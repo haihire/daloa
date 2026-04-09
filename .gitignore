@@ -1,0 +1,32 @@
+# 환경변수 (절대 커밋 금지)
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 에디터
+.vscode/
+.idea/
+
+# Docker 볼륨 / SSL 인증서
+nginx/ssl/
+
+# Python 크롤러
+crawlers/__pycache__/
+crawlers/*.pyc
+crawlers/.venv/
+
+# Redis
+dump.rdb
+
+# 로그
+*.log
+server-stdout.log
+server-stderr.log
+
+# TypeScript 빌드 캐시
+server/tsconfig.build.tsbuildinfo
+server/dist/
