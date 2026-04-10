@@ -34,27 +34,11 @@ export default async function Home() {
           </p>
         </header>
 
-        <section className="grid gap-5 lg:grid-cols-[300px_minmax(0,1fr)_300px]">
-          {/* 왼쪽 광고 */}
-          <aside className="hidden lg:flex flex-col items-center justify-start pt-2">
-            <div className="w-[300px] h-[600px] rounded-xl border border-dashed border-slate-300 bg-white/50 backdrop-blur flex items-center justify-center text-xs text-slate-400">
-              광고 (300×600)
-            </div>
-          </aside>
-
-          <div className="flex flex-col gap-5">
-            <div className="grid gap-5 sm:grid-cols-[320px_minmax(0,1fr)]">
-              <StatBuildList tabs={statBuilds} />
-              <SiteList sites={sites} />
-            </div>
+        <section className="flex flex-col gap-5">
+          <div className="grid gap-5 sm:grid-cols-[320px_minmax(0,1fr)]">
+            <StatBuildList tabs={statBuilds} />
+            <SiteList sites={sites} />
           </div>
-
-          {/* 오른쪽 광고 */}
-          <aside className="hidden lg:flex flex-col items-center justify-start pt-2">
-            <div className="w-[300px] h-[600px] rounded-xl border border-dashed border-slate-300 bg-white/50 backdrop-blur flex items-center justify-center text-xs text-slate-400">
-              광고 (300×600)
-            </div>
-          </aside>
         </section>
       </main>
     </div>
