@@ -26,7 +26,7 @@ export default async function Home() {
             LOST ARK DASHBOARD
           </p>
           <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            로아 허브 템플릿
+            다로아 - 로아 사이트 모음
           </h1>
           <p className="mt-2 text-sm text-slate-600 sm:text-base">
             가운데는 사이트 모음, 왼쪽은 특성 빌드 분포, 오른쪽은 방송 라이브
