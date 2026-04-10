@@ -14,7 +14,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "다로아 - 로아 사이트 모음",
-  description: "로스트아크 유용한 사이트 모음, 캐릭터 특성 빌드 분포를 한 번에 확인하세요.",
+  description:
+    "로스트아크 유용한 사이트 모음, 캐릭터 특성 빌드 분포를 한 번에 확인하세요.",
 };
 
 export default function RootLayout({
