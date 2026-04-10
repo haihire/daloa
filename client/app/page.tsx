@@ -18,8 +18,8 @@ export default async function Home() {
   return (
     <div className="min-h-screen py-8">
       <main className="mx-auto flex w-full max-w-[1800px] flex-col gap-6">
-        <header className="mx-4 rounded-2xl border border-white/50 bg-white/70 p-6 shadow-lg backdrop-blur-xl fade-in sm:mx-6">
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+        <header className="fade-in text-center">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
             다로아 - 로아 사이트 모음
           </h1>
         </header>
