@@ -55,6 +55,8 @@ export default function StatBuildList({ tabs }: Props) {
 
   const [activeTab, setActiveTab] = useState(defaultTab);
 
+  const grandTotal = safeTabs.reduce((sum, t) => sum + (t.totalCount ?? 0), 0);
+
   const current =
     safeTabs.find((t) => t.statBuild === activeTab) ?? safeTabs[0];
   const maxCount = Math.max(...(current?.items?.map((i) => i.count) ?? [1]), 1);
@@ -90,7 +92,9 @@ export default function StatBuildList({ tabs }: Props) {
                   isActive ? "bg-white/30" : "bg-slate-100 text-slate-400"
                 }`}
               >
-                {tab.totalCount}
+                {grandTotal > 0
+                  ? `${Math.round((tab.totalCount / grandTotal) * 100)}%`
+                  : "0%"}
               </span>
             </button>
           );
@@ -98,49 +102,39 @@ export default function StatBuildList({ tabs }: Props) {
       </div>
 
       {/* 선택된 탭 직업 순위 */}
-      <ul className="flex flex-col gap-3 max-h-72 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:theme(colors.slate.200)_transparent]">
-        {current?.items?.map((item, idx) => {
-          const style = BUILD_STYLE[activeTab] ?? DEFAULT_STYLE;
-          return (
-            <li
-              key={`${item.classDetail}-${idx}`}
-              className="flex flex-col gap-1"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="w-5 shrink-0 text-center text-xs font-bold text-slate-400">
-                    {idx + 1}
-                  </span>
-                  <div className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-slate-800">
+      <ul className="flex flex-col gap-1 max-h-64 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:theme(colors.slate.200)_transparent]">
+        {[...(current?.items ?? [])]
+          .sort((a, b) => b.count - a.count)
+          .map((item, idx) => {
+            const style = BUILD_STYLE[activeTab] ?? DEFAULT_STYLE;
+            return (
+              <li
+                key={`${item.classDetail}-${idx}`}
+                className="flex items-center gap-2 py-0.5"
+              >
+                <span className="w-4 shrink-0 text-center text-xs font-bold text-slate-400">
+                  {idx + 1}
+                </span>
+                <span className="w-32 shrink-0 truncate text-xs font-semibold text-slate-800">
+                  {item.classEngraving}
+                  {item.classDetail && (
+                    <span className="ml-1 font-normal text-slate-400">
                       {item.classDetail}
                     </span>
-                    {item.classEngraving && (
-                      <span className="text-xs text-slate-400">
-                        {item.classEngraving}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <span className="shrink-0 text-xs font-semibold text-slate-600">
-                  {item.count}명
+                  )}
                 </span>
-              </div>
-
-              <div className="ml-7 flex items-center gap-2">
                 <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
                   <div
                     className={`h-full rounded-full transition-all ${style.bar}`}
                     style={{ width: `${(item.count / maxCount) * 100}%` }}
                   />
                 </div>
-                <span className="w-8 shrink-0 text-right text-xs text-slate-400">
-                  {Math.round((item.count / maxCount) * 100)}%
+                <span className="w-9 shrink-0 text-right text-xs text-slate-500">
+                  {item.count}명
                 </span>
-              </div>
-            </li>
-          );
-        })}
+              </li>
+            );
+          })}
 
         {(!current || !current.items?.length) && (
           <li className="py-8 text-center text-sm text-slate-400">

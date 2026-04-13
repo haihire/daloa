@@ -4,13 +4,13 @@ import { DB_POOL } from '../db/db.module';
 
 // 장비 스탯 수치(치명/특화/신속) 기반 빌드 분류
 // 전체 합산 대비 비율 15% 이상이어야 해당 스탯을 "투자됨"으로 인정
-// ex) 치명 1800 + 신속 600 + 특화 150 → 특화 비율 6.1% < 15% → 치신
+// ex) 치명 1800 + 신속 600 + 특화 150 → 특화 비율 6.1% < 15% → 치신 / 합산 < 300이면 미설정
 // ex) 치명 800 + 신속 800 + 특화 800 → 각 33% ≥ 15% → 치특신
 const STAT_RATIO_THRESHOLD = 0.15;
 
 function classifyStatBuild(crit: number, spec: number, swift: number): string {
   const total = crit + spec + swift;
-  if (total < 100) return '미설정';
+  if (total < 300) return '미설정';
 
   const hasCrit = crit / total >= STAT_RATIO_THRESHOLD;
   const hasSpec = spec / total >= STAT_RATIO_THRESHOLD;
@@ -70,8 +70,8 @@ export class CharactersService {
         AND (u.stat_crit > 0 OR u.stat_spec > 0 OR u.stat_swift > 0)
     `);
 
-    // 직업+코어+빌드타입 별로 집계
-    const itemMap = new Map<
+    // Step 1: 직업+각인+빌드타입 별로 각각 집계
+    const rawMap = new Map<
       string,
       {
         classDetail: string;
@@ -84,13 +84,13 @@ export class CharactersService {
 
     for (const r of rows as any[]) {
       const build = classifyStatBuild(r.statCrit, r.statSpec, r.statSwift);
-      const key = `${r.classDetail}::${build}::${r.classEngraving ?? ''}`;
-      const existing = itemMap.get(key);
+      const key = `${r.classDetail}\x00${r.classEngraving ?? ''}\x00${build}`;
+      const existing = rawMap.get(key);
       if (existing) {
         existing.count++;
         if (r.level > existing.topLevel) existing.topLevel = r.level;
       } else {
-        itemMap.set(key, {
+        rawMap.set(key, {
           classDetail: r.classDetail,
           classEngraving: r.classEngraving ?? null,
           statBuild: build,
@@ -100,7 +100,78 @@ export class CharactersService {
       }
     }
 
-    // 탭별로 그룹핑 (빌드 종류 → 직업 목록)
+    // Step 2: 직업+각인 단위로 빌드별 카운트 집계
+    //   → 미설정은 대표 빌드 결정에서 제외 (유효 빌드만 비교)
+    const ceMap = new Map<
+      string,
+      {
+        classDetail: string;
+        classEngraving: string | null;
+        buildCounts: Map<string, { count: number; topLevel: number }>;
+      }
+    >();
+
+    for (const entry of rawMap.values()) {
+      const ceKey = `${entry.classDetail}\x00${entry.classEngraving ?? ''}`;
+      if (!ceMap.has(ceKey)) {
+        ceMap.set(ceKey, {
+          classDetail: entry.classDetail,
+          classEngraving: entry.classEngraving,
+          buildCounts: new Map(),
+        });
+      }
+      const ce = ceMap.get(ceKey)!;
+      const prev = ce.buildCounts.get(entry.statBuild);
+      if (prev) {
+        prev.count += entry.count;
+        if (entry.topLevel > prev.topLevel) prev.topLevel = entry.topLevel;
+      } else {
+        ce.buildCounts.set(entry.statBuild, {
+          count: entry.count,
+          topLevel: entry.topLevel,
+        });
+      }
+    }
+
+    // Step 3: 각 직업+각인의 "대표 빌드"(미설정 제외 최다) 로 전체 카운트 합산
+    //   → 예) 업화의 계승자 특치 70명 + 신치 30명 → 대표 빌드 특치로 100명 표시
+    const mergedItems: {
+      classDetail: string;
+      classEngraving: string | null;
+      statBuild: string;
+      count: number;
+      topLevel: number;
+    }[] = [];
+
+    for (const ce of ceMap.values()) {
+      let dominantBuild = '';
+      let maxCount = 0;
+      let totalCount = 0;
+      let maxTopLevel = 0;
+
+      for (const [build, { count, topLevel }] of ce.buildCounts.entries()) {
+        if (topLevel > maxTopLevel) maxTopLevel = topLevel;
+        // 미설정은 총합에도 포함하지 않음
+        if (build === '미설정') continue;
+        totalCount += count;
+        if (count > maxCount) {
+          maxCount = count;
+          dominantBuild = build;
+        }
+      }
+
+      if (dominantBuild && totalCount > 0) {
+        mergedItems.push({
+          classDetail: ce.classDetail,
+          classEngraving: ce.classEngraving,
+          statBuild: dominantBuild,
+          count: totalCount,
+          topLevel: maxTopLevel,
+        });
+      }
+    }
+
+    // Step 4: 탭별로 그룹핑 (빌드 종류 → 직업 목록)
     const TAB_ORDER = [
       '치신',
       '신치',
@@ -125,7 +196,7 @@ export class CharactersService {
       }
     >();
 
-    for (const entry of itemMap.values()) {
+    for (const entry of mergedItems) {
       const existing = tabMap.get(entry.statBuild);
       if (existing) {
         existing.items.push({

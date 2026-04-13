@@ -6,9 +6,11 @@ import type { Redis } from 'ioredis';
 import { REDIS_CLIENT } from '../redis/redis.module';
 
 const CACHE_PREFIX = 'youtube:videos:page:';
-const CACHE_TTL = 2 * 60 * 60; // 2시간
+const POPULAR_CACHE_KEY = 'youtube:popular:first';
+const CACHE_TTL = 60 * 60; // 1시간
 const QUOTA_KEY = 'youtube:quota_exceeded';
 const MAX_RESULTS = 20;
+const POPULAR_MAX_RESULTS = 50;
 
 /** YouTube 할당량 리셋까지 남은 초 (매일 오후 4시 KST = 07:00 UTC) */
 function secondsUntilQuotaReset(): number {
@@ -26,6 +28,7 @@ export interface YoutubeVideoItem {
   thumbnailUrl: string;
   publishedAt: string;
   duration: string;
+  viewCount: number;
 }
 
 function parseDurationSec(iso: string): number {
@@ -155,7 +158,38 @@ export class StreamersService implements OnModuleInit {
     return result;
   }
 
-  private async fetchFromYouTube(pageToken?: string): Promise<{
+  /** GET /api/streamers/popular — 오늘 올라온 영상 최신순 (캐시 1시간, 5분 이상 숏츠 제외) */
+  async searchPopularVideos(): Promise<{ items: YoutubeVideoItem[] }> {
+    try {
+      const cached = await this.redis.get(POPULAR_CACHE_KEY);
+      if (cached) return JSON.parse(cached) as { items: YoutubeVideoItem[] };
+    } catch (_) {}
+
+    try {
+      const blocked = await this.redis.get(QUOTA_KEY);
+      if (blocked) return { items: [] };
+    } catch (_) {}
+
+    const result = await this.fetchFromYouTube(undefined, 'date', true);
+    const popular = { items: result.items };
+
+    try {
+      await this.redis.set(
+        POPULAR_CACHE_KEY,
+        JSON.stringify(popular),
+        'EX',
+        CACHE_TTL,
+      );
+    } catch (_) {}
+
+    return popular;
+  }
+
+  private async fetchFromYouTube(
+    pageToken?: string,
+    order: 'date' | 'viewCount' = 'date',
+    isPopular = false,
+  ): Promise<{
     items: YoutubeVideoItem[];
     nextPageToken: string | null;
   }> {
@@ -164,10 +198,20 @@ export class StreamersService implements OnModuleInit {
       part: ['id', 'snippet'],
       q: '로스트아크',
       type: ['video'],
-      order: 'date',
+      order,
+      ...(isPopular
+        ? {
+            publishedAfter: (() => {
+              const d = new Date();
+              d.setDate(d.getDate() - 7); // 7일 전
+              d.setHours(0, 0, 0, 0);
+              return d.toISOString();
+            })(),
+          }
+        : {}),
       relevanceLanguage: 'ko',
       regionCode: 'KR',
-      maxResults: MAX_RESULTS,
+      maxResults: isPopular ? POPULAR_MAX_RESULTS : MAX_RESULTS,
       ...(pageToken ? { pageToken } : {}),
     });
 
@@ -179,16 +223,27 @@ export class StreamersService implements OnModuleInit {
 
     if (videoIds.length === 0) return { items: [], nextPageToken };
 
-    // 2. 영상 상세 (재생시간) 조회
+    // 2. 영상 상세 (재생시간 + 조회수) 조회
     const detailsRes = await this.youtube.videos.list({
-      part: ['snippet', 'contentDetails'],
+      part: ['snippet', 'contentDetails', 'statistics'],
       id: videoIds,
     });
 
     const items: YoutubeVideoItem[] = (detailsRes.data.items ?? [])
       .filter((v) => {
         const sec = parseDurationSec(v.contentDetails?.duration ?? '');
-        return sec > 0 && sec < 3600; // 1초 이상, 1시간 미만
+        if (sec < 300 || sec >= 3600) return false; // 5분 이상 1시간 미만 (숏츠·1시간+ 제외)
+        // 로스트아크 무관 키워드가 제목/채널에 포함된 영상 제외
+        const text =
+          `${v.snippet?.title ?? ''} ${v.snippet?.channelTitle ?? ''}`.toLowerCase();
+        const EXCLUDE = [
+          '붉은사막',
+          '블레이드앤소울',
+          '검은사막',
+          '와우',
+          'world of warcraft',
+        ];
+        return !EXCLUDE.some((kw) => text.includes(kw));
       })
       .map((v) => ({
         videoId: v.id ?? '',
@@ -200,6 +255,7 @@ export class StreamersService implements OnModuleInit {
           '',
         publishedAt: v.snippet?.publishedAt ?? '',
         duration: formatDuration(v.contentDetails?.duration ?? ''),
+        viewCount: parseInt(v.statistics?.viewCount ?? '0', 10),
       }));
 
     return { items, nextPageToken };

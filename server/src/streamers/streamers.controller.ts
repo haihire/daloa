@@ -13,4 +13,13 @@ export class StreamersController {
   searchVideos(@Query('pageToken') pageToken?: string) {
     return this.streamersService.searchVideos(pageToken);
   }
+
+  /**
+   * GET /api/streamers/popular
+   * 로스트아크 최근 30일 동영상 조회수순 (Redis 2시간 캐시)
+   */
+  @Get('popular')
+  searchPopular() {
+    return this.streamersService.searchPopularVideos();
+  }
 }

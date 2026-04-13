@@ -13,6 +13,7 @@ export interface YoutubeVideo {
   thumbnailUrl: string;
   publishedAt: string;
   duration: string;
+  viewCount: number;
 }
 
 export interface StatBuildItem {
