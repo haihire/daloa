@@ -19,7 +19,7 @@ async function dump() {
   const tableKey = Object.keys(tables[0])[0];
   const tableNames = tables.map((r) => r[tableKey]);
 
-  let sql = `SET FOREIGN_KEY_CHECKS=0;\n\n`;
+  let sql = `SET FOREIGN_KEY_CHECKS=0;\nSET NAMES utf8mb4;\n\n`;
 
   for (const table of tableNames) {
     console.log(`Dumping ${table}...`);

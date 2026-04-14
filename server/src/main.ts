@@ -7,8 +7,16 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Next.js SSR 서버(localhost:3000)에서의 요청 허용
+  const rawOrigin = process.env.CLIENT_ORIGIN ?? 'http://localhost:3000';
+  const allowedOrigins = rawOrigin.split(',').map((o) => o.trim());
+  // www 서브도메인 자동 추가 (예: https://daloa.kr → https://www.daloa.kr 도 허용)
+  const wwwVariants = allowedOrigins
+    .filter((o) => !o.includes('://www.'))
+    .map((o) => o.replace('://', '://www.'));
+  const origins = [...new Set([...allowedOrigins, ...wwwVariants])];
+
   app.enableCors({
-    origin: process.env.CLIENT_ORIGIN ?? 'http://localhost:3000',
+    origin: origins,
   });
 
   // 전역 에러 필터 - 500 이상 에러 발생 시 카카오 알림
