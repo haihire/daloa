@@ -45,13 +45,12 @@ const DEFAULT_STYLE = BUILD_STYLE["미설정"];
 
 export default function StatBuildList({ tabs }: Props) {
   const safeTabs = Array.isArray(tabs)
-    ? tabs.map((t) => ({ ...t, statBuild: t.statBuild.trim() }))
+    ? tabs
+        .map((t) => ({ ...t, statBuild: t.statBuild.trim() }))
+        .sort((a, b) => (b.totalCount ?? 0) - (a.totalCount ?? 0))
     : [];
 
-  const defaultTab =
-    safeTabs.find((t) => t.statBuild === "치신")?.statBuild ??
-    safeTabs[0]?.statBuild ??
-    "";
+  const defaultTab = safeTabs[0]?.statBuild ?? "";
 
   const [activeTab, setActiveTab] = useState(defaultTab);
 

@@ -1,5 +1,7 @@
 services:
   mysql:
+    profiles:
+      - production
     image: mysql:8.0
     container_name: daloa-mysql
     restart: unless-stopped
@@ -10,7 +12,8 @@ services:
       MYSQL_PASSWORD: ${DB_PASS}
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./scripts/dump.sql:/docker-entrypoint-initdb.d/02-data.sql
     healthcheck:
       test:
         [
@@ -50,14 +53,14 @@ services:
       DB_HOST: mysql
       REDIS_HOST: redis
     depends_on:
-      mysql:
-        condition: service_healthy
       redis:
         condition: service_started
     networks:
       - daloa-net
 
   nginx:
+    profiles:
+      - production
     image: nginx:alpine
     container_name: daloa-nginx
     restart: unless-stopped
