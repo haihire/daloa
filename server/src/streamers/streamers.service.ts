@@ -227,7 +227,7 @@ export class StreamersService implements OnModuleInit {
         ? {
             publishedAfter: (() => {
               const d = new Date();
-              d.setDate(d.getDate() - 7); // 7일 전
+              d.setDate(d.getDate() - 3); // 3일 전
               d.setHours(0, 0, 0, 0);
               return d.toISOString();
             })(),

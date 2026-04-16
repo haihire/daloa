@@ -45,7 +45,10 @@ export default function YoutubeList() {
     fetch(`${API}/api/streamers/popular`)
       .then((r) => r.json())
       .then((data) => {
-        setItems(Array.isArray(data.items) ? data.items : []);
+        const raw: YoutubeVideo[] = Array.isArray(data.items) ? data.items : [];
+        // 최신순 정렬
+        raw.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+        setItems(raw);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
