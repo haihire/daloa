@@ -75,7 +75,7 @@ export default function StatBuildList({ tabs }: Props) {
             .sort((a, b) => b.count - a.count)
             .filter(
               (item) =>
-                item.classEngraving.toLowerCase().includes(q) ||
+                item.classEngraving?.toLowerCase().includes(q) ||
                 item.classDetail?.toLowerCase().includes(q),
             );
           return { tab, matched };
