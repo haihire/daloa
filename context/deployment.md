@@ -214,17 +214,23 @@ ssh -i "C:\Users\tjdtn\Desktop\ingit\daloa\daloa-key.pem" -o StrictHostKeyChecki
 
 ## 7. 빠른 참조 — 배포 체크리스트
 
+> **배포 스크립트를 사용하면 캐시 삭제를 자동으로 처리한다.**
+
 ### 서버만 변경했을 때
 
 ```powershell
-ssh -i "C:\Users\tjdtn\Desktop\ingit\daloa\daloa-key.pem" -o StrictHostKeyChecking=no ubuntu@3.39.239.9 "cd daloa && git pull && cd server && npm run build 2>&1 | tail -3 && cd .. && docker compose up -d nest 2>&1 | tail -3"
+# 스크립트 사용 (권장 — dist/ 삭제 포함)
+powershell -File scripts/deploy.ps1
+
+# Redis 캐시도 날리려면
+powershell -File scripts/deploy.ps1 -FlushRedis
 ```
 
 ### 클라이언트만 변경했을 때
 
 ```powershell
 git push origin main
-# → Vercel 자동 배포
+# → Vercel 자동 배포 (.next 캐시는 Vercel이 관리)
 ```
 
 ### 둘 다 변경했을 때
@@ -233,8 +239,14 @@ git push origin main
 # 1) push (Vercel 자동 배포)
 git push origin main
 
-# 2) EC2 서버 배포
-ssh -i "C:\Users\tjdtn\Desktop\ingit\daloa\daloa-key.pem" -o StrictHostKeyChecking=no ubuntu@3.39.239.9 "cd daloa && git pull && cd server && npm run build 2>&1 | tail -3 && cd .. && docker compose up -d nest 2>&1 | tail -3"
+# 2) EC2 서버 배포 (캐시 삭제 포함)
+powershell -File scripts/deploy.ps1
+```
+
+### 전체 서비스 재시작 (MySQL/Redis/Nginx 포함)
+
+```powershell
+powershell -File scripts/deploy.ps1 -Full
 ```
 
 ### Vercel이 옛날 데이터를 보여줄 때 (캐시 강제 갱신)
