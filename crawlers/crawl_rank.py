@@ -18,8 +18,41 @@ DB에 저장합니다.
 
 import sys
 import asyncio
+import logging
+import os
+from datetime import datetime
 from urllib.parse import quote
 from curl_cffi.requests import AsyncSession
+
+# ─── 파일 로거 설정 ───────────────────────────────────────────────────────────
+_LOG_DIR = os.path.join(os.path.dirname(__file__), "logs")
+os.makedirs(_LOG_DIR, exist_ok=True)
+
+def _setup_logger() -> logging.Logger:
+    """실행 시각 기반 로그 파일 생성 (crawlers/logs/crawl-YYYY-MM-DD_HH-MM-SS.log)"""
+    ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    log_path = os.path.join(_LOG_DIR, f"crawl-{ts}.log")
+
+    logger = logging.getLogger("crawl_rank")
+    logger.setLevel(logging.DEBUG)
+
+    # 파일 핸들러 (UTF-8)
+    fh = logging.FileHandler(log_path, encoding="utf-8")
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)-7s] %(message)s"))
+
+    # 콘솔 핸들러 (기존 print 출력을 보완)
+    ch = logging.StreamHandler(sys.stdout)
+    ch.setLevel(logging.INFO)
+    ch.setFormatter(logging.Formatter("%(asctime)s [%(levelname)-7s] %(message)s"))
+
+    logger.addHandler(fh)
+    logger.addHandler(ch)
+    logger.info(f"로그 파일 생성: {log_path}")
+    return logger
+
+log = _setup_logger()
+# ─────────────────────────────────────────────────────────────────────────────
 
 SERVER_BASE = "http://localhost:3001"
 EXISTS_API  = f"{SERVER_BASE}/api/users/exists"
@@ -56,7 +89,7 @@ async def fetch_rank_page(session: AsyncSession, page: int, counters: dict, lock
         r.raise_for_status()
         data = r.json()
     except Exception as e:
-        print(f'\n[페이지 {page}] 요청 실패: {e}', flush=True)
+        log.error(f'[페이지 {page}] 요청 실패: {e}')
         return []
 
     items = data.get('data', {}).get('items', [])
@@ -129,7 +162,7 @@ async def call_search(
                 if attempt < MAX_RETRY:
                     await asyncio.sleep(RETRY_DELAY)
                 else:
-                    print(f'\n[ERROR] {name}: {e}', flush=True)
+                    log.error(f'[API 실패] {name}: {e}')
                     async with lock:
                         counters['errors'] += 1
                         counters['active'] -= 1
@@ -232,9 +265,13 @@ async def crawl(total_pages: int = 999):
         stop_event.set()
         await logger
 
-    print(f'\n============================')
-    print(f'완료: {len(done_expeditions)}개 원정대 처리')
-    print(f'저장: {counters["saved"]}명 / 스킵: {counters["skipped"]}명 / 에러: {counters["errors"]}명')
+    summary = (
+        f'완료: {len(done_expeditions)}개 원정대 | '
+        f'저장: {counters["saved"]}명 / 스킵: {counters["skipped"]}명 / 에러: {counters["errors"]}몝'
+    )
+    print(f'\n============================\n{summary}')
+    log.info('=' * 40)
+    log.info(summary)
 
 
 if __name__ == '__main__':

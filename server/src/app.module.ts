@@ -9,6 +9,7 @@ import { RedisModule } from './redis/redis.module';
 import { KakaoModule } from './kakao/kakao.module';
 import { StreamersModule } from './streamers/streamers.module';
 import { UsersModule } from './users/users.module';
+import { ClassSummaryModule } from './class-summary/class-summary.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { UsersModule } from './users/users.module';
     KakaoModule,
     StreamersModule,
     UsersModule,
+    ClassSummaryModule,
   ],
 })
 export class AppModule {}

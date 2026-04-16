@@ -28,3 +28,9 @@ export interface StatBuildTab {
   totalCount: number;
   items: StatBuildItem[];
 }
+
+export interface ClassSummary {
+  className: string;
+  summary: string;
+  updatedAt: string;
+}

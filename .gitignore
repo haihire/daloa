@@ -32,6 +32,9 @@ docker-compose.override.yml
 *.log
 server-stdout.log
 server-stderr.log
+server/logs/
+client/logs/
+crawlers/logs/
 
 # TypeScript 빌드 캐시
 server/tsconfig.build.tsbuildinfo

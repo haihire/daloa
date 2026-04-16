@@ -29,6 +29,14 @@ export default function YoutubeList() {
   const [items, setItems] = useState<YoutubeVideo[]>([]);
   const [loading, setLoading] = useState(false);
   const loadedOnce = useRef(false);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  const scroll = (dir: "left" | "right") => {
+    listRef.current?.scrollBy({
+      left: dir === "right" ? 280 : -280,
+      behavior: "smooth",
+    });
+  };
 
   useEffect(() => {
     if (loadedOnce.current) return;
@@ -63,50 +71,69 @@ export default function YoutubeList() {
           ))}
         </div>
       ) : (
-        <ul className="flex gap-4 overflow-x-auto pb-2 [scrollbar-width:thin] [scrollbar-color:theme(colors.slate.200)_transparent]">
-          {items.map((v) => (
-            <li key={v.videoId} className="w-52 shrink-0 flex">
-              <a
-                href={`https://www.youtube.com/watch?v=${v.videoId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex flex-col h-full gap-2 rounded-xl border border-slate-200 bg-white p-2 transition-transform duration-150 hover:-translate-y-0.5 hover:border-red-300 hover:shadow-md"
-              >
-                {v.thumbnailUrl && (
-                  <div className="relative">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={v.thumbnailUrl}
-                      alt=""
-                      className="h-28 w-full rounded-lg object-cover"
-                    />
-                    <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-0.5 text-[10px] font-bold text-white leading-none">
-                      {v.duration}
-                    </span>
-                  </div>
-                )}
-                <div className="flex flex-col flex-1 justify-between gap-0.5 px-0.5 pb-0.5 min-h-0">
-                  <p className="line-clamp-2 text-xs font-medium text-slate-800 leading-snug">
-                    {v.title}
-                  </p>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="truncate text-[11px] text-slate-500">
-                      {v.channelTitle}
-                    </span>
-                    <span className="shrink-0 text-[11px] text-slate-400 ml-1">
-                      {timeAgo(v.publishedAt)}
-                    </span>
-                  </div>
-                  {v.viewCount > 0 && (
-                    <span className="text-[11px] text-slate-400">
-                      조회수 {formatViewCount(v.viewCount)}
-                    </span>
+        <div className="relative">
+          <button
+            onClick={() => scroll("left")}
+            className="absolute left-0 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-red-300 hover:text-red-500 hover:shadow-md"
+            aria-label="이전"
+          >
+            ‹
+          </button>
+          <button
+            onClick={() => scroll("right")}
+            className="absolute right-0 top-1/2 z-10 translate-x-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-red-300 hover:text-red-500 hover:shadow-md"
+            aria-label="다음"
+          >
+            ›
+          </button>
+          <ul
+            ref={listRef}
+            className="flex gap-4 overflow-x-auto pb-2 [scrollbar-width:thin] [scrollbar-color:theme(colors.slate.200)_transparent]"
+          >
+            {items.map((v) => (
+              <li key={v.videoId} className="w-52 shrink-0 flex">
+                <a
+                  href={`https://www.youtube.com/watch?v=${v.videoId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex flex-col h-full gap-2 rounded-xl border border-slate-200 bg-white p-2 transition-transform duration-150 hover:-translate-y-0.5 hover:border-red-300 hover:shadow-md"
+                >
+                  {v.thumbnailUrl && (
+                    <div className="relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={v.thumbnailUrl}
+                        alt=""
+                        className="h-28 w-full rounded-lg object-cover"
+                      />
+                      <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-0.5 text-[10px] font-bold text-white leading-none">
+                        {v.duration}
+                      </span>
+                    </div>
                   )}
-                </div>
-              </a>
-            </li>
-          ))}
-        </ul>
+                  <div className="flex flex-col flex-1 justify-between gap-0.5 px-0.5 pb-0.5 min-h-0">
+                    <p className="line-clamp-2 text-xs font-medium text-slate-800 leading-snug">
+                      {v.title}
+                    </p>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="truncate text-[11px] text-slate-500">
+                        {v.channelTitle}
+                      </span>
+                      <span className="shrink-0 text-[11px] text-slate-400 ml-1">
+                        {timeAgo(v.publishedAt)}
+                      </span>
+                    </div>
+                    {v.viewCount > 0 && (
+                      <span className="text-[11px] text-slate-400">
+                        조회수 {formatViewCount(v.viewCount)}
+                      </span>
+                    )}
+                  </div>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );

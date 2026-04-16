@@ -8,7 +8,11 @@ import { DB_POOL } from '../db/db.module';
 // ex) 치명 800 + 신속 800 + 특화 800 → 각 33% ≥ 15% → 치특신
 const STAT_RATIO_THRESHOLD = 0.15;
 
-function classifyStatBuild(crit: number, spec: number, swift: number): string {
+export function classifyStatBuild(
+  crit: number,
+  spec: number,
+  swift: number,
+): string {
   const total = crit + spec + swift;
   if (total < 300) return '미설정';
 

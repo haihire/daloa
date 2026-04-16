@@ -1,10 +1,12 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/http-exception.filter';
+import { FileLoggerService } from './common/file-logger.service';
 import { KakaoService } from './kakao/kakao.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const logger = new FileLoggerService();
+  const app = await NestFactory.create(AppModule, { logger });
 
   // Next.js SSR 서버(localhost:3000)에서의 요청 허용
   const rawOrigin = process.env.CLIENT_ORIGIN ?? 'http://localhost:3000';
