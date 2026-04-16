@@ -12,6 +12,18 @@ const QUOTA_KEY = 'youtube:quota_exceeded';
 const MAX_RESULTS = 20;
 const POPULAR_MAX_RESULTS = 50;
 
+/** YouTube API 응답의 HTML 엔티티 디코딩 */
+function decodeHtmlEntities(str: string): string {
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&apos;/g, "'");
+}
+
 /** YouTube 할당량 리셋까지 남은 초 (매일 오후 4시 KST = 07:00 UTC) */
 function secondsUntilQuotaReset(): number {
   const now = new Date();
@@ -247,8 +259,8 @@ export class StreamersService implements OnModuleInit {
       })
       .map((v) => ({
         videoId: v.id ?? '',
-        title: v.snippet?.title ?? '',
-        channelTitle: v.snippet?.channelTitle ?? '',
+        title: decodeHtmlEntities(v.snippet?.title ?? ''),
+        channelTitle: decodeHtmlEntities(v.snippet?.channelTitle ?? ''),
         thumbnailUrl:
           v.snippet?.thumbnails?.medium?.url ??
           v.snippet?.thumbnails?.default?.url ??
