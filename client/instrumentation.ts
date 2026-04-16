@@ -9,6 +9,8 @@
  *   client/logs/app-YYYY-MM-DD.log   — 전체 로그
  *   client/logs/error-YYYY-MM-DD.log — error / warn 전용
  */
+export const runtime = "nodejs"; // Edge Runtime에서 실행 안 함
+
 export async function register() {
   if (process.env.NEXT_RUNTIME === "edge") return; // Edge Runtime 제외
 
