@@ -159,7 +159,13 @@ export class StreamersService implements OnModuleInit {
     } catch (_) {}
 
     // 3. YouTube API 호출
-    const result = await this.fetchFromYouTube(pageToken);
+    let result: { items: YoutubeVideoItem[]; nextPageToken: string | null };
+    try {
+      result = await this.fetchFromYouTube(pageToken);
+    } catch (err: any) {
+      this.logger.error(`getStreamers 실패: ${err?.message ?? err}`);
+      return { items: [], nextPageToken: null };
+    }
 
     try {
       await this.redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL);
@@ -182,8 +188,14 @@ export class StreamersService implements OnModuleInit {
       if (blocked) return { items: [] };
     } catch (_) {}
 
-    const result = await this.fetchFromYouTube(undefined, 'date', true);
-    const popular = { items: result.items };
+    let popular: { items: YoutubeVideoItem[] };
+    try {
+      const result = await this.fetchFromYouTube(undefined, 'date', true);
+      popular = { items: result.items };
+    } catch (err: any) {
+      this.logger.error(`searchPopularVideos 실패: ${err?.message ?? err}`);
+      return { items: [] };
+    }
 
     try {
       await this.redis.set(
