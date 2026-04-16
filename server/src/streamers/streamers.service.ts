@@ -190,8 +190,20 @@ export class StreamersService implements OnModuleInit {
 
     let popular: { items: YoutubeVideoItem[] };
     try {
-      const result = await this.fetchFromYouTube(undefined, 'date', true);
-      popular = { items: result.items };
+      const allItems: YoutubeVideoItem[] = [];
+      let pageToken: string | undefined;
+      const MAX_PAGES = 4; // 50 × 4 = 최대 200개
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const result = await this.fetchFromYouTube(pageToken, 'date', true);
+        allItems.push(...result.items);
+        if (!result.nextPageToken) break;
+        pageToken = result.nextPageToken;
+      }
+      allItems.sort(
+        (a, b) =>
+          new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
+      );
+      popular = { items: allItems };
     } catch (err: any) {
       this.logger.error(`searchPopularVideos 실패: ${err?.message ?? err}`);
       return { items: [] };
@@ -213,6 +225,7 @@ export class StreamersService implements OnModuleInit {
     pageToken?: string,
     order: 'date' | 'viewCount' = 'date',
     isPopular = false,
+    query = '로스트아크',
   ): Promise<{
     items: YoutubeVideoItem[];
     nextPageToken: string | null;
@@ -220,7 +233,7 @@ export class StreamersService implements OnModuleInit {
     // 1. 동영상 검색 (최신순)
     const searchRes = await this.youtube.search.list({
       part: ['id', 'snippet'],
-      q: '로스트아크',
+      q: query,
       type: ['video'],
       order,
       ...(isPopular

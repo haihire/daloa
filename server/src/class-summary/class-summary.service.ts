@@ -207,6 +207,18 @@ export class ClassSummaryService implements OnModuleInit {
   ): Promise<string | null> {
     if (!this.genAI) return null;
 
+    // 일일 한도 체크 (무료 티어: 20회/일 → 안전 마진 18회)
+    const MAX_DAILY_CALLS = 18;
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const dailyKey = `gemini:daily-count:${today}`;
+    const currentCount = parseInt((await this.redis.get(dailyKey)) ?? '0', 10);
+    if (currentCount >= MAX_DAILY_CALLS) {
+      this.logger.warn(
+        `[${className}] 오늘 Gemini 일일 한도(${MAX_DAILY_CALLS}회) 도달 — 스킵`,
+      );
+      return null;
+    }
+
     const model = this.genAI.getGenerativeModel({
       model: 'gemini-2.5-flash',
     });
@@ -221,7 +233,11 @@ export class ClassSummaryService implements OnModuleInit {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const result = await model.generateContent(prompt);
-        return result.response.text().trim().replace(/\n.*/s, '');
+        const text = result.response.text().trim().replace(/\n.*/s, '');
+        // 성공 시 카운터 증가, TTL 25시간
+        await this.redis.incr(dailyKey);
+        await this.redis.expire(dailyKey, 25 * 60 * 60);
+        return text;
       } catch (e: any) {
         const msg: string = e?.message ?? '';
 

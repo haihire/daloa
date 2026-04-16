@@ -22,6 +22,8 @@
 | API 호출 / 컨트롤러 수정 | [`context/api-contracts.md`](../context/api-contracts.md) |
 | 환경변수 추가            | [`context/env-config.md`](../context/env-config.md)       |
 | Redis 관련 서비스 수정   | [`context/redis-keys.md`](../context/redis-keys.md)       |
+| 폴더 구조 / 파일 위치    | [`context/folder-structure.md`](../context/folder-structure.md) |
+| 배포 / 인프라 변경       | [`context/deployment.md`](../context/deployment.md)       |
 
 ---
 

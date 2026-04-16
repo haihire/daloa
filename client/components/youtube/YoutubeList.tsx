@@ -47,7 +47,11 @@ export default function YoutubeList() {
       .then((data) => {
         const raw: YoutubeVideo[] = Array.isArray(data.items) ? data.items : [];
         // 최신순 정렬
-        raw.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+        raw.sort(
+          (a, b) =>
+            new Date(b.publishedAt).getTime() -
+            new Date(a.publishedAt).getTime(),
+        );
         setItems(raw);
       })
       .catch(() => {})
