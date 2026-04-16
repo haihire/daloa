@@ -9,12 +9,14 @@ const API = process.env.NEST_API_URL ?? "http://localhost:3001";
 
 export default async function Home() {
   const [sites, statBuilds, classSummaries] = await Promise.all([
-    fetch(`${API}/api/sites`, { next: { revalidate: 300 } }).then<Site[]>((r) =>
-      r.json(),
-    ),
+    fetch(`${API}/api/sites`, { next: { revalidate: 300 } })
+      .then<Site[]>((r) => r.json())
+      .catch(() => [] as Site[]),
     fetch(`${API}/api/characters/stat-builds`, {
       next: { revalidate: 300 },
-    }).then<StatBuildTab[]>((r) => r.json()),
+    })
+      .then<StatBuildTab[]>((r) => r.json())
+      .catch(() => [] as StatBuildTab[]),
     fetch(`${API}/api/class-summary`, { next: { revalidate: 3600 } })
       .then<ClassSummary[]>((r) => r.json())
       .catch(() => [] as ClassSummary[]),
