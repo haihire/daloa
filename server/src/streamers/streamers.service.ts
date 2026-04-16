@@ -271,7 +271,7 @@ export class StreamersService implements OnModuleInit {
         const sec = parseDurationSec(v.contentDetails?.duration ?? '');
         const minSec = 300; // 5분 이상 (숏츠 제외)
         if (sec < minSec) return false;
-        if (!isPopular && sec >= 3600) return false; // 일반 목록만 1시간 미만
+        if (sec >= 3600) return false; // 1시간 이상 제외
         if (parseInt(v.statistics?.viewCount ?? '0', 10) < 500) return false; // 조회수 500 미만 제외
         // 로스트아크 무관 키워드가 제목/채널에 포함된 영상 제외
         const text =

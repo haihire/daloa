@@ -31,15 +31,15 @@ git pull
 cd server
 npm run build
 
-# Docker 컨테이너 재시작 (nest는 profiles 없음 — --profile 불필요)
+# Docker 컨테이너 재빌드 + 재시작 (--build 필수 — 없으면 이전 이미지 재사용)
 cd ..
-docker compose up -d nest
+docker compose up -d --build nest
 ```
 
 ### 1-3. 원커맨드 배포 (로컬에서)
 
 ```powershell
-ssh -i "C:\Users\tjdtn\Desktop\ingit\daloa\daloa-key.pem" -o StrictHostKeyChecking=no ubuntu@3.39.239.9 "cd daloa && git pull && cd server && npm run build 2>&1 | tail -3 && cd .. && docker compose up -d nest 2>&1 | tail -3"
+ssh -i "C:\Users\tjdtn\Desktop\ingit\daloa\daloa-key.pem" -o StrictHostKeyChecking=no ubuntu@3.39.239.9 "cd daloa && git pull && cd server && npm run build 2>&1 | tail -3 && cd .. && docker compose up -d --build nest 2>&1 | tail -3"
 ```
 
 ### 1-4. 전체 서비스 재시작 (MySQL, Redis, Nginx 포함)
@@ -59,8 +59,8 @@ docker compose --profile production up -d
 # EC2 접속 후 직접 편집
 nano /home/ubuntu/daloa/.env
 
-# 수정 후 nest 컨테이너 재시작
-cd daloa && docker compose up -d nest
+# 수정 후 nest 컨테이너 재시작 (--build 필수)
+cd daloa && docker compose up -d --build nest
 ```
 
 로컬에서 SCP로 덮어쓸 경우 **반드시 `/home/ubuntu/daloa/.env`** 경로로 전송:
