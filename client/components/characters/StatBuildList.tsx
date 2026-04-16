@@ -89,12 +89,9 @@ export default function StatBuildList({ tabs }: Props) {
   const maxCount = Math.max(...(current?.items?.map((i) => i.count) ?? [1]), 1);
 
   return (
-    <article className="h-full flex flex-col rounded-2xl border border-slate-200/70 bg-white/85 p-4 shadow-md backdrop-blur fade-in delay-1">
+    <article className="h-[calc((100vh-90px)/3)] shrink-0 flex flex-col rounded-2xl border border-slate-200/70 bg-white/85 p-4 shadow-md backdrop-blur fade-in delay-1 overflow-hidden">
       <div className="mb-3 shrink-0 flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-cyan-700">
-            Stat Builds
-          </p>
           <h2 className="text-xl font-semibold text-slate-900">
             특성 빌드 분포
           </h2>
@@ -181,10 +178,10 @@ export default function StatBuildList({ tabs }: Props) {
             )}
           </div>
         ) : (
-          /* ── 탭 뷰 ── */
-          <div className="flex flex-col flex-1 min-h-0">
-            {/* 스택 프로그레스바 */}
-            <div className="mb-2 flex h-5 w-full overflow-hidden rounded-lg">
+          /* ── 탭 뷰: 왼쪽 세로 막대 + 오른쪽 항목 리스트 ── */
+          <div className="flex gap-3 flex-1 min-h-0">
+            {/* 왼쪽: 세로 스택 바 (100% 높이) */}
+            <div className="shrink-0 w-8 flex flex-col overflow-hidden rounded-lg self-stretch">
               {safeTabs.map((tab) => {
                 const pct =
                   grandTotal > 0 ? (tab.totalCount / grandTotal) * 100 : 0;
@@ -196,52 +193,19 @@ export default function StatBuildList({ tabs }: Props) {
                     type="button"
                     onClick={() => setActiveTab(tab.statBuild)}
                     title={`${tab.statBuild} ${Math.round(pct)}%`}
-                    className={`h-full transition-opacity ${style.bg} ${
+                    className={`w-full transition-opacity ${style.bg} ${
                       isActive ? "opacity-100" : "opacity-40 hover:opacity-70"
                     }`}
                     style={{
-                      width: `${pct}%`,
-                      minWidth: pct > 0 ? "4px" : "0",
+                      height: `${pct}%`,
+                      minHeight: pct > 0 ? "4px" : "0",
                     }}
                   />
                 );
               })}
             </div>
 
-            {/* 범례 */}
-            <div className="mb-4 flex flex-wrap gap-x-3 gap-y-1">
-              {safeTabs.map((tab) => {
-                const pct =
-                  grandTotal > 0
-                    ? Math.round((tab.totalCount / grandTotal) * 100)
-                    : 0;
-                const style = BUILD_STYLE[tab.statBuild] ?? DEFAULT_STYLE;
-                const isActive = tab.statBuild === activeTab;
-                return (
-                  <button
-                    key={tab.statBuild}
-                    type="button"
-                    onClick={() => setActiveTab(tab.statBuild)}
-                    className={`flex items-center gap-1 text-xs transition-colors ${
-                      isActive
-                        ? "font-bold text-slate-800"
-                        : "text-slate-400 hover:text-slate-600"
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-2 w-2 shrink-0 rounded-full ${style.bg}`}
-                    />
-                    {tab.statBuild}
-                    <span
-                      className={isActive ? "text-slate-500" : "text-slate-300"}
-                    >
-                      {pct}%
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
+            {/* 오른쪽: 항목 리스트 */}
             <ul className="flex flex-col gap-1 flex-1 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:theme(colors.slate.200)_transparent]">
               {[...(current?.items ?? [])]
                 .sort((a, b) => b.count - a.count)
@@ -255,7 +219,7 @@ export default function StatBuildList({ tabs }: Props) {
                       <span className="w-4 shrink-0 text-center text-xs font-bold text-slate-400">
                         {idx + 1}
                       </span>
-                      <div className="flex w-32 shrink-0 flex-col">
+                      <div className="flex w-24 shrink-0 flex-col">
                         <span className="truncate text-xs font-semibold leading-tight text-slate-800">
                           {item.classEngraving}
                         </span>

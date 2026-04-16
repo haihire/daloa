@@ -37,10 +37,12 @@ export default async function Home() {
           </header>
 
           <section className="flex flex-col gap-4">
-            <div className="grid gap-4 sm:grid-cols-[320px_minmax(0,1fr)_280px]">
-              <StatBuildList tabs={statBuilds} />
+            <div className="grid gap-4 sm:grid-cols-[320px_minmax(0,1fr)]">
+              <div className="flex h-full flex-col gap-4">
+                <StatBuildList tabs={statBuilds} />
+                <ClassSummaryList summaries={classSummaries} />
+              </div>
               <SiteList sites={sites} />
-              <ClassSummaryList summaries={classSummaries} />
             </div>
           </section>
 

@@ -9,9 +9,9 @@ interface Props {
 export default function SiteList({ sites }: Props) {
   return (
     <section className="flex flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-white/80 shadow-md backdrop-blur">
-      <h2 className="shrink-0 border-b border-slate-100 px-4 py-3 text-lg font-semibold text-slate-900">
+      {/* <h2 className="shrink-0 border-b border-slate-100 px-4 py-3 text-lg font-semibold text-slate-900">
         사이트 모음
-      </h2>
+      </h2> */}
       <div className="stagger flex-1 overflow-y-auto p-4">
         <ul className="grid grid-cols-2 gap-3 xl:grid-cols-3">
           {sites.map((site) => (
