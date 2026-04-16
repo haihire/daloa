@@ -195,19 +195,26 @@ scp -i "daloa-key.pem" scripts/dump.sql ubuntu@3.39.239.9:~/daloa/scripts/
 
 ### DB 데이터 수동 수정 (SQL 파일 실행)
 
-> ⚠️ mysql 실행 시 반드시 `--default-character-set=utf8mb4` 옵션을 붙여야 한글이 깨지지 않는다.
+> ⚠️ `deploy.ps1 -SqlFile` 을 사용하면 SQL 전송 → MySQL 실행 → Redis DEL → 캐시 워밍업을 자동 처리한다.
+
+```powershell
+# fix.sql 작성 후 원커맨드 실행 (권장)
+powershell -File scripts/deploy.ps1 -SqlFile fix.sql
+```
+
+수동으로 단계별 실행이 필요한 경우:
 
 ```powershell
 # 1. 로컬에서 SQL 파일 작성 후 EC2로 전송
 scp -i "C:\Users\tjdtn\Desktop\ingit\daloa\daloa-key.pem" fix.sql ubuntu@3.39.239.9:/tmp/fix.sql
 
 # 2. EC2 MySQL 컨테이너에서 실행
-ssh -i "C:\Users\tjdtn\Desktop\ingit\daloa\daloa-key.pem" -o StrictHostKeyChecking=no ubuntu@3.39.239.9 \
+ssh -i "C:\Users\tjdtn\Desktop\ingit\daloa\daloa-key.pem" -o StrictHostKeyChecking=no ubuntu@3.39.239.9 `
   "docker exec -i daloa-mysql mysql -udaloa -p1234 --default-character-set=utf8mb4 lost_ark < /tmp/fix.sql"
 
-# 3. 관련 Redis 캐시 삭제 (예: sites)
-ssh -i "C:\Users\tjdtn\Desktop\ingit\daloa\daloa-key.pem" -o StrictHostKeyChecking=no ubuntu@3.39.239.9 \
-  "docker exec daloa-redis redis-cli -a Redis9999! DEL sites:all"
+# 3. 관련 Redis 캐시 삭제 + 워밍업 (삭제만 하면 첫 요청 전까지 DB 쿼리 발생)
+ssh -i "C:\Users\tjdtn\Desktop\ingit\daloa\daloa-key.pem" -o StrictHostKeyChecking=no ubuntu@3.39.239.9 `
+  "docker exec daloa-redis redis-cli -a Redis9999! DEL sites:all && curl -s http://localhost:3001/sites > /dev/null && echo '캐시 워밍업 완료'"
 ```
 
 ---
