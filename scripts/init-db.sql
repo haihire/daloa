@@ -93,5 +93,7 @@ INSERT IGNORE INTO loa_sites (name, href, category, description, icon) VALUES
 ('로아차트',    'https://loachart.com/',              '제작·경매',   '제작/마리샵/더보기 효율, 레이드 경매 계산기 지원.', 'https://www.google.com/s2/favicons?domain=loachart.com&sz=32'),
 ('로아업',      'https://loaup.com',                  '스펙업 순서', '스펙업 순서를 가이드해 주는 사이트.', 'https://www.google.com/s2/favicons?domain=loaup.com&sz=32'),
 ('로아투두',    'https://app.loatodo.com/todo',        '숙제 관리',   '숙제 스케줄 관리 사이트.', 'https://www.google.com/s2/favicons?domain=app.loatodo.com&sz=32'),
+('로스트아크 인벤', 'https://lostark.inven.co.kr/',      '커뮤니티',   '뉴스, 팁과 노하우, 직업 게시판, 질문 게시판 등 로스트아크 정보와 커뮤니티를 제공하는 사이트.', 'https://www.google.com/s2/favicons?domain=lostark.inven.co.kr&sz=32'),
+('사사게 검색기', 'https://sasagefind.com/',            '게시글 검색', '사건사고 게시판 관련 검색어를 빠르게 조회할 수 있는 검색 사이트.', 'https://www.google.com/s2/favicons?domain=sasagefind.com&sz=32'),
 ('낙원 스킬트리', 'https://sites.google.com/view/achi-loa/%EB%82%99%EC%9B%90/%EB%82%99%EC%9B%90-%EC%8B%9C%EC%A6%8C2', '스킬트리', '각 직업별 낙원 시즌2 스킬트리 모음.', 'https://www.google.com/s2/favicons?domain=sites.google.com&sz=32'),
 ('낙원 장비',    'https://codepen.io/ialgqfxp-the-animator/pen/NPrQxOx',                                             '장비',     '각 직업별 낙원 장비 모음.', 'https://www.google.com/s2/favicons?domain=codepen.io&sz=32');
