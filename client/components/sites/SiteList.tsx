@@ -8,7 +8,7 @@ interface Props {
 
 export default function SiteList({ sites }: Props) {
   return (
-    <section className="flex max-h-[calc(100vh-90px)] flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-white/80 shadow-md backdrop-blur">
+    <section className="flex flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-white/80 shadow-md backdrop-blur">
       <h2 className="shrink-0 border-b border-slate-100 px-4 py-3 text-lg font-semibold text-slate-900">
         사이트 모음
       </h2>

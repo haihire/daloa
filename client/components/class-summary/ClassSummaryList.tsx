@@ -103,7 +103,7 @@ export default function ClassSummaryList({ summaries }: Props) {
     : summaries;
 
   return (
-    <section className="flex max-h-[480px] flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-white/80 shadow-md backdrop-blur">
+    <section className="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-white/80 shadow-md backdrop-blur">
       <div className="shrink-0 border-b border-slate-100 px-4 py-3">
         <h2 className="text-lg font-semibold text-slate-900">AI 직업 한줄평</h2>
       </div>
