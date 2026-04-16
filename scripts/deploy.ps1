@@ -37,7 +37,7 @@ if ($SqlFile) {
     ssh -i $KeyPath -o StrictHostKeyChecking=no $Host @"
 docker exec daloa-redis redis-cli -a Redis9999! DEL sites:all 2>/dev/null
 echo '[캐시] sites:all 삭제 완료'
-curl -s http://localhost:3001/sites > /dev/null && echo '[워밍업] sites 캐시 재생성 완료'
+docker exec daloa-nest wget -qO- http://localhost:3001/api/sites > /dev/null && echo '[워밍업] sites 캐시 재생성 완료'
 "@
 
     Write-Host ""
@@ -67,7 +67,7 @@ if ($Full) {
 
 if ($FlushRedis) {
     $commands += "echo '[추가] Redis 캐시 플러시...' && docker exec daloa-redis redis-cli -a Redis9999! FLUSHALL 2>&1"
-    $commands += "echo '[워밍업] 캐시 재생성 중...' && sleep 2 && curl -s http://localhost:3001/sites > /dev/null && echo '[워밍업] sites OK'"
+    $commands += "echo '[워밍업] 캐시 재생성 중...' && sleep 2 && docker exec daloa-nest wget -qO- http://localhost:3001/api/sites > /dev/null && echo '[워밍업] sites OK'"
 }
 
 $commands += "echo '' && echo '배포 완료' && docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"

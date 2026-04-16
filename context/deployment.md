@@ -214,7 +214,7 @@ ssh -i "C:\Users\tjdtn\Desktop\ingit\daloa\daloa-key.pem" -o StrictHostKeyChecki
 
 # 3. 관련 Redis 캐시 삭제 + 워밍업 (삭제만 하면 첫 요청 전까지 DB 쿼리 발생)
 ssh -i "C:\Users\tjdtn\Desktop\ingit\daloa\daloa-key.pem" -o StrictHostKeyChecking=no ubuntu@3.39.239.9 `
-  "docker exec daloa-redis redis-cli -a Redis9999! DEL sites:all && curl -s http://localhost:3001/sites > /dev/null && echo '캐시 워밍업 완료'"
+  "docker exec daloa-redis redis-cli -a Redis9999! DEL sites:all && docker exec daloa-nest wget -qO- http://localhost:3001/api/sites > /dev/null && echo '캐시 워밍업 완료'"
 ```
 
 ---
