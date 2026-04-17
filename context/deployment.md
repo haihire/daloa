@@ -109,10 +109,10 @@ git push origin main
 
 Vercel 프로젝트 Settings → Environment Variables에 설정:
 
-| 변수명                     | 환경           | 값                       |
-| -------------------------- | -------------- | ------------------------ |
-| `NEST_API_URL`             | All            | `https://api.daloa.kr`   |
-| `NEXT_PUBLIC_NEST_API_URL` | Production     | `https://api.daloa.kr`   |
+| 변수명                     | 환경       | 값                     |
+| -------------------------- | ---------- | ---------------------- |
+| `NEST_API_URL`             | All        | `https://api.daloa.kr` |
+| `NEXT_PUBLIC_NEST_API_URL` | Production | `https://api.daloa.kr` |
 
 - `NEST_API_URL` — SSR fetch 시 서버에서 사용 (`page.tsx`의 `process.env.NEST_API_URL`)
 - `NEXT_PUBLIC_NEST_API_URL` — 클라이언트 컴포넌트에서 사용
@@ -174,6 +174,117 @@ sudo certbot renew --dry-run
 ---
 
 ## 6. DB 관리
+
+### 한글 깨짐 방지 (utf8mb4)
+
+앱 연결(NestJS `db.module.ts`)은 이미 `charset: utf8mb4`로 설정되어 있다.  
+한글이 깨지는 원인은 **배포/수동 SQL 실행 세션**에서 인코딩이 빠지는 경우이다.
+
+**필수 수칙:**
+
+1. **MySQL 컨테이너** — 서버 기본값 + 세션 모두 utf8mb4 강제  
+   (`docker-compose.yml`의 `command` 또는 `my.cnf`에서 설정)
+2. **수동 SQL 실행** — 항상 `--default-character-set=utf8mb4` 옵션 사용
+3. **PowerShell에서 한글 SQL 직접 입력** — `chcp 65001` (UTF-8 콘솔) 설정 후 실행하거나, UTF-8로 저장된 `.sql` 파일로 실행
+
+#### EC2 인코딩 점검 쿼리
+
+MySQL 컨테이너에 접속:
+
+```bash
+docker exec -it daloa-mysql mysql -udaloa -p1234 --default-character-set=utf8mb4 lost_ark
+```
+
+접속 후 아래 쿼리들을 순서대로 실행:
+
+```sql
+-- 1) 서버 기본값 확인 (전부 utf8mb4여야 정상)
+SHOW VARIABLES LIKE 'character_set_%';
+SHOW VARIABLES LIKE 'collation_%';
+
+-- 2) 현재 세션 인코딩 확인
+SELECT @@character_set_client, @@character_set_connection, @@character_set_results;
+
+-- 3) 테이블별 charset/collation 확인
+SELECT TABLE_NAME, TABLE_COLLATION
+  FROM information_schema.TABLES
+ WHERE TABLE_SCHEMA = 'lost_ark';
+
+-- 4) 컬럼별 charset 확인 (문제 있는 컬럼 찾기)
+SELECT TABLE_NAME, COLUMN_NAME, CHARACTER_SET_NAME, COLLATION_NAME
+  FROM information_schema.COLUMNS
+ WHERE TABLE_SCHEMA = 'lost_ark'
+   AND CHARACTER_SET_NAME IS NOT NULL
+   AND CHARACTER_SET_NAME != 'utf8mb4';
+```
+
+#### 깨진 행 탐지 쿼리
+
+한글 컬럼에 `?` 또는 비정상 바이트가 들어간 행을 탐지:
+
+```sql
+-- loa_users: 캐릭터명/서버명/길드명 깨짐
+SELECT name, server_name, guild
+  FROM loa_users
+ WHERE name REGEXP '[?]{2,}'
+    OR name != CONVERT(CONVERT(name USING utf8mb4) USING binary)
+ LIMIT 20;
+
+-- loa_sites: 사이트명/설명 깨짐
+SELECT name, description
+  FROM loa_sites
+ WHERE name REGEXP '[?]{2,}'
+    OR description REGEXP '[?]{2,}'
+ LIMIT 20;
+
+-- loa_class: 직업명/각인명 깨짐
+SELECT class_detail, class_engraving
+  FROM loa_class
+ WHERE class_detail REGEXP '[?]{2,}'
+    OR class_engraving REGEXP '[?]{2,}'
+ LIMIT 20;
+
+-- loa_class_summaries: AI 한줄평 깨짐
+SELECT class_name, summary
+  FROM loa_class_summaries
+ WHERE summary REGEXP '[?]{2,}'
+ LIMIT 20;
+```
+
+#### 안전한 재적재 명령 순서
+
+깨진 데이터가 발견되면 아래 순서로 복구:
+
+```bash
+# 1) NestJS 컨테이너 중지 (쓰기 방지)
+docker compose stop nest
+
+# 2) 깨진 테이블 비우기 (또는 특정 행만 DELETE)
+docker exec -i daloa-mysql mysql -udaloa -p1234 \
+  --default-character-set=utf8mb4 lost_ark \
+  -e "TRUNCATE TABLE loa_users;"
+
+# 3) 깨끗한 덤프 파일 적재 (반드시 utf8mb4)
+docker exec -i daloa-mysql mysql -udaloa -p1234 \
+  --default-character-set=utf8mb4 lost_ark < /home/ubuntu/daloa/scripts/dump.sql
+
+# 4) 적재 후 깨짐 재확인
+docker exec -i daloa-mysql mysql -udaloa -p1234 \
+  --default-character-set=utf8mb4 lost_ark \
+  -e "SELECT name, server_name FROM loa_users WHERE name REGEXP '[?]{2,}' LIMIT 5;"
+
+# 5) Redis 캐시 전체 삭제 (옛 데이터 제거)
+docker exec daloa-redis redis-cli -a $REDIS_PASSWORD FLUSHALL
+
+# 6) NestJS 컨테이너 재시작
+docker compose up -d --build nest
+
+# 7) API로 정상 응답 확인
+curl -s https://api.daloa.kr/api/sites | head -c 200
+```
+
+> **주의:** `dump.sql` 파일 자체가 UTF-8(BOM 없음)로 저장되어 있어야 한다.  
+> 로컬에서 `node scripts/dump-db.js` 실행 시 Node.js는 기본 UTF-8로 출력하므로 별도 설정 불필요.
 
 ### 스키마 초기화
 
