@@ -159,7 +159,7 @@ export default function ClassSummaryList({ summaries }: Props) {
         </ul>
 
         {/* 오른쪽 직업 + 한줄평 목록 */}
-        <ul className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col gap-1.5 [scrollbar-width:thin] [scrollbar-color:theme(colors.slate.200)_transparent]">
+        <ul key={activeTab} className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col gap-1.5 [scrollbar-width:thin] [scrollbar-color:theme(colors.slate.200)_transparent]">
           {filtered.length === 0 ? (
             <li className="py-8 text-center text-sm text-slate-400">
               데이터 집계 중…

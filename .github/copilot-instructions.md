@@ -15,15 +15,15 @@
 
 ## 컨텍스트 파일 (코드 작업 전 관련 파일 먼저 읽기)
 
-| 작업 유형                | 읽어야 할 컨텍스트                                        |
-| ------------------------ | --------------------------------------------------------- |
-| 새 기능 추가 / 모듈 연결 | [`context/architecture.md`](../context/architecture.md)   |
-| 쿼리 작성 / 스키마 변경  | [`context/db-schema.md`](../context/db-schema.md)         |
-| API 호출 / 컨트롤러 수정 | [`context/api-contracts.md`](../context/api-contracts.md) |
-| 환경변수 추가            | [`context/env-config.md`](../context/env-config.md)       |
-| Redis 관련 서비스 수정   | [`context/redis-keys.md`](../context/redis-keys.md)       |
+| 작업 유형                | 읽어야 할 컨텍스트                                              |
+| ------------------------ | --------------------------------------------------------------- |
+| 새 기능 추가 / 모듈 연결 | [`context/architecture.md`](../context/architecture.md)         |
+| 쿼리 작성 / 스키마 변경  | [`context/db-schema.md`](../context/db-schema.md)               |
+| API 호출 / 컨트롤러 수정 | [`context/api-contracts.md`](../context/api-contracts.md)       |
+| 환경변수 추가            | [`context/env-config.md`](../context/env-config.md)             |
+| Redis 관련 서비스 수정   | [`context/redis-keys.md`](../context/redis-keys.md)             |
 | 폴더 구조 / 파일 위치    | [`context/folder-structure.md`](../context/folder-structure.md) |
-| 배포 / 인프라 변경       | [`context/deployment.md`](../context/deployment.md)       |
+| 배포 / 인프라 변경       | [`context/deployment.md`](../context/deployment.md)             |
 
 ---
 
@@ -67,3 +67,17 @@
 - NestJS는 `CommonJS` 빌드 (`module: "commonjs"`) — ESM 전환은 NestJS v12 이후 검토
 - 서비스 로직의 순수 함수는 `export` 하여 단위 테스트 가능하게 유지
 - 환경변수는 `.env` 파일 사용, `.gitignore`에 포함 (`node_modules`, `.env` 커밋 금지)
+
+---
+
+## DB 한글 깨짐 방지 (필독)
+
+> 상세 절차: [`context/deployment.md`](../context/deployment.md) 섹션 6
+
+DB 스키마 변경·데이터 수정·배포 시 **반드시** 아래를 지킨다:
+
+1. **수동 SQL 실행** — 항상 `--default-character-set=utf8mb4` 옵션 사용
+2. **SQL 파일** — 반드시 UTF-8(BOM 없음)로 저장 후 실행
+3. **UPDATE 기준 컬럼** — 한글이 깨질 수 있는 `name` 대신 `href`(URL) 등 ASCII 컬럼으로 WHERE 조건 작성
+4. **PowerShell 한글 입력** — `chcp 65001` 설정 후 실행하거나 UTF-8 `.sql` 파일로 실행
+5. **배포 후** — 깨진 행 탐지 쿼리로 점검 (`deployment.md` 참조)

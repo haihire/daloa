@@ -66,16 +66,24 @@ function formatDuration(iso: string): string {
 @Injectable()
 export class StreamersService implements OnModuleInit {
   private readonly logger = new Logger(StreamersService.name);
-  private readonly youtube;
+  private readonly youtubeKeys: any[];
+  private currentKeyIdx = 0;
+
+  private get youtube() {
+    return this.youtubeKeys[this.currentKeyIdx];
+  }
 
   constructor(
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly config: ConfigService,
   ) {
-    this.youtube = google.youtube({
-      version: 'v3',
-      auth: this.config.get<string>('YOUTUBE_API_KEY'),
-    });
+    const keys = [
+      config.get<string>('YOUTUBE_API_KEY', ''),
+      config.get<string>('YOUTUBE_API_KEY_2', ''),
+    ].filter((k) => !!k);
+    this.youtubeKeys = keys.map((k) =>
+      google.youtube({ version: 'v3', auth: k }),
+    );
   }
 
   async onModuleInit() {
@@ -222,6 +230,37 @@ export class StreamersService implements OnModuleInit {
   }
 
   private async fetchFromYouTube(
+    pageToken?: string,
+    order: 'date' | 'viewCount' = 'date',
+    isPopular = false,
+    query = '로스트아크',
+  ): Promise<{
+    items: YoutubeVideoItem[];
+    nextPageToken: string | null;
+  }> {
+    const total = this.youtubeKeys.length;
+    for (let attempt = 0; attempt < total; attempt++) {
+      try {
+        return await this._doFetch(pageToken, order, isPopular, query);
+      } catch (err: any) {
+        const reason = err?.response?.data?.error?.errors?.[0]?.reason;
+        if (
+          (reason === 'quotaExceeded' || reason === 'dailyLimitExceeded') &&
+          attempt < total - 1
+        ) {
+          this.currentKeyIdx = (this.currentKeyIdx + 1) % total;
+          this.logger.warn(
+            `YouTube 키 ${attempt + 1}/${total} 할당량 초과 — 키 ${this.currentKeyIdx + 1}로 전환`,
+          );
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw new Error('모든 YouTube API 키 할당량 초과');
+  }
+
+  private async _doFetch(
     pageToken?: string,
     order: 'date' | 'viewCount' = 'date',
     isPopular = false,

@@ -8,7 +8,10 @@ interface Props {
 
 export default function SiteList({ sites }: Props) {
   return (
-    <section className="flex flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-white/80 shadow-md backdrop-blur">
+    <section
+      className="flex flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-white/80 shadow-md backdrop-blur"
+      style={{ height: "590px" }}
+    >
       {/* <h2 className="shrink-0 border-b border-slate-100 px-4 py-3 text-lg font-semibold text-slate-900">
         사이트 모음
       </h2> */}
@@ -38,6 +41,22 @@ export default function SiteList({ sites }: Props) {
                         width={16}
                         height={16}
                         className="shrink-0 rounded-sm"
+                        onError={(e) => {
+                          const img = e.target as HTMLImageElement;
+                          const domain = (() => {
+                            try {
+                              return new URL(site.href).hostname;
+                            } catch {
+                              return "";
+                            }
+                          })();
+                          const fallback = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+                          if (img.src !== fallback && domain) {
+                            img.src = fallback;
+                          } else {
+                            img.style.display = "none";
+                          }
+                        }}
                       />
                     )}
                     <span className="truncate font-semibold text-slate-900">

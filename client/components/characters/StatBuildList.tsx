@@ -206,7 +206,7 @@ export default function StatBuildList({ tabs }: Props) {
             </div>
 
             {/* 오른쪽: 항목 리스트 */}
-            <ul className="flex flex-col gap-1 flex-1 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:theme(colors.slate.200)_transparent]">
+            <ul key={activeTab} className="flex flex-col gap-1 flex-1 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:theme(colors.slate.200)_transparent]">
               {[...(current?.items ?? [])]
                 .sort((a, b) => b.count - a.count)
                 .map((item, idx) => {
