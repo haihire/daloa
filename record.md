@@ -357,3 +357,214 @@ INSERT INTO loa_users VALUES (...),(...),(...),...
 
 - 원정대당 DB 쿼리 횟수: N회 → 1회
 - 800 원정대 기준: 12,000회 → 800회 (93% 감소)
+
+---
+
+## 문제 6. 탭 전환 시 우측 패널의 스크롤 위치가 이전 상태를 기억함
+
+**문제**
+특성 빌드 분포(`StatBuildList`)와 AI 직업 한줄평(`ClassSummaryList`) 탭을 전환할 때,
+우측 목록이 이전 탭에서 스크롤한 위치를 그대로 유지했다.
+
+예: 치신 탭에서 스크롤 끝까지 내려간 후 특신 탭으로 전환하면, 특신 탭도 같은 위치에서 시작됨.
+
+**고민**
+
+- React의 컴포넌트 재렌더링 메커니즘: 동일한 DOM 요소(리스트)는 위치 상태(`scrollTop`)를 그대로 유지
+- 각 탭이 별도 데이터를 가지고 있지만, 렌더링되는 `<ul>` 엘리먼트는 동일한 인스턴스이므로 스크롤 상태가 공유됨
+- 탭 전환 시 컴포넌트를 강제 재마운트(remount)해야 하는데, 방법이 여러 가지 존재
+
+**해결**
+
+1. 우측 `<ul>` 엘리먼트에 `key={activeTab}` 속성 추가
+2. React의 reconciliation 알고리즘이 `key` 변경을 감지하면 기존 DOM을 버리고 새로 생성
+3. 새로운 DOM은 `scrollTop: 0` 초기 상태로 시작
+4. 동일한 처리를 `StatBuildList`와 `ClassSummaryList` 두 컴포넌트에 적용
+
+**결과**
+
+- 탭 전환 시 우측 목록이 항상 맨 위(scrollTop=0)부터 시작
+- 사용자가 각 탭에서 독립적으로 스크롤 가능
+- `key` 속성 추가로 해결되어 추가 상태(scrollPos 변수)나 useEffect 보일러플레이트 불필요
+
+---
+
+## 문제 7. 즐겨찾기 기능 부재 및 localStorage 활용 미흡
+
+**문제**
+사용자가 유용한 사이트를 자주 방문하는데, 매 방문마다 여러 사이트 중에서 찾아야 했다.
+모바일/데스크톱 환경 구분 없이 같은 기기에서는 이전 방문 기록을 유지하고 싶다는 요청 발생.
+
+**고민**
+
+- 북마크 기능을 구현하되, 서버 DB에 저장하지 않고 클라이언트 localStorage만 사용할지 여부
+  - DB 저장 방식: 사용자 계정 필요, 복잡도 증가
+  - localStorage 방식: 동일 기기/브라우저에서만 유지, 계정 불필요
+- localStorage에 어떤 형식(배열 vs Set vs 객체)으로 저장할지
+  - 배열: 추가/제거 순서 추적 가능, JSON 직렬화 편함
+  - Set: 중복 자동 제거, 순서 보장 불가
+- 즐겨찾기 항목 표시 방식(별, 하트, 핀 등)
+
+**해결**
+
+1. **저장소**: localStorage만 사용, 키는 `loa_favorites`
+2. **데이터 구조**: 즐겨찾기 사이트 href를 배열로 관리
+   - `favorites: string[]` — 추가된 순서대로 정렬
+3. **UI 표현**:
+   - 별 모양 아이콘(SVG)
+   - 즐겨찾기 미추가: 회색
+   - 즐겨찾기 추가됨: 노란색(#FBBF24)
+4. **카드 스타일**: 즐겨찾기 사이트는 파란 테두리 + 파란 배경(`border-blue-400 bg-blue-50`)
+5. **정렬 규칙**: 즐겨찾기 항목을 맨 위에 배치, 같은 레벨 내에서 추가 순서 유지
+
+**결과**
+
+- 사용자가 자주 방문하는 사이트를 별 클릭으로 상단에 고정 가능
+- 새로고침/탭 전환 후에도 localStorage에서 즐겨찾기 복원
+- 데이터는 로컬만 저장되어 개인정보 유출 우려 없음
+- 향후 회원가입 기능 추가 시 서버 동기화로 확장 가능한 구조
+
+---
+
+## 문제 8. 방문자 통계 수집 불가
+
+**문제**
+사이트 런칭 후 방문자 수, 사용 기기 분포, 지역 분석 등 기초적인 메트릭이 없었다.
+Google Analytics는 설정이 복잡하고, 간단한 카운팅만 필요한 상황.
+
+**고민**
+
+- Google Analytics: 설정 복잡, 쿠키 동의 필요, 개인정보보호법 고려
+- Vercel 자체 분석 도구: Vercel에 배포된 프로젝트라면 최소 설정으로 활용 가능
+- 기타 SaaS(Mixpanel, Amplitude): 유료 또는 무료 한도 제한
+
+**해결**
+
+1. `npm install @vercel/analytics@latest` 설치
+2. `client/app/layout.tsx`의 RootLayout에서 Analytics 컴포넌트 import
+   ```tsx
+   import { Analytics } from "@vercel/analytics/react";
+   ```
+3. `<body>` 내부 마지막에 `<Analytics />` 추가
+4. 빌드/배포 후 자동으로 Vercel Dashboard에 데이터 수집 시작
+
+**결과**
+
+- 추가 설정 없이 다음 메트릭 자동 수집:
+  - 월별 페이지뷰
+  - 기기별 분포(Desktop, Mobile, Tablet)
+  - 브라우저 종류
+  - 지역(국가 단위)
+  - 주요 진입 경로
+- 월별 50,000 이벤트 무료 한도 충분 (예상 일 방문자 600명 기준)
+- Vercel Dashboard에서 실시간 조회 가능
+
+---
+
+## 문제 9. YouTube 영상 섹션의 스크롤바 미표시 및 네비게이션 불편
+
+**문제**
+YouTube 영상 목록(6개 카드)이 가로로 자동 스크롤되는 컴포넌트였으나:
+
+1. 스크롤바가 보이지 않아 스크롤 가능 여부를 사용자가 모름
+2. 좌우 네비게이션 버튼이 없어 마우스 드래그나 터치만 가능
+3. 모바일에서 스크롤이 불편함
+
+**고민**
+
+- 수평 스크롤바를 보이게 하려면 `overflow-x-auto` 필요한데, 기본 스크롤바는 목록을 압박
+- CSS 3D `rotateX(180deg)` 변환으로 역방향 스크롤바를 상단에 배치하는 시도
+- JavaScript 이중 스크롤 동기화: 보이는 스크롤바와 실제 리스트 scroll 값 연동
+- 버튼 위치: 절대 포지셔닝(목록 위에 오버레이)인지, 헤더 행에 인라인인지
+
+**해결**
+
+1. **상단 스크롤바 구현**:
+   - 상단에 별도 `<div ref={topScrollRef}>` 컨테이너 배치
+   - 내부에 너비를 동적으로 설정하는 `<div>` spacer 배치
+   - `useEffect` + `ResizeObserver`로 리스트의 `scrollWidth`와 spacer 너비 동기화
+   - 스크롤바는 Tailwind 커스텀 클래스로 스타일링 (높이 h-3, 색상 slate-400)
+
+2. **이중 스크롤 동기화**:
+
+   ```tsx
+   topScrollRef.addEventListener("scroll", () => {
+     listRef.scrollLeft = topScrollRef.scrollLeft;
+   });
+   listRef.addEventListener("scroll", () => {
+     topScrollRef.scrollLeft = listRef.scrollLeft;
+   });
+   ```
+
+   - `syncingRef`로 무한 루프 방지
+
+3. **네비게이션 버튼**:
+   - 헤더 행(`<div className="flex items-center gap-3">`)에 타이틀 옆 인라인 배치
+   - 크기: `h-10 w-10`(충분히 큼)
+   - 모양: 둥근 테두리(`rounded-md`) + 회색 배경
+   - 상태: 로딩 중 또는 아이템 없을 시 `disabled={...}`로 비활성화
+   - 스타일: `disabled:opacity-40 disabled:cursor-default`
+
+4. **간격 최적화**:
+   - 헤더 마진: `mb-3` → `mb-1`(타이틀과 스크롤바 간격 축소)
+   - 스크롤바 마진: `mb-2` → `mb-1`(스크롤바와 영상 카드 간격 축소)
+
+**결과**
+
+- 상단에 항상 보이는 수평 스크롤바로 스크롤 가능성 명시
+- 좌/우 버튼으로 마우스/터치 스크롤 어려운 사용자도 쉽게 네비게이션 가능
+- 스크롤바와 버튼 동기화로 UX 일관성 확보
+- 모바일에서 버튼 크기(10×10 = 약 40×40px)가 충분해 접근성 향상
+
+---
+
+## 문제 10. 페이지 하단에 저작권/서비스 정보 부재
+
+**문제**
+페이지 구조가 메인 콘텐츠만 있고 footer가 없었다.
+로스트아크 공식 자산(이미지, 데이터)을 사용하고 있으므로 저작권 표시 필요.
+또한 사용자에게 서비스 정보(연락처, 약관 등)를 제공할 공간 부재.
+
+**고민**
+
+- Footer 위치: 콘텐츠가 짧을 때 화면 하단 고정 vs 콘텐츠 아래 배치
+- Footer 높이: 최소한의 정보만 표시할지, 링크/섹션이 여러 개일지
+- 스타일: 메인 콘텐츠와의 시각적 구분
+
+**해결**
+
+1. **레이아웃 재구성**:
+
+   ```tsx
+   <div className="flex min-h-screen flex-col">
+     <div className="flex-1 py-3">{children}</div>
+     <footer>{...}</footer>
+   </div>
+   ```
+
+   - Outer: `flex min-h-screen flex-col` — 항상 전체 높이 점유, 세로 배치
+   - Main content: `flex-1` — 남은 공간 모두 점유
+   - Footer: 별도 형제 요소로 하단 고정
+
+2. **Footer 스타일**:
+   - 배경: 연한 회색(`bg-slate-50`) + 블러(`backdrop-blur`) 적용
+   - 테두리: 상단만(`border-t border-slate-200/80`)
+   - 패딩/여백: `px-4 py-4`
+   - 텍스트: 작게(`text-xs`) + 회색(`text-slate-500`)
+
+3. **콘텐츠**:
+   ```tsx
+   <p className="text-[11px] text-slate-400">
+     Lost Ark and related assets belong to Smilegate RPG.
+   </p>
+   ```
+
+   - 저작권: Smilegate RPG 표시
+   - 향후 확장 가능: 이용약관, 개인정보처리방침, GitHub 링크 등 추가
+
+**결과**
+
+- 로스트아크 공식 저작권 표시로 법적 준수
+- 페이지 끝이 명확해 사용자 경험 개선
+- 밝고 깔끔한 스타일로 메인 콘텐츠와 구분
+- 향후 서비스 정보(About, Contact, Privacy) 확장 기반 마련

@@ -77,13 +77,55 @@ cd client && npm run test:coverage
 
 ---
 
-## 1. 파일 위치 규칙
+## 1. 폴더 구조 규칙
+
+### 1-1. 서버 (NestJS) 모듈 구조
+
+각 **feature** 디렉터리(`characters/`, `sites/`, `users/` 등)는 다음 파일들을 포함한다:
+
+```
+server/src/[feature]/
+  [feature].controller.ts      — HTTP 엔드포인트 정의
+  [feature].service.ts         — 비즈니스 로직 (순수 함수 export)
+  [feature].module.ts          — NestJS 모듈 (DI 설정)
+  [feature].service.spec.ts    — 단위 테스트 (Jest)
+```
+
+**공용 모듈**:
+- `common/` — 에러 필터, 인터셉터, 데코레이터
+- `db/` — 데이터베이스 풀 관리
+- `redis/` — Redis 클라이언트 관리
+- `kakao/` / `lostark/` — 외부 API 통합
+
+### 1-2. 클라이언트 (Next.js) 폴더 구조
+
+```
+client/app/
+  layout.tsx          — 루트 레이아웃 (HTML 마크업, 전역 CSS)
+  page.tsx            — 메인 페이지 컴포넌트
+  sitemap.ts          — SEO 사이트맵
+  globals.css         — 테일윈드 전역 스타일
+
+client/components/
+  [feature]/
+    [Feature].tsx     — 컴포넌트 (PascalCase)
+    [Feature].test.tsx — 테스트 (같은 폴더)
+
+client/types/
+  index.ts            — 전역 타입 정의 (Site, Character 등)
+
+client/public/
+  favicon.ico, icon.png 등
+```
+
+### 1-3. 테스트 파일 위치
 
 | 레이어              | 테스트 파일 위치                  | 패턴                           |
 | ------------------- | --------------------------------- | ------------------------------ |
 | 서버 단위           | `server/src/**/*.spec.ts`         | 테스트 대상과 같은 폴더에 위치 |
 | 서버 E2E            | `server/test/*.e2e-spec.ts`       | 격리된 `test/` 폴더            |
 | 클라이언트 컴포넌트 | `client/components/**/*.test.tsx` | 컴포넌트와 같은 폴더에 위치    |
+| 클라이언트 유틸/훅  | `client/[utils\|hooks]/**/*.test.ts` | 대상과 같은 폴더             |
 
 ---
 
@@ -176,6 +218,43 @@ it('클릭 시 window.open 호출', async () => {
 - 빈 배열(`[]`) props 전달 시 렌더링 오류 없는지 확인
 - Optional props(`icon?`, `description?`) 누락 시 동작 확인
 
+### 테스트 신뢰도 체크리스트 (필수)
+
+- 테스트 이름과 assertion은 반드시 1:1로 대응한다.
+  - 예: "로딩 메시지 표시" 테스트에서 컨테이너 존재만 확인하지 말고, 실제 로딩 텍스트(`불러오는 중…`)를 검증한다.
+- 인덱스 기반 선택(`getAllByRole(...)[1]`)을 지양하고, 역할/이름/레이블 기반 선택을 사용한다.
+  - 예: `getByRole('button', { name: /다음/i })`, `button[aria-label*="즐겨찾기"]`
+- 예외 경로 테스트는 실제 런타임 호출 경로를 스파이/목한다.
+  - `window.localStorage`를 교체한 경우 `Storage.prototype`이 아니라 교체된 객체 메서드를 스파이한다.
+- React `key` 관련 동작은 DOM attribute 조회로 검증하지 않는다.
+  - `key`는 DOM에 노출되지 않으므로, 재마운트 여부(노드 참조 변경)와 결과 상태(`scrollTop` 초기화 등)로 검증한다.
+- 목 데이터는 타입 계약을 준수한다.
+  - 테스트가 통과해도 필수 필드 누락(예: `topLevel`, `updatedAt`)은 허용하지 않는다.
+
+### 유틸리티 & 훅 테스트
+
+- 순수 함수(데이터 변환, 포맷팅 등)는 독립적으로 단위 테스트
+- React 훅은 `renderHook` (Vitest)으로 테스트
+
+```ts
+// 유틸리티 테스트
+import { formatNumber } from '@/utils/format';
+
+it('formatNumber(1000000) → "1,000,000"', () => {
+  expect(formatNumber(1000000)).toBe('1,000,000');
+});
+
+// 훅 테스트 (있을 경우)
+import { renderHook, act } from '@testing-library/react';
+import { useCounter } from '@/hooks/useCounter';
+
+it('카운터 증가', () => {
+  const { result } = renderHook(() => useCounter());
+  act(() => result.current.increment());
+  expect(result.current.count).toBe(1);
+});
+```
+
 ### 금지 사항
 
 - 구현 세부사항(클래스명, DOM 구조) 기반 쿼리 금지 → `getByRole`, `getByText` 사용
@@ -198,6 +277,61 @@ it('클릭 시 window.open 호출', async () => {
 - PR 머지 전 `npm test` 통과 필수
 - 커버리지가 목표치 미달이면 머지 차단
 - E2E는 별도 `test:e2e` 스크립트로 분리하여 선택적으로 실행
+
+---
+
+## 6-1. 환경변수 관리
+
+### .env 파일 구조
+
+각 환경마다 별도의 `.env` 파일을 관리한다. `.gitignore` 에 포함되어야 한다.
+
+**서버** (`server/.env` 또는 `server/.env.local`):
+```env
+# 기본
+PORT=3001
+CLIENT_ORIGIN=http://localhost:3000
+
+# 데이터베이스
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_NAME=lost_ark
+DB_USER=root
+DB_PASS=1234
+
+# 외부 API
+LOSTARK_API_KEY=...
+YOUTUBE_API_KEY=...
+KAKAO_REST_API_KEY=...
+
+# Redis
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_DB=0
+```
+
+**클라이언트** (`client/.env.local`):
+```env
+# 개발 환경
+NEXT_PUBLIC_API_URL=http://localhost:3001
+
+# 배포 환경 (production)
+# NEXT_PUBLIC_API_URL=https://api.daloa.kr
+```
+
+### 환경별 설정 방법
+
+| 환경        | 위치                  | 방법                                  |
+| ----------- | --------------------- | ------------------------------------- |
+| 로컬 개발   | `server/.env.local`   | `npm run start:dev` (자동 로드)       |
+| 로컬 dev.ps1 | Docker Compose 환경   | 컨테이너 시작 전 `.env` 복사          |
+| EC2 배포    | EC2 서버의 `.env`     | SSH 접근 후 수동 설정 또는 GitHub Secrets |
+
+### 금지 사항
+
+- **절대로** `.env` 파일을 git에 커밋하지 말 것
+- 민감한 정보(API 키, DB 비밀번호)를 코드 또는 로그에 노출하지 말 것
+- 환경변수는 런타임에 읽을 것 — 빌드 타임에 하드코딩하지 말 것
 
 ---
 

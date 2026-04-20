@@ -118,12 +118,12 @@ export default function YoutubeList() {
 
   return (
     <section className="fade-in">
-      <div className="mb-1 flex items-center gap-3">
+      <div className="mb-0 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-baseline gap-2">
           <h2 className="text-lg font-semibold text-slate-900">로아 영상</h2>
           <span className="text-xs text-slate-400">심심할 때 보는</span>
         </div>
-        <div className="ml-1 flex items-center gap-2">
+        <div className="flex items-center gap-2 self-end sm:self-auto">
           <button
             onClick={() => scroll("left")}
             className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-xl text-slate-500 shadow-sm transition hover:border-red-300 hover:text-red-500 hover:shadow-md disabled:cursor-default disabled:opacity-40"
@@ -157,7 +157,7 @@ export default function YoutubeList() {
         <div>
           <div
             ref={topScrollRef}
-            className="mb-1 overflow-x-auto overflow-y-hidden pb-1 [scrollbar-width:auto] [scrollbar-color:theme(colors.slate.400)_theme(colors.slate.100)] [&::-webkit-scrollbar]:h-3 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-slate-100 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-400"
+            className="overflow-x-auto overflow-y-hidden [scrollbar-width:auto] [scrollbar-color:theme(colors.slate.400)_theme(colors.slate.100)] [&::-webkit-scrollbar]:h-3 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-slate-100 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-400"
           >
             <div className="h-3" />
           </div>

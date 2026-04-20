@@ -20,7 +20,6 @@ body {
 
 .fade-in {
   animation: fade-in-up 0.7s ease-out both;
-  margin-top: -1px;
 }
 
 .delay-1 {

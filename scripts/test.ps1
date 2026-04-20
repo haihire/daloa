@@ -1,6 +1,6 @@
-# test.ps1 — 하네스 엔지니어링 테스트 스크립트
+# test.ps1 - 하네스 엔지니어링 테스트 스크립트
 # 사용: powershell -File scripts/test.ps1
-# 효과: 서버 단위 테스트 → 클라이언트 테스트 → 결과 요약 → 실패 시 로그 안내
+# 효과: 서버 단위 테스트 -> 클라이언트 테스트 -> 결과 요약
 
 param(
     [switch]$Coverage,    # -Coverage 플래그 시 커버리지 포함
@@ -16,27 +16,23 @@ Write-Host "  하네스 테스트 실행"
 Write-Host "========================================"
 Write-Host ""
 
-# ─────────────────────────────────────────────
 # 함수: 테스트 실행 후 결과 반환 (0=pass, 1=fail)
-# ─────────────────────────────────────────────
 function Run-Tests {
     param(
         [string]$Label,
         [string]$Dir,
         [string]$Script
     )
-    Write-Host "─────────────────────────────────────"
+    Write-Host "---"
     Write-Host "  $Label"
-    Write-Host "─────────────────────────────────────"
+    Write-Host "---"
     Push-Location $Dir
-    npm run $Script
+    cmd /c "npm run $Script" | Out-Host
     $result = $LASTEXITCODE
     Pop-Location
     if ($result -ne 0) {
         Write-Host ""
-        Write-Host "[FAIL] $Label 실패 — 로그를 확인하세요:"
-        Write-Host "  서버 로그  : $Root\server\logs\"
-        Write-Host "  클라이언트 : $Root\client\logs\"
+        Write-Host "[FAIL] $Label 실패"
         Write-Host ""
     } else {
         Write-Host ""
@@ -62,13 +58,12 @@ if ($E2E) {
     if ($r -ne 0) { $exitCode = 1 }
 }
 
-# ─── 최종 결과 ───
+# 최종 결과
 Write-Host "========================================"
 if ($exitCode -eq 0) {
     Write-Host "  결과: 전체 테스트 통과"
 } else {
-    Write-Host "  결과: 실패한 테스트 있음 — 위 로그 확인 후 수정하고 재실행"
-    Write-Host "  재실행: powershell -File scripts/test.ps1"
+    Write-Host "  결과: 실패한 테스트 있음"
 }
 Write-Host "========================================"
 Write-Host ""

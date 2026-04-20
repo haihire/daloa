@@ -8,8 +8,14 @@
 ## 프로젝트 구조
 
 - **서버**: `server/` — NestJS + MariaDB + Redis (포트 3001)
+  - 각 feature 모듈: `src/[feature]/{service, controller, module, spec}.ts`
+  - 공용 모듈: `common/`, `db/`, `redis/`, `kakao/`, `lostark/`
 - **클라이언트**: `client/` — Next.js 15 App Router (포트 3000)
+  - 라우팅: `app/` (layout.tsx, page.tsx, sitemap.ts)
+  - 컴포넌트: `components/[feature]/[Feature].tsx + .test.tsx`
+  - 타입: `types/index.ts`
 - **크롤러**: `crawlers/` — Python (curl_cffi + asyncio)
+- **웹서버**: `nginx/` — Nginx 설정 (SSL, 프록시)
 
 ---
 
@@ -46,8 +52,20 @@
 - 서버 단위 테스트: `server/src/**/*.spec.ts`, DB·Redis·외부 서비스는 반드시 목(mock) 처리
 - 서버 E2E: `server/test/*.e2e-spec.ts`, Supertest 사용
 - 클라이언트 컴포넌트 테스트: `client/components/**/*.test.tsx`, Vitest + Testing Library
+- 클라이언트 유틸/훅 테스트: `client/[utils|hooks]/**/*.test.ts` (독립 단위 테스트)
 - `it` 안에서 실제 DB·Redis·네트워크 호출 절대 금지
 - `vi.spyOn` / `jest.fn()` 사용 후 반드시 `mockRestore()` 또는 `beforeEach` 초기화
+
+---
+
+## 환경변수 관리
+
+> 상세 규칙: `HARNESS.md` 섹션 6-1
+
+- **서버**: `server/.env.local` — DB, API 키, Redis 연결 정보
+- **클라이언트**: `client/.env.local` — `NEXT_PUBLIC_API_URL=http://localhost:3001` (개발)
+- **절대 금지**: 민감한 정보를 코드·로그·git에 노출하지 말 것
+- **배포**: EC2에서는 `.env`를 수동 설정하거나 GitHub Secrets 사용
 
 ---
 
