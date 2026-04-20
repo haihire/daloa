@@ -44,8 +44,28 @@ export class SitesService {
   async findAll() {
     const cached = await this.redis.get(CACHE_KEY);
     if (cached) {
-      this.logger.debug('sites: Redis 캐시 히트');
-      return JSON.parse(cached);
+      const parsedCache = JSON.parse(cached) as Array<{
+        seq: number;
+        name: string;
+        href: string;
+        category: string | null;
+        description: string | null;
+        icon: string | null;
+      }>;
+
+      // 캐시에 깨진 텍스트가 있으면 즉시 무효화 후 DB 재조회
+      const brokenInCache = parsedCache.filter(
+        (row) => hasBrokenText(row.name) || hasBrokenText(row.description),
+      );
+      if (brokenInCache.length === 0) {
+        this.logger.debug('sites: Redis 캐시 히트');
+        return parsedCache;
+      }
+
+      this.logger.warn(
+        `sites: Redis 캐시에서 깨진 텍스트 ${brokenInCache.length}건 감지 — 캐시 무효화 후 DB 재조회`,
+      );
+      await this.redis.del(CACHE_KEY);
     }
 
     const [rows] = (await (this.pool as any).execute(
@@ -62,15 +82,25 @@ export class SitesService {
       any,
     ];
 
-    // 운영 DB에서 드물게 한글이 "???"로 깨지는 경우, 기준 텍스트로 즉시 복구한다.
-    const brokenRows = rows.filter((row) => {
-      const canonical = SITE_TEXT_CANONICAL[row.href];
-      if (!canonical) {
-        return false;
-      }
+    // SITE_TEXT_CANONICAL 등록 사이트: DB 즉시 복구
+    // 미등록 사이트: 경고 로그 기록 (관리자가 SITE_TEXT_CANONICAL에 추가해야 함)
+    const allBrokenRows = rows.filter(
+      (row) => hasBrokenText(row.name) || hasBrokenText(row.description),
+    );
 
-      return hasBrokenText(row.name) || hasBrokenText(row.description);
-    });
+    const brokenRows = allBrokenRows.filter(
+      (row) => !!SITE_TEXT_CANONICAL[row.href],
+    );
+    const unknownBrokenRows = allBrokenRows.filter(
+      (row) => !SITE_TEXT_CANONICAL[row.href],
+    );
+
+    if (unknownBrokenRows.length > 0) {
+      this.logger.error(
+        `sites: 미등록 사이트에서 깨진 텍스트 감지 (자동 복구 불가) — ` +
+          unknownBrokenRows.map((r) => r.href).join(', '),
+      );
+    }
 
     if (brokenRows.length > 0) {
       await Promise.all(
@@ -96,8 +126,24 @@ export class SitesService {
       this.logger.warn(`sites: 한글 깨짐 ${brokenRows.length}건 자동 복구`);
     }
 
-    await this.redis.set(CACHE_KEY, JSON.stringify(rows), 'EX', CACHE_TTL_SEC);
-    this.logger.debug('sites: DB 조회 후 Redis 캐시 저장');
+    // 복구 후에도 여전히 깨진 텍스트가 있으면 캐시에 저장하지 않음 (다음 요청에서 재시도)
+    const stillBroken = rows.some(
+      (row) => hasBrokenText(row.name) || hasBrokenText(row.description),
+    );
+    if (!stillBroken) {
+      await this.redis.set(
+        CACHE_KEY,
+        JSON.stringify(rows),
+        'EX',
+        CACHE_TTL_SEC,
+      );
+      this.logger.debug('sites: DB 조회 후 Redis 캐시 저장');
+    } else {
+      this.logger.warn(
+        'sites: 깨진 텍스트 잔존으로 Redis 캐시 저장 생략 — 다음 요청에서 DB 재조회',
+      );
+    }
+
     return rows;
   }
 

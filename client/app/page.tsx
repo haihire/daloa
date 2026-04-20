@@ -1,14 +1,13 @@
 import StatBuildList from "@/components/characters/StatBuildList";
 import SiteList from "@/components/sites/SiteList";
 import YoutubeList from "@/components/youtube/YoutubeList";
-import ClassSummaryList from "@/components/class-summary/ClassSummaryList";
-import type { ClassSummary, Site, StatBuildTab } from "@/types";
+import type { Site, StatBuildTab } from "@/types";
 
 // SSR: NestJS 서버에서 데이터를 직접 fetch (빌드 시 또는 요청마다)
 const API = process.env.NEST_API_URL ?? "http://localhost:3001";
 
 export default async function Home() {
-  const [sites, statBuilds, classSummaries] = await Promise.all([
+  const [sites, statBuilds] = await Promise.all([
     fetch(`${API}/api/sites`, { cache: "no-store" })
       .then<Site[]>((r) => r.json())
       .catch(() => [] as Site[]),
@@ -17,9 +16,6 @@ export default async function Home() {
     })
       .then<StatBuildTab[]>((r) => r.json())
       .catch(() => [] as StatBuildTab[]),
-    fetch(`${API}/api/class-summary`, { next: { revalidate: 3600 } })
-      .then<ClassSummary[]>((r) => r.json())
-      .catch(() => [] as ClassSummary[]),
   ]);
 
   return (
@@ -41,7 +37,6 @@ export default async function Home() {
               <div className="grid gap-4 sm:grid-cols-[320px_minmax(0,1fr)]">
                 <div className="flex h-full flex-col gap-4">
                   <StatBuildList tabs={statBuilds} />
-                  <ClassSummaryList summaries={classSummaries} />
                 </div>
                 <SiteList sites={sites} />
               </div>

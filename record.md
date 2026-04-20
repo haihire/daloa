@@ -247,6 +247,64 @@ docker compose up -d nest
 
 ---
 
+## 문제 8. 사이트 목록이 실서버에서 기준 데이터와 어긋나고, 설명글이 간헐적으로 `??`로 노출됨
+
+**문제**
+사이트 목록 운영 중 다음 이슈가 연속으로 발생했다.
+
+- `LOA.GG(아크그리드 최적화)` 삭제/복구 상태가 로컬 파일, 실DB, 배포 결과에서 서로 다르게 보임
+- `init-db.sql`, `seed_sites.mjs`, 운영 DB 데이터가 시점마다 불일치
+- 실서버 화면(`daloa.kr`)에서 `로스트아크 인벤`, `사사게 검색기`, `KLoa` 설명이 `??` 형태로 보이는 현상이 재발
+
+**고민**
+
+- 단순 캐시 문제인지, DB 데이터 자체가 깨진 것인지 구분이 먼저 필요했음
+- `seed_sites.mjs`는 upsert만 수행하므로, 삭제가 자동으로 반영되지 않는 구조였음
+- 서버 Redis 캐시(10분)와 클라이언트 SSR 캐시(revalidate 300초)가 서로 다른 stale 창을 만들어
+  DB가 정상이어도 화면은 과거 값을 보여줄 수 있었음
+- 한글 깨짐은 앱 연결 문제가 아니라, 수동 SQL 실행 세션 인코딩 누락 가능성이 높았음
+
+**해결**
+
+1. 기준 데이터 파일을 재정렬했다.
+
+- `scripts/init-db.sql`, `scripts/seed_sites.mjs`, `scripts/sync-sites.sql`를 동일 기준으로 맞춤
+- 아크그리드 최적화(`https://aloa.gg/ko/arkgrid`) 항목을 최종 복구
+
+2. 삭제까지 보장되는 동기화 스크립트를 추가했다.
+
+- `scripts/sync-sites.sql`에서
+  - 기준 목록 upsert
+  - 기준 목록에 없는 href 삭제
+    를 트랜잭션으로 수행하도록 구성
+
+3. 실서버 반영 순서를 고정했다.
+
+- `git push`
+- EC2에서 `git pull`
+- DB 동기화 SQL 실행(utf8mb4 강제)
+- Redis `sites:all` 삭제
+- Nest 빌드/재배포
+
+4. 서버 측 한글 깨짐 자동복구 장치를 넣었다.
+
+- `server/src/sites/sites.service.ts`에서 `KLoa`, `로스트아크 인벤`, `사사게 검색기`를 기준 텍스트로 정의
+- 조회 시 `??` 패턴 감지 시 즉시 DB update + 응답값 보정
+
+5. 프론트 stale SSR 캐시를 줄였다.
+
+- `client/app/page.tsx`의 사이트 fetch를 `revalidate: 300`에서 `cache: "no-store"`로 변경
+- API는 정상인데 웹페이지만 구값을 보여주는 현상을 차단
+
+**결과**
+
+- 실DB `loa_sites` 기준으로 아크그리드 최적화가 정상 복구되고 `is_active=1` 상태 확인
+- `api.daloa.kr/api/sites`와 `daloa.kr`의 사이트 설명 불일치가 해소됨
+- `??` 설명 노출 재발 빈도가 크게 줄고, 재발 시 서버가 자동 복구 가능한 구조 확보
+- 사이트 목록 운영 절차가 "파일 기준 동기화 + 삭제 보장 + 캐시 무효화"로 명확해짐
+
+---
+
 # 크롤러 개발 - 고민한 문제와 해결 과정
 
 ---
@@ -590,6 +648,7 @@ YouTube 영상 목록(6개 카드)이 가로로 자동 스크롤되는 컴포넌
    - 텍스트: 작게(`text-xs`) + 회색(`text-slate-500`)
 
 3. **콘텐츠**:
+
    ```tsx
    <p className="text-[11px] text-slate-400">
      Lost Ark and related assets belong to Smilegate RPG.
