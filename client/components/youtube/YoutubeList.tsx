@@ -29,7 +29,9 @@ export default function YoutubeList() {
   const [items, setItems] = useState<YoutubeVideo[]>([]);
   const [loading, setLoading] = useState(false);
   const loadedOnce = useRef(false);
+  const topScrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const syncingRef = useRef(false);
 
   const scroll = (dir: "left" | "right") => {
     listRef.current?.scrollBy({
@@ -37,6 +39,60 @@ export default function YoutubeList() {
       behavior: "smooth",
     });
   };
+
+  useEffect(() => {
+    const topEl = topScrollRef.current;
+    const listEl = listRef.current;
+    if (!topEl || !listEl) return;
+
+    const syncTopWidth = () => {
+      const spacer = topEl.firstElementChild as HTMLDivElement | null;
+      if (!spacer) return;
+      spacer.style.width = `${listEl.scrollWidth}px`;
+    };
+
+    const handleTopScroll = () => {
+      if (syncingRef.current) return;
+      syncingRef.current = true;
+      listEl.scrollLeft = topEl.scrollLeft;
+      requestAnimationFrame(() => {
+        syncingRef.current = false;
+      });
+    };
+
+    const handleListScroll = () => {
+      if (syncingRef.current) return;
+      syncingRef.current = true;
+      topEl.scrollLeft = listEl.scrollLeft;
+      requestAnimationFrame(() => {
+        syncingRef.current = false;
+      });
+    };
+
+    syncTopWidth();
+    topEl.scrollLeft = listEl.scrollLeft;
+
+    topEl.addEventListener("scroll", handleTopScroll);
+    listEl.addEventListener("scroll", handleListScroll);
+
+    const resizeObserver = new ResizeObserver(() => {
+      syncTopWidth();
+      topEl.scrollLeft = listEl.scrollLeft;
+    });
+
+    resizeObserver.observe(listEl);
+    Array.from(listEl.children).forEach((child) =>
+      resizeObserver.observe(child),
+    );
+    window.addEventListener("resize", syncTopWidth);
+
+    return () => {
+      topEl.removeEventListener("scroll", handleTopScroll);
+      listEl.removeEventListener("scroll", handleListScroll);
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", syncTopWidth);
+    };
+  }, [items]);
 
   useEffect(() => {
     if (loadedOnce.current) return;
@@ -62,9 +118,29 @@ export default function YoutubeList() {
 
   return (
     <section className="fade-in">
-      <div className="mb-3 flex items-baseline gap-2">
-        <h2 className="text-lg font-semibold text-slate-900">로아 영상</h2>
-        <span className="text-xs text-slate-400">심심할 때 보는</span>
+      <div className="mb-1 flex items-center gap-3">
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-lg font-semibold text-slate-900">로아 영상</h2>
+          <span className="text-xs text-slate-400">심심할 때 보는</span>
+        </div>
+        <div className="ml-1 flex items-center gap-2">
+          <button
+            onClick={() => scroll("left")}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-xl text-slate-500 shadow-sm transition hover:border-red-300 hover:text-red-500 hover:shadow-md disabled:cursor-default disabled:opacity-40"
+            aria-label="이전"
+            disabled={loading || items.length === 0}
+          >
+            ‹
+          </button>
+          <button
+            onClick={() => scroll("right")}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-xl text-slate-500 shadow-sm transition hover:border-red-300 hover:text-red-500 hover:shadow-md disabled:cursor-default disabled:opacity-40"
+            aria-label="다음"
+            disabled={loading || items.length === 0}
+          >
+            ›
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -78,24 +154,16 @@ export default function YoutubeList() {
           ))}
         </div>
       ) : (
-        <div className="relative">
-          <button
-            onClick={() => scroll("left")}
-            className="absolute left-0 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-red-300 hover:text-red-500 hover:shadow-md"
-            aria-label="이전"
+        <div>
+          <div
+            ref={topScrollRef}
+            className="mb-1 overflow-x-auto overflow-y-hidden pb-1 [scrollbar-width:auto] [scrollbar-color:theme(colors.slate.400)_theme(colors.slate.100)] [&::-webkit-scrollbar]:h-3 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-slate-100 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-400"
           >
-            ‹
-          </button>
-          <button
-            onClick={() => scroll("right")}
-            className="absolute right-0 top-1/2 z-10 translate-x-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-red-300 hover:text-red-500 hover:shadow-md"
-            aria-label="다음"
-          >
-            ›
-          </button>
+            <div className="h-3" />
+          </div>
           <ul
             ref={listRef}
-            className="flex gap-4 overflow-x-auto pb-2 [scrollbar-width:thin] [scrollbar-color:theme(colors.slate.200)_transparent]"
+            className="flex gap-4 overflow-x-auto pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
           >
             {items.map((v) => (
               <li key={v.videoId} className="w-52 shrink-0 flex">
@@ -122,11 +190,11 @@ export default function YoutubeList() {
                     <p className="line-clamp-2 text-xs font-medium text-slate-800 leading-snug">
                       {v.title}
                     </p>
-                    <div className="flex items-center justify-between mt-1">
+                    <div className="mt-1 flex items-center justify-between">
                       <span className="truncate text-[11px] text-slate-500">
                         {v.channelTitle}
                       </span>
-                      <span className="shrink-0 text-[11px] text-slate-400 ml-1">
+                      <span className="ml-1 shrink-0 text-[11px] text-slate-400">
                         {timeAgo(v.publishedAt)}
                       </span>
                     </div>
