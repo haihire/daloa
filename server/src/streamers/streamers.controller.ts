@@ -19,7 +19,15 @@ export class StreamersController {
    * 로스트아크 최근 30일 동영상 조회수순 (Redis 2시간 캐시)
    */
   @Get('popular')
-  searchPopular() {
-    return this.streamersService.searchPopularVideos();
+  searchPopular(
+    @Query('offset') offsetRaw?: string,
+    @Query('limit') limitRaw?: string,
+  ) {
+    const offset = Number.parseInt(offsetRaw ?? '0', 10);
+    const limit = Number.parseInt(limitRaw ?? '0', 10);
+    return this.streamersService.searchPopularVideos(
+      Number.isNaN(offset) ? 0 : offset,
+      Number.isNaN(limit) ? 0 : limit,
+    );
   }
 }

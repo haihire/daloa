@@ -139,9 +139,37 @@ DB 전체 캐릭터 수 통계.
 
 ### `GET /api/streamers/popular`
 
-최근 30일 로스트아크 영상 조회수 순. Redis TTL 2시간.
+최근 7일 로스트아크 영상 최신순 인기 영상. Redis TTL 1시간.
 
-**응답** — 위와 동일 형태, `nextPageToken` 없음
+쿼리 파라미터:
+
+- `offset` (optional): 캐시된 인기 영상 목록 시작 위치
+- `limit` (optional): 반환 개수. 현재 서버 최대 50개
+
+**응답 (200)**
+
+```json
+{
+  "items": [
+    {
+      "videoId": "abc123",
+      "title": "영상 제목",
+      "channelTitle": "채널명",
+      "thumbnailUrl": "https://...",
+      "publishedAt": "2026-04-16T00:00:00Z",
+      "duration": "12:34",
+      "viewCount": 12345
+    }
+  ],
+  "nextOffset": 8,
+  "hasMore": true,
+  "total": 137
+}
+```
+
+- `offset`, `limit` 없이 호출하면 캐시된 전체 목록 반환
+- 사용자 추가 탐색 시에는 서버 Redis 캐시를 분할 반환하며, 외부 YouTube API를 매번 다시 호출하지 않음
+- YouTube quota 초과 시 빈 배열 반환 (에러 아님)
 
 ---
 

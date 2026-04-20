@@ -38,10 +38,13 @@
 > 상세 규칙: `HARNESS.md` 섹션 0
 
 1. `powershell -File scripts/dev.ps1` — 포트 정리 후 서버·클라이언트 재시작, 로그 기록
-2. `server/logs/`, `client/logs/` 에서 에러 로그 확인 → 원인 수정
+2. `server/logs/`, `client/logs/` 에서 먼저 오늘치 `app-*.log`를 확인하고, 필요 시 `error-*.log`까지 함께 확인 → 원인 수정
 3. `powershell -File scripts/test.ps1` — 전체 테스트 실행
 4. `[PASS]` 전부 확인 후 작업 완료로 간주
 5. 새로 발견한 버그·설계 변경은 `record.md`에 기록
+
+- 에러 체크/디버깅 시에는 테스트 출력만 보지 말고, 관련 시점의 로그 파일을 먼저 확인해 원인을 좁힌다.
+- `scripts/dev.ps1`가 남기는 실행/콘솔 로그는 `app-YYYY-MM-DD.log`, 애플리케이션 내부 에러 전용 로그는 `error-YYYY-MM-DD.log`로 구분한다.
 
 ---
 

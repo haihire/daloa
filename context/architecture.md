@@ -40,14 +40,17 @@
 - **비즈니스 모듈**: `SitesModule`, `CharactersModule`, `StreamersModule`, `ClassSummaryModule`, `UsersModule`, `LostarkModule`, `KakaoModule`
 - **크론**: `SitesService`(매일 09:00 사이트 점검), `StreamersService`(매시 YouTube 갱신)
 - **에러 필터**: `AllExceptionsFilter` — 5xx 발생 시 카카오 알림, 1분 쿨다운
-- **로거**: `FileLoggerService` — `logs/app-YYYY-MM-DD.log`, `logs/error-YYYY-MM-DD.log`
+- **로거**: 
+  - `FileLoggerService` — 서버 애플리케이션 로그를 `logs/app-YYYY-MM-DD.log`, `logs/error-YYYY-MM-DD.log`에 기록 (일별 로테이션)
+  - 개발 시작 스크립트: `scripts/dev.ps1` — 서버/클라이언트 dev 서버의 콘솔 stdout+stderr를 각 `logs/app-YYYY-MM-DD.log`에 append
+  - **로그 정리**: `scripts/cleanup-logs.ps1` — 기본값 30일 이상 경과한 로그 자동 삭제 (dev.ps1에서 시작 시 자동 실행)
 
 ### `crawlers/` — Python (curl_cffi + asyncio)
 
 - `crawl_rank.py`: loawa.com 전투력 순위 → LostArk API → MariaDB 저장
 - **파이프라인**: Producer → name_queue → Checker(×30) → search_queue → Searcher
 - **Rate Limiter**: NestJS `LostarkService` 내부 직렬 큐, 분당 80회 제한(한도 100의 80%)
-- 실행 로그: `crawlers/logs/crawl-YYYY-MM-DD_HH-MM-SS.log`
+- 실행 로그: `crawlers/logs/crawl-YYYY-MM-DD_HH-MM-SS.log` (cleanup-logs.ps1 대상)
 
 ### `nginx/` — 리버스 프록시 (프로덕션)
 

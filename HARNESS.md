@@ -16,18 +16,43 @@ powershell -File scripts/dev.ps1
 - 포트 3001(서버), 3000(클라이언트)을 점유 중인 프로세스를 **먼저 종료**한 뒤 재시작
 - 서버/클라이언트 각각 **새 창**에서 실행, 로그를 `server/logs/`, `client/logs/`에 저장
 - 포트 변경이 필요하면: `powershell -File scripts/dev.ps1 -ServerPort 3002 -ClientPort 3001`
+- **자동 로그 정리**: dev.ps1은 시작 시 30일 이상 경과한 로그를 자동으로 삭제함
+
+#### 로그 수동 정리 (필요 시)
+
+특정 기간의 로그만 유지하려면:
+
+```powershell
+# 7일 이상 경과한 로그 모두 삭제 (상세 출력)
+powershell -File scripts/cleanup-logs.ps1 -Days 7 -Verbose
+
+# 기본값 (30일)
+powershell -File scripts/cleanup-logs.ps1
+```
+
+- `cleanup-logs.ps1`은 `server/logs/`, `client/logs/`, `crawlers/logs/` 의 `*.log` 파일을 정리한다
+- Git에서는 모든 로그 파일(`.gitignore`에 `server/logs/`, `client/logs/` 포함)이 제외되어 있으므로 안전하다
 
 ### 단계 2 — 로그 분석
 
 시작 직후 오류가 의심될 때는 로그 파일을 확인한다:
 
 ```powershell
-# 서버 오늘치 에러 로그
+# 서버 오늘치 실행/콘솔 로그 (dev.ps1가 stdout+stderr를 함께 append)
+Get-Content server\logs\app-$(Get-Date -Format 'yyyy-MM-dd').log -Tail 50
+
+# 클라이언트 오늘치 실행/콘솔 로그 (dev.ps1가 stdout+stderr를 함께 append)
+Get-Content client\logs\app-$(Get-Date -Format 'yyyy-MM-dd').log -Tail 50
+
+# 서버 애플리케이션 내부 에러 로그 (FileLoggerService가 기록)
 Get-Content server\logs\error-$(Get-Date -Format 'yyyy-MM-dd').log -Tail 50
 
-# 클라이언트 오늘치 에러 로그
+# 클라이언트 애플리케이션 내부 에러 로그 (instrumentation.ts가 기록)
 Get-Content client\logs\error-$(Get-Date -Format 'yyyy-MM-dd').log -Tail 50
 ```
+
+- `scripts/dev.ps1`는 현재 표준출력 + 표준에러를 합쳐 `app-YYYY-MM-DD.log`에 누적한다.
+- `error-YYYY-MM-DD.log`는 별도 애플리케이션 로거가 기록한 에러 전용 파일이며, 모든 콘솔 stderr가 자동 분리 저장되는 것은 아니다.
 
 - 오류 발견 시: 원인 파악 → 코드 수정 → 단계 3으로 이동
 - 오류 없으면: 단계 3으로 바로 이동

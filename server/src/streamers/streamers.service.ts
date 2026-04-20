@@ -11,6 +11,15 @@ const CACHE_TTL = 60 * 60; // 1시간
 const QUOTA_KEY = 'youtube:quota_exceeded';
 const MAX_RESULTS = 20;
 const POPULAR_MAX_RESULTS = 50;
+const POPULAR_MAX_LIMIT = 50;
+const POPULAR_MAX_PAGES = 8;
+
+interface PopularResponse {
+  items: YoutubeVideoItem[];
+  nextOffset: number | null;
+  hasMore: boolean;
+  total: number;
+}
 
 /** YouTube API 응답의 HTML 엔티티 디코딩 */
 function decodeHtmlEntities(str: string): string {
@@ -184,24 +193,37 @@ export class StreamersService implements OnModuleInit {
     return result;
   }
 
-  /** GET /api/streamers/popular — 오늘 올라온 영상 최신순 (캐시 1시간, 5분 이상 숏츠 제외) */
-  async searchPopularVideos(): Promise<{ items: YoutubeVideoItem[] }> {
+  /**
+   * GET /api/streamers/popular
+   * offset/limit 미지정 시 전체 목록, 지정 시 캐시된 목록을 분할 반환
+   */
+  async searchPopularVideos(
+    offset = 0,
+    limit = 0,
+  ): Promise<PopularResponse> {
+    const safeOffset = Math.max(0, offset);
+    const safeLimit = Math.min(Math.max(0, limit), POPULAR_MAX_LIMIT);
+
     try {
       const cached = await this.redis.get(POPULAR_CACHE_KEY);
-      if (cached) return JSON.parse(cached) as { items: YoutubeVideoItem[] };
+      if (cached) {
+        const parsed = JSON.parse(cached) as { items: YoutubeVideoItem[] };
+        return this.slicePopular(parsed.items, safeOffset, safeLimit);
+      }
     } catch (_) {}
 
     try {
       const blocked = await this.redis.get(QUOTA_KEY);
-      if (blocked) return { items: [] };
+      if (blocked) {
+        return { items: [], nextOffset: null, hasMore: false, total: 0 };
+      }
     } catch (_) {}
 
     let popular: { items: YoutubeVideoItem[] };
     try {
       const allItems: YoutubeVideoItem[] = [];
       let pageToken: string | undefined;
-      const MAX_PAGES = 4; // 50 × 4 = 최대 200개
-      for (let page = 0; page < MAX_PAGES; page++) {
+      for (let page = 0; page < POPULAR_MAX_PAGES; page++) {
         const result = await this.fetchFromYouTube(pageToken, 'date', true);
         allItems.push(...result.items);
         if (!result.nextPageToken) break;
@@ -214,7 +236,7 @@ export class StreamersService implements OnModuleInit {
       popular = { items: allItems };
     } catch (err: any) {
       this.logger.error(`searchPopularVideos 실패: ${err?.message ?? err}`);
-      return { items: [] };
+      return { items: [], nextOffset: null, hasMore: false, total: 0 };
     }
 
     try {
@@ -226,7 +248,33 @@ export class StreamersService implements OnModuleInit {
       );
     } catch (_) {}
 
-    return popular;
+    return this.slicePopular(popular.items, safeOffset, safeLimit);
+  }
+
+  private slicePopular(
+    allItems: YoutubeVideoItem[],
+    offset: number,
+    limit: number,
+  ): PopularResponse {
+    if (limit <= 0) {
+      return {
+        items: allItems,
+        nextOffset: null,
+        hasMore: false,
+        total: allItems.length,
+      };
+    }
+
+    const items = allItems.slice(offset, offset + limit);
+    const consumed = offset + items.length;
+    const hasMore = consumed < allItems.length;
+
+    return {
+      items,
+      nextOffset: hasMore ? consumed : null,
+      hasMore,
+      total: allItems.length,
+    };
   }
 
   private async fetchFromYouTube(
@@ -279,7 +327,7 @@ export class StreamersService implements OnModuleInit {
         ? {
             publishedAfter: (() => {
               const d = new Date();
-              d.setDate(d.getDate() - 3); // 3일 전
+              d.setDate(d.getDate() - 7); // 7일 전
               d.setHours(0, 0, 0, 0);
               return d.toISOString();
             })(),
