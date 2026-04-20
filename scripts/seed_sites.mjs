@@ -75,7 +75,7 @@ import mysql from "mysql2/promise";
       "KLoa",
       "https://kloa.gg/",
       "공식 통디",
-      "로스트아크 통디 공식 사이트. 떠상 알람 지원 및 캐릭터 검색 기능 지원",
+      "떠상 알림 지원",
       "https://www.google.com/s2/favicons?domain=kloa.gg&sz=32",
     ],
     [
@@ -124,14 +124,14 @@ import mysql from "mysql2/promise";
       "로스트아크 인벤",
       "https://lostark.inven.co.kr/",
       "커뮤니티",
-      "뉴스, 팁과 노하우, 직업 게시판, 질문 게시판 등 로스트아크 정보와 커뮤니티를 제공하는 사이트",
+      "로아 커뮤니티",
       "https://www.google.com/s2/favicons?domain=lostark.inven.co.kr&sz=32",
     ],
     [
       "사사게 검색기",
       "https://sasagefind.com/",
       "게시글 검색",
-      "사건사고 게시판 관련 검색어를 빠르게 조회할 수 있는 검색 사이트",
+      "범죄자 데이터베이스",
       "https://www.google.com/s2/favicons?domain=sasagefind.com&sz=32",
     ],
     [
@@ -147,13 +147,6 @@ import mysql from "mysql2/promise";
       "장비",
       "각 직업별 낙원 장비 모음",
       "https://www.google.com/s2/favicons?domain=codepen.io&sz=32",
-    ],
-    [
-      "아크그리드 최적화",
-      "https://aloa.gg/ko/arkgrid",
-      "아크그리드",
-      "직업별 아크패시브 그리드 최적화 조합을 제공하는 사이트",
-      "https://www.google.com/s2/favicons?domain=aloa.gg&sz=32",
     ],
   ];
 
