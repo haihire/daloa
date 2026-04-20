@@ -148,6 +148,13 @@ import mysql from "mysql2/promise";
       "각 직업별 낙원 장비 모음",
       "https://www.google.com/s2/favicons?domain=codepen.io&sz=32",
     ],
+    [
+      "아크그리드 최적화",
+      "https://aloa.gg/ko/arkgrid",
+      "아크그리드",
+      "직업별 아크패시브 그리드 최적화 조합을 제공하는 사이트",
+      "https://www.google.com/s2/favicons?domain=aloa.gg&sz=32",
+    ],
   ];
 
   for (const s of sites) {

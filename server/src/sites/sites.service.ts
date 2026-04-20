@@ -9,6 +9,27 @@ import { KakaoService, type SiteChange } from '../kakao/kakao.service';
 const CACHE_KEY = 'sites:all';
 const CACHE_TTL_SEC = 600; // 10분
 
+const SITE_TEXT_CANONICAL: Record<
+  string,
+  { name: string; description: string }
+> = {
+  'https://kloa.gg/': {
+    name: 'KLoa',
+    description: '떠상 알림 지원',
+  },
+  'https://lostark.inven.co.kr/': {
+    name: '로스트아크 인벤',
+    description: '로아 커뮤니티',
+  },
+  'https://sasagefind.com/': {
+    name: '사사게 검색기',
+    description: '범죄자 데이터베이스',
+  },
+};
+
+const hasBrokenText = (value: unknown): value is string =>
+  typeof value === 'string' && /\?{2,}/.test(value);
+
 @Injectable()
 export class SitesService {
   private readonly logger = new Logger(SitesService.name);
@@ -27,9 +48,53 @@ export class SitesService {
       return JSON.parse(cached);
     }
 
-    const [rows] = await (this.pool as any).execute(
+    const [rows] = (await (this.pool as any).execute(
       'SELECT seq, name, href, category, description, icon FROM loa_sites WHERE is_active = 1 ORDER BY seq',
-    );
+    )) as [
+      Array<{
+        seq: number;
+        name: string;
+        href: string;
+        category: string | null;
+        description: string | null;
+        icon: string | null;
+      }>,
+      any,
+    ];
+
+    // 운영 DB에서 드물게 한글이 "???"로 깨지는 경우, 기준 텍스트로 즉시 복구한다.
+    const brokenRows = rows.filter((row) => {
+      const canonical = SITE_TEXT_CANONICAL[row.href];
+      if (!canonical) {
+        return false;
+      }
+
+      return hasBrokenText(row.name) || hasBrokenText(row.description);
+    });
+
+    if (brokenRows.length > 0) {
+      await Promise.all(
+        brokenRows.map(async (row) => {
+          const canonical = SITE_TEXT_CANONICAL[row.href];
+          if (!canonical) {
+            return;
+          }
+
+          await (this.pool as any).execute(
+            `UPDATE loa_sites
+                SET name = ?,
+                    description = ?
+              WHERE seq = ?`,
+            [canonical.name, canonical.description, row.seq],
+          );
+
+          row.name = canonical.name;
+          row.description = canonical.description;
+        }),
+      );
+
+      this.logger.warn(`sites: 한글 깨짐 ${brokenRows.length}건 자동 복구`);
+    }
 
     await this.redis.set(CACHE_KEY, JSON.stringify(rows), 'EX', CACHE_TTL_SEC);
     this.logger.debug('sites: DB 조회 후 Redis 캐시 저장');
@@ -43,9 +108,9 @@ export class SitesService {
   @Cron('0 0 9 * * *')
   async checkSites() {
     this.logger.log('사이트 일일 점검 시작');
-    const [rows] = await (this.pool as any).execute(
+    const [rows] = (await (this.pool as any).execute(
       'SELECT seq, name, href, last_title, last_status FROM loa_sites WHERE is_active = 1',
-    ) as [any[], any];
+    )) as [any[], any];
 
     const changes: SiteChange[] = [];
 
@@ -58,7 +123,9 @@ export class SitesService {
           const res = await fetch(site.href, {
             method: 'GET',
             signal: AbortSignal.timeout(10_000),
-            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; LoaHubBot/1.0)' },
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; LoaHubBot/1.0)',
+            },
           });
           status = res.status;
 
@@ -87,7 +154,9 @@ export class SitesService {
         }
 
         // 접속 가능 여부 변경 감지
-        const wasDown = site.last_status === 0 || (site.last_status != null && site.last_status >= 500);
+        const wasDown =
+          site.last_status === 0 ||
+          (site.last_status != null && site.last_status >= 500);
         if (site.last_status != null && wasDown !== change.isDown) {
           change.downChanged = true;
         }
@@ -118,4 +187,3 @@ export class SitesService {
     }
   }
 }
-

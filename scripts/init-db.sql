@@ -86,7 +86,7 @@ INSERT IGNORE INTO loa_sites (name, href, category, description, icon) VALUES
 ('유각 시세 조회','https://loa-shop.pages.dev/',       '시세 조회',   '실시간 유각 시세 조회 사이트.', 'https://www.google.com/s2/favicons?domain=loa-shop.pages.dev&sz=32'),
 ('LoaGap',      'https://loagap.com/',                '통합 툴',     '컨텐츠 효율, 유각·보석·악세 시세 확인 등 각종 툴 제공.', 'https://www.google.com/s2/favicons?domain=loagap.com&sz=32'),
 ('로스트 골드', 'https://lostgld.com/',               '생활 효율',   '생활도구 효율 및 융화재료 효율 계산기 지원 사이트.', 'https://www.google.com/s2/favicons?domain=lostgld.com&sz=32'),
-('KLoa',        'https://kloa.gg/',                   '공식 통디',   '떠상 알림', 'https://www.google.com/s2/favicons?domain=kloa.gg&sz=32'),
+('KLoa',        'https://kloa.gg/',                   '공식 통디',   '떠상 알림 지원', 'https://www.google.com/s2/favicons?domain=kloa.gg&sz=32'),
 ('로아와',      'https://loawa.com/',                 '캐릭터 검색', '캐릭터 검색 기능 및 캐릭터 통계 조회 사이트.', 'https://www.google.com/s2/favicons?domain=loawa.com&sz=32'),
 ('로아베스팅',  'https://www.loavesting.com/',         '재련 계산',   '재련 비용 계산기 등 툴 제공 사이트.', 'https://www.google.com/s2/favicons?domain=loavesting.com&sz=32'),
 ('Loatto',      'https://loatto.kr/',                 '통합 툴',     '돌파고, 젬파고, 지옥보상 효율 등 각종 툴 제공.', 'https://www.google.com/s2/favicons?domain=loatto.kr&sz=32'),
