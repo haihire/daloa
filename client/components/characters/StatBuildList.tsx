@@ -89,7 +89,7 @@ export default function StatBuildList({ tabs }: Props) {
   const maxCount = Math.max(...(current?.items?.map((i) => i.count) ?? [1]), 1);
 
   return (
-    <article className="h-[calc((100vh-90px)/3)] shrink-0 flex flex-col rounded-2xl border border-slate-200/70 bg-white/85 p-4 shadow-md backdrop-blur fade-in delay-1 overflow-hidden">
+    <article className="flex max-h-[40vh] shrink-0 flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-white/85 p-4 shadow-md backdrop-blur fade-in delay-1 sm:h-[calc((100vh-90px)/3)] sm:max-h-none">
       <div className="mb-3 shrink-0 flex items-start justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold text-slate-900">
@@ -206,7 +206,10 @@ export default function StatBuildList({ tabs }: Props) {
             </div>
 
             {/* 오른쪽: 항목 리스트 */}
-            <ul key={activeTab} className="flex flex-col gap-1 flex-1 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:theme(colors.slate.200)_transparent]">
+            <ul
+              key={activeTab}
+              className="flex flex-col gap-1 flex-1 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:theme(colors.slate.200)_transparent]"
+            >
               {[...(current?.items ?? [])]
                 .sort((a, b) => b.count - a.count)
                 .map((item, idx) => {

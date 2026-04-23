@@ -13,6 +13,10 @@ Thumbs.db
 
 # Docker 볼륨 / SSL 인증서
 nginx/ssl/
+daloa-key.pem
+
+# 로컬 이미지 변경 산출물
+이미지변화/
 
 # Python 크롤러
 crawlers/__pycache__/

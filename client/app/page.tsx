@@ -22,7 +22,7 @@ export default async function Home() {
     <div className="flex min-h-screen flex-col">
       <div className="flex-1 py-3">
         {/* 좌우 광고 슬롯 예약 (미표시) + 중앙 콘텐츠 */}
-        <div className="grid grid-cols-1 gap-4 px-4 xl:grid-cols-[160px_minmax(0,1fr)_160px]">
+        <div className="grid grid-cols-1 gap-4 pl-4 pr-7 sm:px-4 xl:grid-cols-[160px_minmax(0,1fr)_160px]">
           {/* 왼쪽 광고 슬롯 (예약만, 표시 안 함) */}
           <div className="hidden xl:block" aria-hidden="true" />
 
@@ -35,15 +35,22 @@ export default async function Home() {
 
             <section className="flex flex-col gap-4">
               <div className="grid gap-4 sm:grid-cols-[320px_minmax(0,1fr)]">
-                <div className="flex h-full flex-col gap-4">
+                <div className="hidden h-full flex-col gap-4 sm:flex">
                   <StatBuildList tabs={statBuilds} />
                 </div>
-                <SiteList sites={sites} />
+                <div>
+                  <SiteList sites={sites} />
+                </div>
               </div>
             </section>
 
             {/* 하단 유튜브 인기 영상 */}
             <YoutubeList />
+
+            {/* 모바일에서는 특성 빌드 분포를 영상 아래로 배치 */}
+            <div className="sm:hidden">
+              <StatBuildList tabs={statBuilds} />
+            </div>
           </main>
 
           {/* 오른쪽 광고 슬롯 (예약만, 표시 안 함) */}

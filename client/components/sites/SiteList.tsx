@@ -64,12 +64,9 @@ export default function SiteList({ sites }: Props) {
   ];
 
   return (
-    <section
-      className="flex flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-white/80 shadow-md backdrop-blur"
-      style={{ height: "590px" }}
-    >
-      <div className="stagger flex-1 overflow-y-auto p-4">
-        <ul className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+    <section className="flex max-h-[56vh] flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-white/80 shadow-md backdrop-blur sm:h-[590px] sm:max-h-none">
+      <div className="stagger flex-1 overflow-y-auto p-4 pr-5 sm:pr-4">
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {sorted.map((site) => {
             const isFav = favSet.has(site.href);
             return (

@@ -87,9 +87,9 @@ export default function YoutubeList() {
     `${API}/api/streamers/popular?offset=${offset}&limit=${limit}`;
 
   const fetchChunk = async (offset: number, limit: number) => {
-    const data: PopularChunkResponse = await fetch(toEndpoint(offset, limit)).then(
-      (r) => r.json(),
-    );
+    const data: PopularChunkResponse = await fetch(
+      toEndpoint(offset, limit),
+    ).then((r) => r.json());
     return {
       items: Array.isArray(data.items) ? data.items : [],
       hasMore: Boolean(data.hasMore),
@@ -146,7 +146,9 @@ export default function YoutubeList() {
       if (incoming.length > 0) {
         const sortedIncoming = toSortedItems(incoming);
         const seen = new Set(itemsRef.current.map((v) => v.videoId));
-        const uniqueIncoming = sortedIncoming.filter((v) => !seen.has(v.videoId));
+        const uniqueIncoming = sortedIncoming.filter(
+          (v) => !seen.has(v.videoId),
+        );
 
         if (uniqueIncoming.length > 0) {
           const nextItems = [...itemsRef.current, ...uniqueIncoming];
@@ -181,7 +183,8 @@ export default function YoutubeList() {
     const listEl = listRef.current;
     if (!listEl || !hasMore || loading || loadingMore) return;
 
-    const remain = listEl.scrollWidth - (listEl.scrollLeft + listEl.clientWidth);
+    const remain =
+      listEl.scrollWidth - (listEl.scrollLeft + listEl.clientWidth);
     if (remain < 560) {
       void requestPreload();
     }
@@ -294,12 +297,14 @@ export default function YoutubeList() {
 
   return (
     <section className="fade-in">
-      <div className="mb-0 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-baseline gap-2">
+      <div className="mb-0 flex flex-row items-center justify-between gap-2">
+        <div className="flex items-baseline gap-2 min-w-0">
           <h2 className="text-lg font-semibold text-slate-900">로아 영상</h2>
-          <span className="text-xs text-slate-400">심심할 때 보는</span>
+          <span className="hidden text-xs text-slate-400 sm:inline">
+            심심할 때 보는
+          </span>
         </div>
-        <div className="flex items-center gap-2 self-end sm:self-auto">
+        <div className="flex items-center gap-1 shrink-0 sm:gap-2">
           <button
             onClick={() => scroll("left")}
             className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-xl text-slate-500 shadow-sm transition hover:border-red-300 hover:text-red-500 hover:shadow-md disabled:cursor-default disabled:opacity-40"
@@ -320,11 +325,11 @@ export default function YoutubeList() {
       </div>
 
       {loading ? (
-        <div className="flex gap-4 overflow-x-auto pb-2">
+        <div className="flex gap-2 overflow-x-auto pb-2 sm:gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="w-52 shrink-0 animate-pulse rounded-xl bg-slate-100"
+              className="w-[calc(50%-0.5rem)] shrink-0 animate-pulse rounded-xl bg-slate-100 sm:w-52"
               style={{ height: 160 }}
             />
           ))}
@@ -339,7 +344,7 @@ export default function YoutubeList() {
           </div>
           <ul
             ref={listRef}
-            className="flex gap-4 overflow-x-auto pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            className="flex gap-2 overflow-x-auto pb-2 sm:gap-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
           >
             {(() => {
               const enteringStart = Math.max(items.length - enteringCount, 0);
@@ -348,7 +353,7 @@ export default function YoutubeList() {
                 return (
                   <li
                     key={`${v.videoId}-${idx}`}
-                    className={`w-52 shrink-0 flex ${isEntering ? "youtube-card-enter" : ""}`}
+                    className={`w-[calc(50%-0.5rem)] shrink-0 flex sm:w-52 ${isEntering ? "youtube-card-enter" : ""}`}
                   >
                     <a
                       href={`https://www.youtube.com/watch?v=${v.videoId}`}
