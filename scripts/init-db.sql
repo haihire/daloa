@@ -97,4 +97,5 @@ INSERT IGNORE INTO loa_sites (name, href, category, description, icon) VALUES
 ('사사게 검색기', 'https://sasagefind.com/',            '게시글 검색', '범죄자 데이터베이스', 'https://www.google.com/s2/favicons?domain=sasagefind.com&sz=32'),
 ('낙원 스킬트리', 'https://sites.google.com/view/achi-loa/%EB%82%99%EC%9B%90/%EB%82%99%EC%9B%90-%EC%8B%9C%EC%A6%8C2', '스킬트리', '각 직업별 낙원 시즌2 스킬트리 모음.', 'https://www.google.com/s2/favicons?domain=sites.google.com&sz=32'),
 ('낙원 장비',    'https://codepen.io/ialgqfxp-the-animator/pen/NPrQxOx',                                             '장비',     '각 직업별 낙원 장비 모음.', 'https://www.google.com/s2/favicons?domain=codepen.io&sz=32'),
-('아크그리드 최적화', 'https://aloa.gg/ko/arkgrid',                                                                '아크그리드', '직업별 아크패시브 그리드 최적화 조합을 제공하는 사이트', 'https://www.google.com/s2/favicons?domain=aloa.gg&sz=32');
+('아크그리드 최적화', 'https://aloa.gg/ko/arkgrid',                                                                '아크그리드', '직업별 아크패시브 그리드 최적화 조합을 제공하는 사이트', 'https://www.google.com/s2/favicons?domain=aloa.gg&sz=32'),
+('LOALAB',             'https://lo4.app/',                                                                                        '통합 툴',    '재련·경매·치명타 계산기, 음돌 계산기, 일정 관리 등 다양한 툴 제공', 'https://www.google.com/s2/favicons?domain=lo4.app&sz=32');
