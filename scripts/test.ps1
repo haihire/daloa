@@ -27,7 +27,7 @@ function Run-Tests {
     Write-Host "  $Label"
     Write-Host "---"
     Push-Location $Dir
-    cmd /c "npm run $Script" | Out-Host
+    & npm run $Script | Out-Host
     $result = $LASTEXITCODE
     Pop-Location
     if ($result -ne 0) {
