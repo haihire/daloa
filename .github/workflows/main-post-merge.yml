@@ -1,0 +1,46 @@
+name: Main Post Merge
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  prepare-and-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install client deps
+        working-directory: client
+        run: npm ci
+
+      - name: Build client
+        working-directory: client
+        run: npm run build
+
+      - name: Install server deps
+        working-directory: server
+        run: npm ci
+
+      - name: Build server
+        working-directory: server
+        run: npm run build
+
+      - name: Deploy trigger (placeholder)
+        run: echo "배포 트리거 단계를 여기에 연결하세요. 예: SSH, webhook, cloud deploy action"
+
+      - name: Health check (optional)
+        env:
+          HEALTHCHECK_URL: ${{ secrets.HEALTHCHECK_URL }}
+        run: |
+          if [ -z "$HEALTHCHECK_URL" ]; then
+            echo "HEALTHCHECK_URL secret is not set. Skip health check."
+            exit 0
+          fi
+          curl -f "$HEALTHCHECK_URL"
