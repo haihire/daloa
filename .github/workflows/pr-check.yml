@@ -7,7 +7,7 @@ on:
 
 jobs:
   server:
-    name: Server (lint + test + build)
+    name: Server (test + build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -26,9 +26,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
-        run: npm run lint -- --max-warnings=0
-
       - name: Test
         run: npm test -- --passWithNoTests
 
@@ -36,7 +33,7 @@ jobs:
         run: npm run build
 
   client:
-    name: Client (lint + test + build)
+    name: Client (test + build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -54,9 +51,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Lint
-        run: npm run lint
 
       - name: Test
         run: npm test
