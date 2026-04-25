@@ -1,6 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { vi } from "vitest";
+﻿import { render, screen, waitFor } from "@testing-library/react";
+import { vi, type MockInstance } from "vitest";
 import YoutubeList from "./YoutubeList";
 import type { YoutubeVideo } from "@/types";
 
@@ -26,13 +25,19 @@ const MOCK_VIDEOS: YoutubeVideo[] = [
 ];
 
 describe("YoutubeList", () => {
+  let fetchMock: MockInstance;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    global.fetch = vi.fn();
+    fetchMock = vi.spyOn(global, "fetch");
+  });
+
+  afterEach(() => {
+    fetchMock.mockRestore();
   });
 
   it("로딩 중일 때 스켈레톤이 표시된다", async () => {
-    (global.fetch as any).mockImplementation(
+    fetchMock.mockImplementation(
       () => new Promise(() => {}), // 영구 대기
     );
 
@@ -45,7 +50,7 @@ describe("YoutubeList", () => {
   });
 
   it("데이터 로드 후 영상 목록이 표시된다", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({ items: MOCK_VIDEOS }),
     });
 
@@ -58,7 +63,7 @@ describe("YoutubeList", () => {
   });
 
   it("로드 완료 전 좌우 버튼이 비활성화된다", async () => {
-    (global.fetch as any).mockImplementation(
+    fetchMock.mockImplementation(
       () => new Promise(() => {}), // 영구 대기
     );
 
@@ -73,7 +78,7 @@ describe("YoutubeList", () => {
   });
 
   it("로드 완료 후 좌우 버튼이 활성화된다", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({ items: MOCK_VIDEOS }),
     });
 
@@ -88,7 +93,7 @@ describe("YoutubeList", () => {
   });
 
   it("빈 배열 응답 시 아무것도 렌더링되지 않는다", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({ items: [] }),
     });
 
@@ -101,7 +106,7 @@ describe("YoutubeList", () => {
   });
 
   it("API 오류 발생 시 안전하게 처리된다", async () => {
-    (global.fetch as any).mockRejectedValueOnce(new Error("Network error"));
+    fetchMock.mockRejectedValueOnce(new Error("Network error"));
 
     const { container } = render(<YoutubeList />);
 
@@ -112,7 +117,7 @@ describe("YoutubeList", () => {
   });
 
   it("null items 응답 시 안전하게 처리된다", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({ items: null }),
     });
 
@@ -136,7 +141,7 @@ describe("YoutubeList", () => {
       },
     ];
 
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({ items: unordered }),
     });
 
@@ -157,7 +162,7 @@ describe("YoutubeList", () => {
   });
 
   it("오른쪽 버튼이 활성화되어 있다", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({ items: MOCK_VIDEOS }),
     });
 
@@ -174,7 +179,7 @@ describe("YoutubeList", () => {
   });
 
   it("제목이 최대 2줄로 표시된다 (line-clamp-2)", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({ items: MOCK_VIDEOS }),
     });
 
@@ -187,7 +192,7 @@ describe("YoutubeList", () => {
   });
 
   it("YouTube 링크가 새 탭에서 열린다", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({ items: MOCK_VIDEOS }),
     });
 

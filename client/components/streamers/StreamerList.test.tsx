@@ -1,5 +1,5 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
-import { vi } from "vitest";
+﻿import { act, render, screen, waitFor } from "@testing-library/react";
+import { vi, type MockInstance } from "vitest";
 import StreamerList from "./StreamerList";
 import type { YoutubeVideo } from "@/types";
 
@@ -25,13 +25,19 @@ const MOCK_VIDEOS: YoutubeVideo[] = [
 ];
 
 describe("StreamerList", () => {
+  let fetchMock: MockInstance;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    global.fetch = vi.fn();
+    fetchMock = vi.spyOn(global, "fetch");
+  });
+
+  afterEach(() => {
+    fetchMock.mockRestore();
   });
 
   it("컴포넌트가 렌더링되고 제목이 표시된다", async () => {
-    (global.fetch as any).mockImplementation(() => new Promise(() => {}));
+    fetchMock.mockImplementation(() => new Promise(() => {}));
 
     render(<StreamerList />);
 
@@ -39,7 +45,7 @@ describe("StreamerList", () => {
   });
 
   it("초기 로드 시 API가 호출된다", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({ items: MOCK_VIDEOS }),
     });
 
@@ -53,7 +59,7 @@ describe("StreamerList", () => {
   });
 
   it("로드된 영상이 목록으로 표시된다", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({ items: MOCK_VIDEOS }),
     });
 
@@ -66,7 +72,7 @@ describe("StreamerList", () => {
   });
 
   it("API 응답에서 null items를 안전하게 처리한다", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({ items: null }),
     });
 
@@ -78,7 +84,7 @@ describe("StreamerList", () => {
   });
 
   it("API 오류 발생 시 안전하게 처리된다", async () => {
-    (global.fetch as any).mockRejectedValueOnce(new Error("Network error"));
+    fetchMock.mockRejectedValueOnce(new Error("Network error"));
 
     render(<StreamerList />);
 
@@ -88,7 +94,7 @@ describe("StreamerList", () => {
   });
 
   it("nextPageToken이 없으면 hasMore는 false가 된다", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({
         items: MOCK_VIDEOS,
         nextPageToken: null,
@@ -103,7 +109,7 @@ describe("StreamerList", () => {
   });
 
   it("nextPageToken이 있으면 hasMore는 true가 된다", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({
         items: MOCK_VIDEOS,
         nextPageToken: "token123",
@@ -119,7 +125,7 @@ describe("StreamerList", () => {
   });
 
   it("로딩 중일 때 '불러오는 중…' 메시지가 표시된다", async () => {
-    (global.fetch as any).mockImplementation(
+    fetchMock.mockImplementation(
       () => new Promise(() => {}), // 영구 대기
     );
 
@@ -131,7 +137,7 @@ describe("StreamerList", () => {
   });
 
   it("영상 링크가 새 탭에서 열린다", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({ items: MOCK_VIDEOS }),
     });
 
@@ -147,7 +153,7 @@ describe("StreamerList", () => {
   });
 
   it("YouTube 영상 URL이 정확히 생성된다", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({ items: MOCK_VIDEOS }),
     });
 
@@ -165,7 +171,7 @@ describe("StreamerList", () => {
   });
 
   it("섬네일과 동영상 시간이 표시된다", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({ items: MOCK_VIDEOS }),
     });
 
@@ -183,7 +189,7 @@ describe("StreamerList", () => {
   });
 
   it("채널명과 발행 시간이 표시된다", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({ items: MOCK_VIDEOS }),
     });
 
@@ -199,7 +205,7 @@ describe("StreamerList", () => {
   });
 
   it("빈 배열 응답 시 '영상을 불러올 수 없습니다' 메시지가 표시된다", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({ items: [] }),
     });
 
@@ -243,9 +249,9 @@ describe("StreamerList", () => {
         disconnect: vi.fn(),
         unobserve: vi.fn(),
       };
-    }) as any;
+    }) as unknown as typeof IntersectionObserver;
 
-    (global.fetch as any)
+    fetchMock
       .mockResolvedValueOnce({
         json: async () => firstResponse,
       })
@@ -287,9 +293,9 @@ describe("StreamerList", () => {
       observe: observeMock,
       disconnect: disconnectMock,
       unobserve: vi.fn(),
-    })) as any;
+    })) as unknown as typeof IntersectionObserver;
 
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({ items: MOCK_VIDEOS, nextPageToken: "token123" }),
     });
 
@@ -302,7 +308,7 @@ describe("StreamerList", () => {
   });
 
   it("title이 최대 2줄로 표시된다", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({ items: MOCK_VIDEOS }),
     });
 
@@ -315,7 +321,7 @@ describe("StreamerList", () => {
   });
 
   it("여러 영상이 세로 목록으로 표시된다", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       json: async () => ({ items: MOCK_VIDEOS }),
     });
 

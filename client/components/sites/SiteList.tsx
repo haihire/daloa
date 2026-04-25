@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Site } from "@/types";
 
 interface Props {
@@ -28,16 +28,14 @@ function StarIcon({ filled }: { filled: boolean }) {
 
 export default function SiteList({ sites }: Props) {
   // 순서 있는 배열로 관리 — 인덱스 0이 가장 최근 추가
-  const [favorites, setFavorites] = useState<string[]>([]);
-
-  useEffect(() => {
+  const [favorites, setFavorites] = useState<string[]>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) setFavorites(JSON.parse(stored));
+      return stored ? (JSON.parse(stored) as string[]) : [];
     } catch {
-      // ignore
+      return [];
     }
-  }, []);
+  });
 
   const toggleFavorite = (href: string, e: React.MouseEvent) => {
     e.stopPropagation();

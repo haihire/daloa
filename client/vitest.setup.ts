@@ -6,7 +6,10 @@ if (!global.ResizeObserver) {
     observe() {}
     unobserve() {}
     disconnect() {}
-  } as any;
+    takeRecords(): ResizeObserverEntry[] {
+      return [];
+    }
+  };
 }
 
 // window.open mock (jsdom 기본 구현은 호출 시 예외 발생)
@@ -22,5 +25,11 @@ if (!global.IntersectionObserver) {
     observe() {}
     unobserve() {}
     disconnect() {}
-  } as any;
+    takeRecords(): IntersectionObserverEntry[] {
+      return [];
+    }
+    readonly root: Element | Document | null = null;
+    readonly rootMargin: string = "";
+    readonly thresholds: ReadonlyArray<number> = [];
+  };
 }

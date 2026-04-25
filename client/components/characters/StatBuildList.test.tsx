@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import StatBuildList from "./StatBuildList";
-import type { StatBuildTab } from "@/types";
+import type { StatBuildItem, StatBuildTab } from "@/types";
 
 const MOCK_TABS: StatBuildTab[] = [
   {
@@ -158,7 +158,7 @@ describe("StatBuildList", () => {
       {
         statBuild: "치신",
         totalCount: 10,
-        items: null as any,
+        items: null as unknown as StatBuildItem[],
       },
     ];
 
