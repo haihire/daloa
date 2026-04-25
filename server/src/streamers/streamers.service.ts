@@ -75,7 +75,7 @@ function formatDuration(iso: string): string {
 @Injectable()
 export class StreamersService implements OnModuleInit {
   private readonly logger = new Logger(StreamersService.name);
-  private readonly youtubeKeys: any[];
+  private readonly youtubeKeys: ReturnType<typeof google.youtube>[];
   private currentKeyIdx = 0;
 
   private get youtube() {
