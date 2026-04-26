@@ -63,25 +63,27 @@ export class LostarkService {
     return result;
   }
 
-  async fetchSiblings(characterName: string): Promise<any[]> {
+  async fetchSiblings<T = unknown[]>(characterName: string): Promise<T> {
     return this.enqueue(async () => {
       const enc = encodeURIComponent(characterName);
       const res = await fetch(`${BASE}/characters/${enc}/siblings`, {
         headers: this.getHeaders(),
       });
       if (!res.ok) throw new Error(`siblings API error: ${res.status}`);
-      return res.json() as Promise<any[]>;
+      const data: unknown = await res.json();
+      return data as T;
     });
   }
 
-  async fetchArmory(characterName: string): Promise<any> {
+  async fetchArmory<T = unknown>(characterName: string): Promise<T> {
     return this.enqueue(async () => {
       const enc = encodeURIComponent(characterName);
       const res = await fetch(`${BASE}/armories/characters/${enc}`, {
         headers: this.getHeaders(),
       });
       if (!res.ok) throw new Error(`armory API error: ${res.status}`);
-      return res.json();
+      const data: unknown = await res.json();
+      return data as T;
     });
   }
 

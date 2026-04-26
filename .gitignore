@@ -28,6 +28,10 @@ dump.rdb
 
 # DB 덤프 파일
 scripts/dump.sql
+scripts/node_modules/
+scripts/package.json
+scripts/package-lock.json
+scripts/seed-sites.ps1
 
 # 로컬 개발 오버라이드 (EC2에는 불필요)
 docker-compose.override.yml

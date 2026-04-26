@@ -1,6 +1,16 @@
 import { Injectable, Inject } from '@nestjs/common';
 import type { Pool } from 'mysql2/promise';
+import type { RowDataPacket } from 'mysql2';
 import { DB_POOL } from '../db/db.module';
+
+interface StatBuildRow extends RowDataPacket {
+  classDetail: string;
+  classEngraving: string | null;
+  statCrit: number;
+  statSpec: number;
+  statSwift: number;
+  level: number;
+}
 
 // 장비 스탯 수치(치명/특화/신속) 기반 빌드 분류
 // 전체 합산 대비 비율 15% 이상이어야 해당 스탯을 "투자됨"으로 인정
@@ -60,7 +70,7 @@ export class CharactersService {
   constructor(@Inject(DB_POOL) private readonly pool: Pool) {}
 
   async findStatBuilds() {
-    const [rows] = await (this.pool as any).execute(`
+    const [rows] = await this.pool.execute<StatBuildRow[]>(`
       SELECT
         c.class_detail    AS classDetail,
         c.class_engraving AS classEngraving,
@@ -86,7 +96,7 @@ export class CharactersService {
       }
     >();
 
-    for (const r of rows as any[]) {
+    for (const r of rows) {
       const build = classifyStatBuild(r.statCrit, r.statSpec, r.statSwift);
       const key = `${r.classDetail}\x00${r.classEngraving ?? ''}\x00${build}`;
       const existing = rawMap.get(key);

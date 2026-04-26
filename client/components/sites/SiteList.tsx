@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import type { Site } from "@/types";
 
 interface Props {
@@ -8,6 +8,52 @@ interface Props {
 }
 
 const STORAGE_KEY = "loa_favorites";
+const FAVORITES_EVENT = "loa_favorites_changed";
+const EMPTY_FAVORITES: string[] = [];
+
+let cachedRawFavorites: string | null = null;
+let cachedParsedFavorites: string[] = EMPTY_FAVORITES;
+
+function readFavorites(): string[] {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) {
+      cachedRawFavorites = null;
+      cachedParsedFavorites = EMPTY_FAVORITES;
+      return cachedParsedFavorites;
+    }
+
+    if (stored === cachedRawFavorites) {
+      return cachedParsedFavorites;
+    }
+
+    const parsed = JSON.parse(stored) as string[];
+    cachedRawFavorites = stored;
+    cachedParsedFavorites = Array.isArray(parsed) ? parsed : EMPTY_FAVORITES;
+    return cachedParsedFavorites;
+  } catch {
+    cachedRawFavorites = null;
+    cachedParsedFavorites = EMPTY_FAVORITES;
+    return cachedParsedFavorites;
+  }
+}
+
+function subscribeFavorites(onStoreChange: () => void): () => void {
+  const onStorage = (event: Event) => {
+    if (event instanceof StorageEvent) {
+      if (event.key !== null && event.key !== STORAGE_KEY) return;
+    }
+    onStoreChange();
+  };
+
+  window.addEventListener("storage", onStorage);
+  window.addEventListener(FAVORITES_EVENT, onStorage);
+
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener(FAVORITES_EVENT, onStorage);
+  };
+}
 
 function StarIcon({ filled }: { filled: boolean }) {
   return (
@@ -27,31 +73,24 @@ function StarIcon({ filled }: { filled: boolean }) {
 }
 
 export default function SiteList({ sites }: Props) {
-  // 순서 있는 배열로 관리 — 인덱스 0이 가장 최근 추가
-  const [favorites, setFavorites] = useState<string[]>([]);
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) setFavorites(JSON.parse(stored));
-    } catch {
-      // ignore
-    }
-  }, []);
+  // SSR/CSR 초기 스냅샷을 일치시켜 hydration mismatch를 방지한다.
+  const favorites = useSyncExternalStore(
+    subscribeFavorites,
+    readFavorites,
+    () => EMPTY_FAVORITES,
+  );
 
   const toggleFavorite = (href: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setFavorites((prev) => {
-      const next = prev.includes(href)
-        ? prev.filter((h) => h !== href) // 해제: 제거
-        : [...prev, href]; // 추가: 맨 뒤에 삽입 (먼저 한 게 상단)
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      } catch {
-        // ignore
-      }
-      return next;
-    });
+    const next = favorites.includes(href)
+      ? favorites.filter((h) => h !== href) // 해제: 제거
+      : [...favorites, href]; // 추가: 맨 뒤에 삽입 (먼저 한 게 상단)
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      window.dispatchEvent(new Event(FAVORITES_EVENT));
+    } catch {
+      // ignore
+    }
   };
 
   const favSet = new Set(favorites);

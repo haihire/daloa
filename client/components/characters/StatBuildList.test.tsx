@@ -1,30 +1,62 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import StatBuildList from "./StatBuildList";
-import type { StatBuildTab } from "@/types";
+import type { StatBuildItem, StatBuildTab } from "@/types";
 
 const MOCK_TABS: StatBuildTab[] = [
   {
     statBuild: "치신",
     totalCount: 100,
     items: [
-      { classEngraving: "각인1", classDetail: "워로드", count: 50, topLevel: 0 },
-      { classEngraving: "각인2", classDetail: "버서커", count: 30, topLevel: 0 },
-      { classEngraving: "각인3", classDetail: "디스트로이어", count: 20, topLevel: 0 },
+      {
+        classEngraving: "각인1",
+        classDetail: "워로드",
+        count: 50,
+        topLevel: 0,
+      },
+      {
+        classEngraving: "각인2",
+        classDetail: "버서커",
+        count: 30,
+        topLevel: 0,
+      },
+      {
+        classEngraving: "각인3",
+        classDetail: "디스트로이어",
+        count: 20,
+        topLevel: 0,
+      },
     ],
   },
   {
     statBuild: "신치",
     totalCount: 80,
     items: [
-      { classEngraving: "각인A", classDetail: "스트라이커", count: 60, topLevel: 0 },
-      { classEngraving: "각인B", classDetail: "배틀마스터", count: 20, topLevel: 0 },
+      {
+        classEngraving: "각인A",
+        classDetail: "스트라이커",
+        count: 60,
+        topLevel: 0,
+      },
+      {
+        classEngraving: "각인B",
+        classDetail: "배틀마스터",
+        count: 20,
+        topLevel: 0,
+      },
     ],
   },
   {
     statBuild: "치특",
     totalCount: 60,
-    items: [{ classEngraving: "각인X", classDetail: "호크아이", count: 60, topLevel: 0 }],
+    items: [
+      {
+        classEngraving: "각인X",
+        classDetail: "호크아이",
+        count: 60,
+        topLevel: 0,
+      },
+    ],
   },
 ];
 
@@ -134,9 +166,6 @@ describe("StatBuildList", () => {
   it("탭 클릭 시 이전 탭의 활성 상태가 해제된다", async () => {
     const { container } = render(<StatBuildList tabs={MOCK_TABS} />);
 
-    const firstTab = container.querySelector(
-      'button[title^="치신 "]',
-    ) as HTMLButtonElement;
     const secondTab = container.querySelector(
       'button[title^="신치 "]',
     ) as HTMLButtonElement;
@@ -158,7 +187,7 @@ describe("StatBuildList", () => {
       {
         statBuild: "치신",
         totalCount: 10,
-        items: null as any,
+        items: null as unknown as StatBuildItem[],
       },
     ];
 

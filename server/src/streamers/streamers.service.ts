@@ -21,6 +21,20 @@ interface PopularResponse {
   total: number;
 }
 
+interface YoutubeApiErrorShape {
+  response?: {
+    status?: number;
+    data?: {
+      error?: {
+        message?: string;
+        errors?: Array<{
+          reason?: string;
+        }>;
+      };
+    };
+  };
+}
+
 /** YouTube API 응답의 HTML 엔티티 디코딩 */
 function decodeHtmlEntities(str: string): string {
   return str
@@ -75,7 +89,7 @@ function formatDuration(iso: string): string {
 @Injectable()
 export class StreamersService implements OnModuleInit {
   private readonly logger = new Logger(StreamersService.name);
-  private readonly youtubeKeys: any[];
+  private readonly youtubeKeys: ReturnType<typeof google.youtube>[];
   private currentKeyIdx = 0;
 
   private get youtube() {
@@ -103,7 +117,9 @@ export class StreamersService implements OnModuleInit {
         this.logger.log('YouTube 캐시 존재 — 시작 시 API 호출 스킵');
         return;
       }
-    } catch (_) {}
+    } catch (error: unknown) {
+      this.logger.debug(`Redis 확인 실패(무시): ${toErrorMessage(error)}`);
+    }
     await this.refresh();
   }
 
@@ -120,7 +136,11 @@ export class StreamersService implements OnModuleInit {
         );
         return;
       }
-    } catch (_) {}
+    } catch (error: unknown) {
+      this.logger.debug(
+        `할당량 플래그 조회 실패(무시): ${toErrorMessage(error)}`,
+      );
+    }
 
     this.logger.log('YouTube 영상 목록 갱신 시작');
     try {
@@ -132,12 +152,13 @@ export class StreamersService implements OnModuleInit {
         CACHE_TTL,
       );
       this.logger.log(`YouTube 영상 ${result.items.length}건 캐시 저장`);
-    } catch (err: any) {
-      const status = err?.response?.status;
-      const reason = err?.response?.data?.error?.errors?.[0]?.reason;
+    } catch (err: unknown) {
+      const apiErr = toYoutubeApiError(err);
+      const status = apiErr.response?.status;
+      const reason = apiErr.response?.data?.error?.errors?.[0]?.reason;
       this.logger.error(
         `YouTube 갱신 실패 [HTTP ${status ?? 'unknown'}] reason: ${reason ?? 'unknown'}`,
-        err?.response?.data?.error?.message ?? (err as Error).message,
+        apiErr.response?.data?.error?.message ?? toErrorMessage(err),
       );
 
       // 할당량 초과 시 리셋 시각까지 플래그 설정
@@ -173,14 +194,18 @@ export class StreamersService implements OnModuleInit {
     try {
       const blocked = await this.redis.get(QUOTA_KEY);
       if (blocked) return { items: [], nextPageToken: null };
-    } catch (_) {}
+    } catch (error: unknown) {
+      this.logger.debug(
+        `할당량 플래그 조회 실패(무시): ${toErrorMessage(error)}`,
+      );
+    }
 
     // 3. YouTube API 호출
     let result: { items: YoutubeVideoItem[]; nextPageToken: string | null };
     try {
       result = await this.fetchFromYouTube(pageToken);
-    } catch (err: any) {
-      this.logger.error(`getStreamers 실패: ${err?.message ?? err}`);
+    } catch (err: unknown) {
+      this.logger.error(`getStreamers 실패: ${toErrorMessage(err)}`);
       return { items: [], nextPageToken: null };
     }
 
@@ -197,10 +222,7 @@ export class StreamersService implements OnModuleInit {
    * GET /api/streamers/popular
    * offset/limit 미지정 시 전체 목록, 지정 시 캐시된 목록을 분할 반환
    */
-  async searchPopularVideos(
-    offset = 0,
-    limit = 0,
-  ): Promise<PopularResponse> {
+  async searchPopularVideos(offset = 0, limit = 0): Promise<PopularResponse> {
     const safeOffset = Math.max(0, offset);
     const safeLimit = Math.min(Math.max(0, limit), POPULAR_MAX_LIMIT);
 
@@ -210,14 +232,22 @@ export class StreamersService implements OnModuleInit {
         const parsed = JSON.parse(cached) as { items: YoutubeVideoItem[] };
         return this.slicePopular(parsed.items, safeOffset, safeLimit);
       }
-    } catch (_) {}
+    } catch (error: unknown) {
+      this.logger.debug(
+        `popular 캐시 조회 실패(무시): ${toErrorMessage(error)}`,
+      );
+    }
 
     try {
       const blocked = await this.redis.get(QUOTA_KEY);
       if (blocked) {
         return { items: [], nextOffset: null, hasMore: false, total: 0 };
       }
-    } catch (_) {}
+    } catch (error: unknown) {
+      this.logger.debug(
+        `할당량 플래그 조회 실패(무시): ${toErrorMessage(error)}`,
+      );
+    }
 
     let popular: { items: YoutubeVideoItem[] };
     try {
@@ -234,8 +264,8 @@ export class StreamersService implements OnModuleInit {
           new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
       );
       popular = { items: allItems };
-    } catch (err: any) {
-      this.logger.error(`searchPopularVideos 실패: ${err?.message ?? err}`);
+    } catch (err: unknown) {
+      this.logger.error(`searchPopularVideos 실패: ${toErrorMessage(err)}`);
       return { items: [], nextOffset: null, hasMore: false, total: 0 };
     }
 
@@ -246,7 +276,11 @@ export class StreamersService implements OnModuleInit {
         'EX',
         CACHE_TTL,
       );
-    } catch (_) {}
+    } catch (error: unknown) {
+      this.logger.debug(
+        `popular 캐시 저장 실패(무시): ${toErrorMessage(error)}`,
+      );
+    }
 
     return this.slicePopular(popular.items, safeOffset, safeLimit);
   }
@@ -290,8 +324,9 @@ export class StreamersService implements OnModuleInit {
     for (let attempt = 0; attempt < total; attempt++) {
       try {
         return await this._doFetch(pageToken, order, isPopular, query);
-      } catch (err: any) {
-        const reason = err?.response?.data?.error?.errors?.[0]?.reason;
+      } catch (err: unknown) {
+        const reason =
+          toYoutubeApiError(err).response?.data?.error?.errors?.[0]?.reason;
         if (
           (reason === 'quotaExceeded' || reason === 'dailyLimitExceeded') &&
           attempt < total - 1
@@ -387,4 +422,16 @@ export class StreamersService implements OnModuleInit {
 
     return { items, nextPageToken };
   }
+}
+
+function toYoutubeApiError(error: unknown): YoutubeApiErrorShape {
+  if (typeof error === 'object' && error !== null) {
+    return error as YoutubeApiErrorShape;
+  }
+  return {};
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }

@@ -52,7 +52,13 @@ export class FileLoggerService implements LoggerService {
   private fmt(level: string, message: unknown, context?: string): string {
     const ts = new Date().toISOString();
     const ctx = context ? `[${context}] ` : '';
-    return `${ts} [${level.padEnd(7)}] ${ctx}${message}\n`;
+    const text =
+      typeof message === 'string'
+        ? message
+        : message instanceof Error
+          ? message.message
+          : String(message);
+    return `${ts} [${level.padEnd(7)}] ${ctx}${text}\n`;
   }
 
   private writeAll(line: string) {

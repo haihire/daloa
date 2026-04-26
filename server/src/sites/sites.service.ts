@@ -1,6 +1,7 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import type { Pool } from 'mysql2/promise';
+import type { RowDataPacket } from 'mysql2';
 import type { Redis } from 'ioredis';
 import { DB_POOL } from '../db/db.module';
 import { REDIS_CLIENT } from '../redis/redis.module';
@@ -8,6 +9,23 @@ import { KakaoService, type SiteChange } from '../kakao/kakao.service';
 
 const CACHE_KEY = 'sites:all';
 const CACHE_TTL_SEC = 600; // 10분
+
+interface SiteRow extends RowDataPacket {
+  seq: number;
+  name: string;
+  href: string;
+  category: string | null;
+  description: string | null;
+  icon: string | null;
+}
+
+interface SiteCheckRow extends RowDataPacket {
+  seq: number;
+  name: string;
+  href: string;
+  last_title: string | null;
+  last_status: number | null;
+}
 
 const SITE_TEXT_CANONICAL: Record<
   string,
@@ -24,6 +42,10 @@ const SITE_TEXT_CANONICAL: Record<
   'https://sasagefind.com/': {
     name: '사사게 검색기',
     description: '범죄자 데이터베이스',
+  },
+  'https://lo4.app/': {
+    name: 'LOALAB',
+    description: '재련·경매·치명타 계산기, 음돌 계산기 등 통합 툴',
   },
 };
 
@@ -68,19 +90,9 @@ export class SitesService {
       await this.redis.del(CACHE_KEY);
     }
 
-    const [rows] = (await (this.pool as any).execute(
+    const [rows] = await this.pool.execute<SiteRow[]>(
       'SELECT seq, name, href, category, description, icon FROM loa_sites WHERE is_active = 1 ORDER BY seq',
-    )) as [
-      Array<{
-        seq: number;
-        name: string;
-        href: string;
-        category: string | null;
-        description: string | null;
-        icon: string | null;
-      }>,
-      any,
-    ];
+    );
 
     // SITE_TEXT_CANONICAL 등록 사이트: DB 즉시 복구
     // 미등록 사이트: 경고 로그 기록 (관리자가 SITE_TEXT_CANONICAL에 추가해야 함)
@@ -110,7 +122,7 @@ export class SitesService {
             return;
           }
 
-          await (this.pool as any).execute(
+          await this.pool.execute(
             `UPDATE loa_sites
                 SET name = ?,
                     description = ?
@@ -154,9 +166,9 @@ export class SitesService {
   @Cron('0 0 9 * * *')
   async checkSites() {
     this.logger.log('사이트 일일 점검 시작');
-    const [rows] = (await (this.pool as any).execute(
+    const [rows] = await this.pool.execute<SiteCheckRow[]>(
       'SELECT seq, name, href, last_title, last_status FROM loa_sites WHERE is_active = 1',
-    )) as [any[], any];
+    );
 
     const changes: SiteChange[] = [];
 
@@ -212,7 +224,7 @@ export class SitesService {
         }
 
         // DB 업데이트
-        await (this.pool as any).execute(
+        await this.pool.execute(
           `UPDATE loa_sites
               SET last_title  = ?,
                   last_status = ?,

@@ -40,7 +40,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? exception.message
         : String(exception);
 
-    this.logger.error(`[${request.method}] ${request.url} → ${status}: ${message}`);
+    this.logger.error(
+      `[${request.method}] ${request.url} → ${status}: ${message}`,
+    );
 
     // 서버 에러(5xx)만 카카오 알림 전송
     if (status >= 500) {
@@ -54,8 +56,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
               `상태: ${status}\n` +
               `메시지: ${message}`,
           )
-          .catch((err) =>
-            this.logger.warn(`카카오 알림 전송 실패: ${err?.message}`),
+          .catch((err: unknown) =>
+            this.logger.warn(`카카오 알림 전송 실패: ${toErrorMessage(err)}`),
           );
       }
     }
@@ -67,4 +69,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message,
     });
   }
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }

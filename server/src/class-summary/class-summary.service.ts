@@ -2,6 +2,7 @@
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import type { Pool } from 'mysql2/promise';
+import type { RowDataPacket } from 'mysql2';
 import type { Redis } from 'ioredis';
 import { createHash } from 'crypto';
 import { DB_POOL } from '../db/db.module';
@@ -54,6 +55,20 @@ const STAGGER_DELAY_MS = 70_000;
 // Redis 키: 직업별 크롤링 제목 해시
 const hashKey = (className: string) => `class-summary:hash:${className}`;
 
+interface CountRow extends RowDataPacket {
+  cnt: number;
+}
+
+interface ExistsRow extends RowDataPacket {
+  exists: 1;
+}
+
+interface SummaryRow extends RowDataPacket {
+  className: string;
+  summary: string;
+  updatedAt: string;
+}
+
 @Injectable()
 export class ClassSummaryService implements OnModuleInit {
   private readonly logger = new Logger(ClassSummaryService.name);
@@ -75,15 +90,16 @@ export class ClassSummaryService implements OnModuleInit {
   }
 
   async onModuleInit() {
-    const [rows] = (await (this.pool as any).execute(
+    const [rows] = await this.pool.execute<CountRow[]>(
       'SELECT COUNT(*) as cnt FROM loa_class_summaries',
-    )) as [any[], any];
-    if (rows[0].cnt < CLASS_LIST.length) {
+    );
+    const currentCount = rows[0]?.cnt ?? 0;
+    if (currentCount < CLASS_LIST.length) {
       this.logger.log(
-        `DB에 ${rows[0].cnt}/${CLASS_LIST.length}개 — 미완성 직업 크롤링 시작`,
+        `DB에 ${currentCount}/${CLASS_LIST.length}개 — 미완성 직업 크롤링 시작`,
       );
       this.runAll().catch((e) =>
-        this.logger.error('초기 크롤링 실패', e?.message),
+        this.logger.error('초기 크롤링 실패', toErrorMessage(e)),
       );
     }
   }
@@ -112,7 +128,7 @@ export class ClassSummaryService implements OnModuleInit {
         try {
           calledGemini = await this.processClass(className);
         } catch (e) {
-          this.logger.error(`[${className}] 처리 실패: ${(e as any)?.message}`);
+          this.logger.error(`[${className}] 처리 실패: ${toErrorMessage(e)}`);
         }
         // Gemini 호출 시 70초, 스킵 시 2초 대기
         await delay(calledGemini ? STAGGER_DELAY_MS : 2_000);
@@ -136,10 +152,10 @@ export class ClassSummaryService implements OnModuleInit {
       .digest('hex');
 
     // DB에 데이터가 있는 경우에만 해시 비교로 스킵
-    const [existing] = (await (this.pool as any).execute(
-      'SELECT 1 FROM loa_class_summaries WHERE class_name = ? LIMIT 1',
+    const [existing] = await this.pool.execute<ExistsRow[]>(
+      'SELECT 1 as exists FROM loa_class_summaries WHERE class_name = ? LIMIT 1',
       [className],
-    )) as [any[], any];
+    );
 
     if (existing.length > 0) {
       const prevHash = await this.redis.get(hashKey(className));
@@ -152,7 +168,7 @@ export class ClassSummaryService implements OnModuleInit {
     const summary = await this.summarize(className, titles);
     if (!summary) return true; // Gemini 호출은 했으므로 true
 
-    await (this.pool as any).execute(
+    await this.pool.execute(
       `INSERT INTO loa_class_summaries (class_name, summary, updated_at)
        VALUES (?, ?, NOW())
        ON DUPLICATE KEY UPDATE summary = VALUES(summary), updated_at = NOW()`,
@@ -238,8 +254,8 @@ export class ClassSummaryService implements OnModuleInit {
         await this.redis.incr(dailyKey);
         await this.redis.expire(dailyKey, 25 * 60 * 60);
         return text;
-      } catch (e: any) {
-        const msg: string = e?.message ?? '';
+      } catch (e: unknown) {
+        const msg = toErrorMessage(e);
 
         // retryDelay 파싱: "21.5s" 또는 "876ms" 형식
         const secMatch = msg.match(/"retryDelay"\s*:\s*"([\d.]+)s"/);
@@ -269,7 +285,7 @@ export class ClassSummaryService implements OnModuleInit {
   async findAll(): Promise<
     { className: string; summary: string; updatedAt: string }[]
   > {
-    const [rows] = (await (this.pool as any).execute(
+    const [rows] = await this.pool.execute<SummaryRow[]>(
       `SELECT class_name AS className, summary,
               DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updatedAt
        FROM loa_class_summaries
@@ -281,7 +297,7 @@ export class ClassSummaryService implements OnModuleInit {
          '블레이드','데모닉','리퍼','소울이터',
          '도화가','기상술사','환수사','가디언나이트'
        )`,
-    )) as [any[], any];
+    );
     return rows;
   }
 
@@ -289,16 +305,21 @@ export class ClassSummaryService implements OnModuleInit {
   async findOne(
     className: string,
   ): Promise<{ className: string; summary: string; updatedAt: string } | null> {
-    const [rows] = (await (this.pool as any).execute(
+    const [rows] = await this.pool.execute<SummaryRow[]>(
       `SELECT class_name AS className, summary,
               DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updatedAt
        FROM loa_class_summaries WHERE class_name = ?`,
       [className],
-    )) as [any[], any];
+    );
     return rows[0] ?? null;
   }
 }
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
