@@ -194,8 +194,15 @@ export default function YoutubeList() {
   };
 
   const scroll = (dir: "left" | "right") => {
-    listRef.current?.scrollBy({
-      left: dir === "right" ? 280 : -280,
+    const listEl = listRef.current;
+    if (!listEl) return;
+    // 첫 번째 카드 너비 기준으로 정렬 — snap 포인트에 정확히 착지
+    const firstItem = listEl.firstElementChild as HTMLElement | null;
+    const cardWidth = firstItem
+      ? firstItem.offsetWidth + (window.innerWidth >= 640 ? 16 : 8) // sm:gap-4 / gap-2
+      : 280;
+    listEl.scrollBy({
+      left: dir === "right" ? cardWidth : -cardWidth,
       behavior: "smooth",
     });
 
@@ -344,7 +351,7 @@ export default function YoutubeList() {
           </div>
           <ul
             ref={listRef}
-            className="flex gap-2 overflow-x-auto pb-2 sm:gap-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            className="flex gap-2 overflow-x-auto pb-2 sm:gap-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden snap-x snap-mandatory"
           >
             {(() => {
               const enteringStart = Math.max(items.length - enteringCount, 0);
@@ -353,7 +360,7 @@ export default function YoutubeList() {
                 return (
                   <li
                     key={`${v.videoId}-${idx}`}
-                    className={`w-[calc(50%-0.5rem)] shrink-0 flex sm:w-52 ${isEntering ? "youtube-card-enter" : ""}`}
+                    className={`w-[calc(50%-0.5rem)] shrink-0 flex sm:w-52 snap-start ${isEntering ? "youtube-card-enter" : ""}`}
                   >
                     <a
                       href={`https://www.youtube.com/watch?v=${v.videoId}`}
@@ -398,7 +405,10 @@ export default function YoutubeList() {
               });
             })()}
             {loadingMore && (
-              <li key="loading-more-indicator" className="w-52 shrink-0 flex">
+              <li
+                key="loading-more-indicator"
+                className="w-52 shrink-0 flex snap-start"
+              >
                 <div className="flex h-full w-full flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white p-4 text-slate-500">
                   <span className="h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-red-400" />
                   <span className="text-xs">불러오는 중...</span>
