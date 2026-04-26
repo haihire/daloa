@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import type { Site } from "@/types";
+import { trackEvent } from "@/lib/gtag";
 
 interface Props {
   sites: Site[];
@@ -82,9 +83,14 @@ export default function SiteList({ sites }: Props) {
 
   const toggleFavorite = (href: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const next = favorites.includes(href)
+    const isFavNow = favorites.includes(href);
+    const next = isFavNow
       ? favorites.filter((h) => h !== href) // 해제: 제거
       : [...favorites, href]; // 추가: 맨 뒤에 삽입 (먼저 한 게 상단)
+    trackEvent("favorite_toggle", {
+      site_href: href,
+      action: isFavNow ? "remove" : "add",
+    });
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       window.dispatchEvent(new Event(FAVORITES_EVENT));
@@ -113,13 +119,24 @@ export default function SiteList({ sites }: Props) {
                 <div
                   role="button"
                   tabIndex={0}
-                  onClick={() =>
-                    window.open(site.href, "_blank", "noopener,noreferrer")
-                  }
-                  onKeyDown={(e) =>
-                    e.key === "Enter" &&
-                    window.open(site.href, "_blank", "noopener,noreferrer")
-                  }
+                  onClick={() => {
+                    trackEvent("site_click", {
+                      site_name: site.name,
+                      site_href: site.href,
+                      site_category: site.category,
+                    });
+                    window.open(site.href, "_blank", "noopener,noreferrer");
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      trackEvent("site_click", {
+                        site_name: site.name,
+                        site_href: site.href,
+                        site_category: site.category,
+                      });
+                      window.open(site.href, "_blank", "noopener,noreferrer");
+                    }
+                  }}
                   className={`relative flex h-full cursor-pointer select-none flex-col rounded-xl border p-3 transition-all duration-200 hover:-translate-y-0.5 ${
                     isFav
                       ? "border-blue-400 bg-blue-50 hover:border-blue-500 hover:bg-blue-50"
