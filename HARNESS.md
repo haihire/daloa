@@ -6,6 +6,44 @@
 
 > **모든 개발/수정/디버깅 세션은 이 순서를 따른다.**
 
+### 단계 0 — 브랜치 생성 및 PR
+
+**모든 기능 추가·버그 수정은 반드시 브랜치를 만들고 PR을 통해 `main`에 머지한다.**  
+`main` 직접 커밋·직접 머지 금지 — PR을 거쳐야 GitHub Actions(`pr-check.yml`)가 실행된다.
+
+```powershell
+# 1) 항상 최신 main 기준으로 브랜치 생성
+git checkout main
+git pull origin main
+git checkout -b feat/기능명        # 새 기능
+git checkout -b fix/버그명         # 버그 수정
+git checkout -b chore/작업명       # 설정·문서·스크립트 변경
+```
+
+**브랜치 네이밍 규칙**
+
+| 접두사      | 사용 상황                | 예시                          |
+| ----------- | ------------------------ | ----------------------------- |
+| `feat/`     | 새 기능 추가             | `feat/site-bookmark`          |
+| `fix/`      | 버그 수정                | `fix/redis-cache-broken-text` |
+| `chore/`    | 설정·스크립트·문서 변경  | `chore/add-cleanup-logs`      |
+| `refactor/` | 동작 변경 없는 코드 정리 | `refactor/sites-service`      |
+
+```powershell
+# 2) 작업 완료 후 브랜치 푸시 → GitHub에서 PR 생성
+git add .
+git commit -m "feat(범위): 설명"
+git push origin feat/기능명
+# → GitHub에서 PR 열기 → pr-check.yml 통과 확인 → Merge
+
+# 3) 머지 후 로컬 정리
+git checkout main
+git pull origin main
+git branch -d feat/기능명
+```
+
+> **주의**: `git merge` 로컬 직접 머지 후 `push origin main` 방식은 `pr-check.yml`이 트리거되지 않는다.
+
 ### 단계 1 — 환경 시작
 
 ```powershell
@@ -117,6 +155,7 @@ server/src/[feature]/
 ```
 
 **공용 모듈**:
+
 - `common/` — 에러 필터, 인터셉터, 데코레이터
 - `db/` — 데이터베이스 풀 관리
 - `redis/` — Redis 클라이언트 관리
@@ -145,12 +184,12 @@ client/public/
 
 ### 1-3. 테스트 파일 위치
 
-| 레이어              | 테스트 파일 위치                  | 패턴                           |
-| ------------------- | --------------------------------- | ------------------------------ |
-| 서버 단위           | `server/src/**/*.spec.ts`         | 테스트 대상과 같은 폴더에 위치 |
-| 서버 E2E            | `server/test/*.e2e-spec.ts`       | 격리된 `test/` 폴더            |
-| 클라이언트 컴포넌트 | `client/components/**/*.test.tsx` | 컴포넌트와 같은 폴더에 위치    |
-| 클라이언트 유틸/훅  | `client/[utils\|hooks]/**/*.test.ts` | 대상과 같은 폴더             |
+| 레이어              | 테스트 파일 위치                     | 패턴                           |
+| ------------------- | ------------------------------------ | ------------------------------ |
+| 서버 단위           | `server/src/**/*.spec.ts`            | 테스트 대상과 같은 폴더에 위치 |
+| 서버 E2E            | `server/test/*.e2e-spec.ts`          | 격리된 `test/` 폴더            |
+| 클라이언트 컴포넌트 | `client/components/**/*.test.tsx`    | 컴포넌트와 같은 폴더에 위치    |
+| 클라이언트 유틸/훅  | `client/[utils\|hooks]/**/*.test.ts` | 대상과 같은 폴더               |
 
 ---
 
@@ -263,17 +302,17 @@ it('클릭 시 window.open 호출', async () => {
 
 ```ts
 // 유틸리티 테스트
-import { formatNumber } from '@/utils/format';
+import { formatNumber } from "@/utils/format";
 
 it('formatNumber(1000000) → "1,000,000"', () => {
-  expect(formatNumber(1000000)).toBe('1,000,000');
+  expect(formatNumber(1000000)).toBe("1,000,000");
 });
 
 // 훅 테스트 (있을 경우)
-import { renderHook, act } from '@testing-library/react';
-import { useCounter } from '@/hooks/useCounter';
+import { renderHook, act } from "@testing-library/react";
+import { useCounter } from "@/hooks/useCounter";
 
-it('카운터 증가', () => {
+it("카운터 증가", () => {
   const { result } = renderHook(() => useCounter());
   act(() => result.current.increment());
   expect(result.current.count).toBe(1);
@@ -312,6 +351,7 @@ it('카운터 증가', () => {
 각 환경마다 별도의 `.env` 파일을 관리한다. `.gitignore` 에 포함되어야 한다.
 
 **서버** (`server/.env` 또는 `server/.env.local`):
+
 ```env
 # 기본
 PORT=3001
@@ -336,6 +376,7 @@ REDIS_DB=0
 ```
 
 **클라이언트** (`client/.env.local`):
+
 ```env
 # 개발 환경
 NEXT_PUBLIC_API_URL=http://localhost:3001
@@ -346,11 +387,11 @@ NEXT_PUBLIC_API_URL=http://localhost:3001
 
 ### 환경별 설정 방법
 
-| 환경        | 위치                  | 방법                                  |
-| ----------- | --------------------- | ------------------------------------- |
-| 로컬 개발   | `server/.env.local`   | `npm run start:dev` (자동 로드)       |
-| 로컬 dev.ps1 | Docker Compose 환경   | 컨테이너 시작 전 `.env` 복사          |
-| EC2 배포    | EC2 서버의 `.env`     | SSH 접근 후 수동 설정 또는 GitHub Secrets |
+| 환경         | 위치                | 방법                                      |
+| ------------ | ------------------- | ----------------------------------------- |
+| 로컬 개발    | `server/.env.local` | `npm run start:dev` (자동 로드)           |
+| 로컬 dev.ps1 | Docker Compose 환경 | 컨테이너 시작 전 `.env` 복사              |
+| EC2 배포     | EC2 서버의 `.env`   | SSH 접근 후 수동 설정 또는 GitHub Secrets |
 
 ### 금지 사항
 
