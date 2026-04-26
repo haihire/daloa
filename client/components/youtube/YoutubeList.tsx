@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { YoutubeVideo } from "@/types";
+import { event as gaEvent } from "@/lib/gtag";
 
 const API = process.env.NEXT_PUBLIC_NEST_API_URL ?? "http://localhost:3001";
 const INITIAL_LIMIT = 8;
@@ -366,6 +367,18 @@ export default function YoutubeList() {
                       href={`https://www.youtube.com/watch?v=${v.videoId}`}
                       target="_blank"
                       rel="noopener noreferrer"
+                      onClick={() => {
+                        gaEvent("youtube_click", {
+                          video_id: v.videoId,
+                          video_title: v.title,
+                          channel_title: v.channelTitle,
+                        });
+                        gaEvent("component_click", {
+                          component_name: "youtube_list",
+                          item_name: v.title,
+                          item_id: v.videoId,
+                        });
+                      }}
                       className="flex flex-col h-full gap-2 rounded-xl border border-slate-200 bg-white p-2 transition-transform duration-150 hover:-translate-y-0.5 hover:border-red-300 hover:shadow-md"
                     >
                       {v.thumbnailUrl && (

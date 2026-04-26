@@ -116,26 +116,31 @@ export default function SiteList({ sites }: Props) {
         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {sorted.map((site) => {
             const isFav = favSet.has(site.href);
+            const trackSiteClick = () => {
+              gaEvent("site_click", {
+                site_name: site.name,
+                site_category: site.category,
+                site_href: site.href,
+              });
+              gaEvent("component_click", {
+                component_name: "site_list",
+                item_name: site.name,
+                item_id: site.href,
+              });
+            };
+
             return (
               <li key={site.href}>
                 <div
                   role="button"
                   tabIndex={0}
                   onClick={() => {
-                    gaEvent("site_click", {
-                      site_name: site.name,
-                      site_category: site.category,
-                      site_href: site.href,
-                    });
+                    trackSiteClick();
                     window.open(site.href, "_blank", "noopener,noreferrer");
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
-                      gaEvent("site_click", {
-                        site_name: site.name,
-                        site_category: site.category,
-                        site_href: site.href,
-                      });
+                      trackSiteClick();
                       window.open(site.href, "_blank", "noopener,noreferrer");
                     }
                   }}
