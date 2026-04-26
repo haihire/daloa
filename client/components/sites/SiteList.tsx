@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import type { Site } from "@/types";
-import { trackEvent } from "@/lib/gtag";
+import { event as gaEvent } from "@/lib/gtag";
 
 interface Props {
   sites: Site[];
@@ -83,13 +83,15 @@ export default function SiteList({ sites }: Props) {
 
   const toggleFavorite = (href: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const isFavNow = favorites.includes(href);
-    const next = isFavNow
+    const isCurrentlyFav = favorites.includes(href);
+    const next = isCurrentlyFav
       ? favorites.filter((h) => h !== href) // 해제: 제거
       : [...favorites, href]; // 추가: 맨 뒤에 삽입 (먼저 한 게 상단)
-    trackEvent("favorite_toggle", {
+    const site = sites.find((s) => s.href === href);
+    gaEvent("favorite_toggle", {
+      site_name: site?.name ?? href,
       site_href: href,
-      action: isFavNow ? "remove" : "add",
+      action: isCurrentlyFav ? "remove" : "add",
     });
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
@@ -120,19 +122,19 @@ export default function SiteList({ sites }: Props) {
                   role="button"
                   tabIndex={0}
                   onClick={() => {
-                    trackEvent("site_click", {
+                    gaEvent("site_click", {
                       site_name: site.name,
-                      site_href: site.href,
                       site_category: site.category,
+                      site_href: site.href,
                     });
                     window.open(site.href, "_blank", "noopener,noreferrer");
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
-                      trackEvent("site_click", {
+                      gaEvent("site_click", {
                         site_name: site.name,
-                        site_href: site.href,
                         site_category: site.category,
+                        site_href: site.href,
                       });
                       window.open(site.href, "_blank", "noopener,noreferrer");
                     }
