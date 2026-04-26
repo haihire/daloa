@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { StatBuildTab } from "@/types";
+import { event as gaEvent } from "@/lib/gtag";
 
 interface Props {
   tabs: StatBuildTab[];
@@ -191,7 +192,18 @@ export default function StatBuildList({ tabs }: Props) {
                   <button
                     key={tab.statBuild}
                     type="button"
-                    onClick={() => setActiveTab(tab.statBuild)}
+                    onClick={() => {
+                      setActiveTab(tab.statBuild);
+                      gaEvent("stat_build_tab_click", {
+                        stat_build: tab.statBuild,
+                        total_count: tab.totalCount ?? 0,
+                      });
+                      gaEvent("component_click", {
+                        component_name: "stat_build_distribution",
+                        item_name: tab.statBuild,
+                        item_id: tab.statBuild,
+                      });
+                    }}
                     title={`${tab.statBuild} ${Math.round(pct)}%`}
                     className={`w-full transition-opacity ${style.bg} ${
                       isActive ? "opacity-100" : "opacity-40 hover:opacity-70"
