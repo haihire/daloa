@@ -159,7 +159,7 @@ import mysql from "mysql2/promise";
       "LOALAB",
       "https://lo4.app/",
       "통합 툴",
-      "재련·경매·치명타 계산기, 음돌 계산기, 일정 관리 등 다양한 툴 제공",
+      "재련·경매·치명타 계산기, 음돌 계산기 등 통합 툴",
       "https://www.google.com/s2/favicons?domain=lo4.app&sz=32",
     ],
   ];

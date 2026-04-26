@@ -243,7 +243,9 @@ describe("StreamerList", () => {
       | undefined;
 
     global.IntersectionObserver = vi.fn((callback) => {
-      ioCallback = callback as (entries: Array<{ isIntersecting: boolean }>) => void;
+      ioCallback = callback as (
+        entries: Array<{ isIntersecting: boolean }>,
+      ) => void;
       return {
         observe: observeMock,
         disconnect: vi.fn(),
