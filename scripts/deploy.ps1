@@ -3,7 +3,7 @@
 # 효과: git pull → dist 삭제 → npm run build → Docker 재빌드 → Redis 캐시 플러시
 
 param(
-    [string]$KeyPath = "C:\Users\tjdtn\Desktop\ingit\daloa\daloa-key.pem",
+    [string]$KeyPath = "C:\Users\tjdtn\Desktop\내가생각하는미래\개발\로아사이트 모음\daloa-key.pem",
     [string]$Host    = "ubuntu@3.39.239.9",
     [switch]$FlushRedis,    # -FlushRedis 시 Redis 캐시 전체 삭제
     [switch]$Full           # -Full 시 MySQL/Nginx 포함 전체 재시작
