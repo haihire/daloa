@@ -14,7 +14,9 @@ export async function register() {
   // Edge / 브라우저에서는 Node 전용 모듈이 없으므로 즉시 반환
   if (
     typeof process === "undefined" ||
+    typeof process.cwd !== "function" ||
     process.env.NEXT_RUNTIME === "edge" ||
+    process.env.VERCEL === "1" ||
     typeof globalThis.require === "undefined"
   ) {
     return;
