@@ -1,6 +1,6 @@
 # 프로젝트 Copilot 지침
 
-테스트·문서 작성 규칙 전체는 [`HARNESS.md`](../HARNESS.md)를 따른다.  
+테스트·문서 작성 규칙 전체는 [`HARNESS.md`](../docs/HARNESS.md)를 따른다.  
 프로젝트 컨텍스트(구조·스키마·API·환경변수·Redis) 전체는 [`context/INDEX.md`](../context/INDEX.md)에서 목차로 접근한다.
 
 ---
@@ -51,7 +51,7 @@
 2. `server/logs/`, `client/logs/` 에서 먼저 오늘치 `app-*.log`를 확인하고, 필요 시 `error-*.log`까지 함께 확인 → 원인 수정
 3. `powershell -File scripts/test.ps1` — 전체 테스트 실행
 4. `[PASS]` 전부 확인 후 작업 완료로 간주
-5. 새로 발견한 버그·설계 변경은 `record.md`에 기록
+5. 새로 발견한 버그·설계 변경은 `docs/record.md`에 기록
 
 - 에러 체크/디버깅 시에는 테스트 출력만 보지 말고, 관련 시점의 로그 파일을 먼저 확인해 원인을 좁힌다.
 - `scripts/dev.ps1`가 남기는 실행/콘솔 로그는 `app-YYYY-MM-DD.log`, 애플리케이션 내부 에러 전용 로그는 `error-YYYY-MM-DD.log`로 구분한다.
@@ -86,9 +86,9 @@
 
 > 상세 규칙: `HARNESS.md` 섹션 7
 
-- 버그 수정·설계 변경 → `record.md`에 문제/고민/해결/결과 형식으로 기록
-- 기능 아이디어·DB 스키마 변경 → `기획.md` 업데이트 (삭제 대신 ~~취소선~~ 사용)
-- 기술 개념 정리 → `technicalRead/[주제명].md` 신규 파일 생성
+- 버그 수정·설계 변경 → `docs/record.md`에 문제/고민/해결/결과 형식으로 기록
+- 기능 아이디어·DB 스키마 변경 → `docs/기획.md` 업데이트 (삭제 대신 ~~취소선~~ 사용)
+- 기술 개념 정리 → `docs/technicalRead/[주제명].md` 신규 파일 생성
 
 ---
 

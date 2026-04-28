@@ -128,9 +128,9 @@ powershell -File scripts/test.ps1 -E2E
 
 ### 단계 4 — 기록
 
-- 새로 발견한 버그·설계 변경 → `record.md` 작성 (섹션 7-1 형식)
-- 기능 추가·스키마 변경 → `기획.md` 업데이트
-- AI 대화 중 발견한 문제도 세션 종료 전에 `record.md`에 기록
+- 새로 발견한 버그·설계 변경 → `docs/record.md` 작성 (섹션 7-1 형식)
+- 기능 추가·스키마 변경 → `docs/기획.md` 업데이트
+- AI 대화 중 발견한 문제도 세션 종료 전에 `docs/record.md`에 기록
 
 ---
 
@@ -425,7 +425,7 @@ NEXT_PUBLIC_API_URL=http://localhost:3001
 
 ### 7-1. `record.md` — 고민한 문제와 해결 과정
 
-**위치**: 프로젝트 루트 `record.md`
+**위치**: `docs/record.md`
 
 **언제 작성하는가**
 
@@ -466,7 +466,7 @@ NEXT_PUBLIC_API_URL=http://localhost:3001
 
 ### 7-2. `기획.md` — 기능 아이디어와 방향 업데이트
 
-**위치**: 프로젝트 루트 `기획.md`
+**위치**: `docs/기획.md`
 
 **언제 작성하는가**
 
@@ -506,7 +506,7 @@ UI 레이아웃과 기능 목록. 완료된 항목은 ~~취소선~~으로 표시
 
 ### 7-3. `technicalRead/` — 기술 학습 노트
 
-**위치**: 프로젝트 루트 `technicalRead/` 폴더
+**위치**: `docs/technicalRead/` 폴더
 
 **언제 작성하는가**
 
@@ -517,9 +517,8 @@ UI 레이아웃과 기능 목록. 완료된 항목은 ~~취소선~~으로 표시
 **파일 명명 규칙**
 
 ```
-technicalRead/
+docs/technicalRead/
   ES6문제.md          ← CJS vs ESM, NestJS와의 충돌 원리
-  Thing.md            ← 개발 환경 구성 고민 (Docker 분리 전략 등)
   Jest목킹원리.md      ← Jest Mock / Spy / Stub 동작 원리  ← 신규 작성 예시
   Redis캐싱전략.md     ← Redis TTL, 캐시 무효화 패턴       ← 신규 작성 예시
 ```
