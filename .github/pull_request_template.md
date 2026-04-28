@@ -1,30 +1,37 @@
-## 목적
+## PR 제목
+
+- 형식: `type(scope): summary`
+- 예시: `fix(server): Redis 캐시 깨짐 텍스트 감지 후 무효화`
+
+## PR 설명
+
+### 목적
 
 - 이 PR로 해결하려는 문제를 한 줄로 작성
 
-## 변경점
+### 변경점
 
 -
 -
 
-## 테스트 결과
+### 테스트 결과
 
 - [ ] 공통 하네스 테스트 통과 (`powershell -File scripts/test.ps1`)
 - [ ] PR CI 통과 확인 (`PR CI / quality-gate`)
 - [ ] 필요 시 서버 E2E 확인 (`Server E2E` workflow)
 
-## 스크린샷 (프론트 변경 시)
+### 스크린샷 (프론트 변경 시)
 
 - 변경 전/후 캡처 첨부
 
-## 영향 범위
+### 영향 범위
 
 - [ ] client
 - [ ] server
 - [ ] crawlers
 - [ ] infra/nginx/scripts
 
-## 롤백 방법
+### 롤백 방법
 
 - 되돌릴 브랜치/커밋:
 - 롤백 절차:
