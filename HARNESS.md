@@ -15,32 +15,47 @@
 # 1) 항상 최신 main 기준으로 브랜치 생성
 git checkout main
 git pull origin main
-git checkout -b feat/기능명        # 새 기능
+git checkout -b feature/기능명     # 새 기능(UI/API, 사이트 추가 포함)
 git checkout -b fix/버그명         # 버그 수정
+git checkout -b hotfix/긴급수정명  # 배포 장애 긴급 수정
 git checkout -b chore/작업명       # 설정·문서·스크립트 변경
+git checkout -b refactor/리팩터링명 # 동작 변경 없는 코드 정리
 ```
 
 **브랜치 네이밍 규칙**
 
-| 접두사      | 사용 상황                | 예시                          |
-| ----------- | ------------------------ | ----------------------------- |
-| `feat/`     | 새 기능 추가             | `feat/site-bookmark`          |
-| `fix/`      | 버그 수정                | `fix/redis-cache-broken-text` |
-| `chore/`    | 설정·스크립트·문서 변경  | `chore/add-cleanup-logs`      |
-| `refactor/` | 동작 변경 없는 코드 정리 | `refactor/sites-service`      |
+| 접두사      | 사용 상황                    | 예시                          |
+| ----------- | ---------------------------- | ----------------------------- |
+| `feature/`  | 새 기능(UI/API, 사이트 추가) | `feature/site-bookmark`       |
+| `fix/`      | 버그 수정                    | `fix/redis-cache-broken-text` |
+| `hotfix/`   | 배포된 서비스 긴급 수정      | `hotfix/prod-login-error`     |
+| `chore/`    | 설정·스크립트·문서 변경      | `chore/add-cleanup-logs`      |
+| `refactor/` | 동작 변경 없는 코드 정리     | `refactor/sites-service`      |
 
 ```powershell
 # 2) 작업 완료 후 브랜치 푸시 → GitHub에서 PR 생성
 git add .
-git commit -m "feat(범위): 설명"
-git push origin feat/기능명
+git commit -m "feature(범위): 설명"
+git push origin feature/기능명
 # → GitHub에서 PR 열기 → pr-check.yml 통과 확인 → Merge
 
 # 3) 머지 후 로컬 정리
 git checkout main
 git pull origin main
-git branch -d feat/기능명
+git branch -d feature/기능명
 ```
+
+**에이전트 작업 규칙 (필수)**
+
+- 파일 수정이 필요한 요청이면, 작업 전에 에이전트가 브랜치 유형을 먼저 추천한다.
+- 추천 형식: `추천 브랜치: feature/...` + 이유 1줄.
+- 사용자 확인(승인) 후에만 실제 파일 수정/커밋 절차를 진행한다.
+- 기준:
+  - `feature/` — 새 사이트 추가, 새 기능(UI/API)
+  - `fix/` — 버그, 한글 깨짐, 로직 오류
+  - `hotfix/` — 배포된 서비스 긴급 수정만
+  - `refactor/` — 코드 정리, 타입 개선
+  - `chore/` — CI 세팅, 문서 업데이트
 
 > **주의**: `git merge` 로컬 직접 머지 후 `push origin main` 방식은 `pr-check.yml`이 트리거되지 않는다.
 

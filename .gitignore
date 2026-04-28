@@ -45,5 +45,6 @@ client/logs/
 crawlers/logs/
 
 # TypeScript 빌드 캐시
+server/tsconfig.tsbuildinfo
 server/tsconfig.build.tsbuildinfo
 server/dist/

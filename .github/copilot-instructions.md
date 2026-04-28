@@ -40,12 +40,13 @@
 0. **브랜치 + PR 필수** — `main` 직접 커밋·직접 머지 절대 금지. 반드시 브랜치를 만들고 PR을 통해 머지한다 (PR이 있어야 `pr-check.yml` Actions가 실행됨).
    ```powershell
    git checkout main ; git pull origin main
-   git checkout -b feat/기능명   # 또는 fix/, chore/, refactor/
+   git checkout -b feature/기능명   # 또는 fix/, hotfix/, refactor/, chore/
    # 작업 후:
-   git push origin feat/기능명
+   git push origin feature/기능명
    # → GitHub에서 PR 생성 → Actions 통과 → Merge
-   git checkout main ; git pull origin main ; git branch -d feat/기능명
+   git checkout main ; git pull origin main ; git branch -d feature/기능명
    ```
+   에이전트는 파일 수정이 필요한 요청에서 먼저 브랜치 유형(feature/fix/hotfix/refactor/chore)을 추천하고, 사용자 확인을 받은 뒤 수정을 진행한다.
 1. `powershell -File scripts/dev.ps1` — 포트 정리 후 서버·클라이언트 재시작, 로그 기록
 2. `server/logs/`, `client/logs/` 에서 먼저 오늘치 `app-*.log`를 확인하고, 필요 시 `error-*.log`까지 함께 확인 → 원인 수정
 3. `powershell -File scripts/test.ps1` — 전체 테스트 실행
