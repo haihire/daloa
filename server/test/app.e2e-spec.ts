@@ -10,6 +10,7 @@ import { AppModule } from '../src/app.module';
  */
 describe('AppController (e2e)', () => {
   let app: INestApplication;
+  let httpServer: Parameters<typeof request>[0];
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -18,6 +19,7 @@ describe('AppController (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     await app.init();
+    httpServer = app.getHttpServer() as Parameters<typeof request>[0];
   });
 
   afterAll(async () => {
@@ -25,7 +27,7 @@ describe('AppController (e2e)', () => {
   });
 
   it('GET /api/sites → 200 + 배열 반환', () => {
-    return request(app.getHttpServer())
+    return request(httpServer)
       .get('/api/sites')
       .expect(200)
       .expect((res) => {
@@ -34,7 +36,7 @@ describe('AppController (e2e)', () => {
   });
 
   it('GET /api/characters/stat-builds → 200 + 7개 탭', () => {
-    return request(app.getHttpServer())
+    return request(httpServer)
       .get('/api/characters/stat-builds')
       .expect(200)
       .expect((res) => {
@@ -44,6 +46,6 @@ describe('AppController (e2e)', () => {
   });
 
   it('존재하지 않는 경로 → 404', () => {
-    return request(app.getHttpServer()).get('/api/not-found').expect(404);
+    return request(httpServer).get('/api/not-found').expect(404);
   });
 });

@@ -13,17 +13,19 @@ function createService(options?: {
   popularCache?: { items: YoutubeVideoItem[] };
 }) {
   const redis: MockRedis = {
-    get: jest.fn(async (key: string) => {
+    get: jest.fn((key: string) => {
       if (key === 'youtube:videos:page:first') {
-        return options?.cache ? JSON.stringify(options.cache) : null;
+        return Promise.resolve(
+          options?.cache ? JSON.stringify(options.cache) : null,
+        );
       }
       if (key === 'youtube:popular:first') {
-        return options?.popularCache
-          ? JSON.stringify(options.popularCache)
-          : null;
+        return Promise.resolve(
+          options?.popularCache ? JSON.stringify(options.popularCache) : null,
+        );
       }
-      if (key === 'youtube:quota_exceeded') return null;
-      return null;
+      if (key === 'youtube:quota_exceeded') return Promise.resolve(null);
+      return Promise.resolve(null);
     }),
     set: jest.fn(),
     ttl: jest.fn(),
