@@ -6,24 +6,25 @@
 
 ## 서버 (NestJS)
 
-| 변수명                | 기본값                  | 필수     | 설명                                 |
-| --------------------- | ----------------------- | -------- | ------------------------------------ |
-| `PORT`                | `3001`                  | -        | NestJS 리스닝 포트                   |
-| `CLIENT_ORIGIN`       | `http://localhost:3000` | -        | CORS 허용 출처 (쉼표 구분 복수 허용) |
-| `DB_HOST`             | `127.0.0.1`             | -        | MariaDB 호스트                       |
-| `DB_PORT`             | `3306`                  | -        | MariaDB 포트                         |
-| `DB_NAME`             | `lost_ark`              | -        | DB 이름                              |
-| `DB_USER`             | `root`                  | -        | DB 유저                              |
-| `DB_PASS`             | `''`                    | **필수** | DB 비밀번호                          |
-| `REDIS_HOST`          | `127.0.0.1`             | -        | Redis 호스트                         |
-| `REDIS_PORT`          | `6379`                  | -        | Redis 포트                           |
-| `REDIS_PASSWORD`      | (없음)                  | -        | Redis 비밀번호 (없으면 미설정)       |
-| `REDIS_DB`            | `0`                     | -        | Redis DB 번호                        |
-| `LOSTARK_API_KEY`     | -                       | **필수** | LostArk Open API 키                  |
-| `YOUTUBE_API_KEY`     | -                       | **필수** | YouTube Data API v3 키               |
-| `GEMINI_API_KEY`      | -                       | **필수** | Google Gemini API 키                 |
-| `KAKAO_REST_API_KEY`  | -                       | **필수** | 카카오 REST API 키                   |
-| `KAKAO_REFRESH_TOKEN` | -                       | **필수** | 카카오 OAuth 리프레시 토큰           |
+| 변수명                     | 기본값                  | 필수     | 설명                                        |
+| -------------------------- | ----------------------- | -------- | ------------------------------------------- |
+| `PORT`                     | `3001`                  | -        | NestJS 리스닝 포트                          |
+| `CLIENT_ORIGIN`            | `http://localhost:3000` | -        | CORS 허용 출처 (쉼표 구분 복수 허용)        |
+| `DB_HOST`                  | `127.0.0.1`             | -        | MariaDB 호스트                              |
+| `DB_PORT`                  | `3306`                  | -        | MariaDB 포트                                |
+| `DB_NAME`                  | `lost_ark`              | -        | DB 이름                                     |
+| `DB_USER`                  | `root`                  | -        | DB 유저                                     |
+| `DB_PASS`                  | `''`                    | **필수** | DB 비밀번호                                 |
+| `REDIS_HOST`               | `127.0.0.1`             | -        | Redis 호스트                                |
+| `REDIS_PORT`               | `6379`                  | -        | Redis 포트                                  |
+| `REDIS_PASSWORD`           | (없음)                  | -        | Redis 비밀번호 (없으면 미설정)              |
+| `REDIS_DB`                 | `0`                     | -        | Redis DB 번호                               |
+| `LOCAL_DISABLE_QUOTA_APIS` | `false`                 | -        | 로컬 개발에서 YouTube/Gemini 외부 호출 차단 |
+| `LOSTARK_API_KEY`          | -                       | **필수** | LostArk Open API 키                         |
+| `YOUTUBE_API_KEY`          | -                       | **필수** | YouTube Data API v3 키                      |
+| `GEMINI_API_KEY`           | -                       | **필수** | Google Gemini API 키                        |
+| `KAKAO_REST_API_KEY`       | -                       | **필수** | 카카오 REST API 키                          |
+| `KAKAO_REFRESH_TOKEN`      | -                       | **필수** | 카카오 OAuth 리프레시 토큰                  |
 
 ### CORS 설정 주의
 
@@ -51,6 +52,9 @@ DB_PASS=1234
 
 # Redis (로컬은 패스워드 없음)
 REDIS_HOST=127.0.0.1
+
+# 로컬 개발 중 YouTube/Gemini 할당량 보호
+LOCAL_DISABLE_QUOTA_APIS=true
 
 # API Keys
 LOSTARK_API_KEY=eyJ0eXAiOiJKV1Q...

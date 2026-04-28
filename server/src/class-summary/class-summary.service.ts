@@ -10,6 +10,7 @@ import { REDIS_CLIENT } from '../redis/redis.module';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { isLocalQuotaApisDisabled } from '../common/local-dev-flags';
 
 // 직업별 인벤 게시판 ID (기획.md 기준)
 const CLASS_BOARD: Record<string, number> = {
@@ -73,6 +74,7 @@ interface SummaryRow extends RowDataPacket {
 export class ClassSummaryService implements OnModuleInit {
   private readonly logger = new Logger(ClassSummaryService.name);
   private readonly genAI: GoogleGenerativeAI | null;
+  private readonly quotaApisDisabled: boolean;
   private isRunning = false; // 동시 실행 방지
 
   constructor(
@@ -80,6 +82,7 @@ export class ClassSummaryService implements OnModuleInit {
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly config: ConfigService,
   ) {
+    this.quotaApisDisabled = isLocalQuotaApisDisabled(config);
     const apiKey = this.config.get<string>('GEMINI_API_KEY');
     if (apiKey) {
       this.genAI = new GoogleGenerativeAI(apiKey);
@@ -90,6 +93,13 @@ export class ClassSummaryService implements OnModuleInit {
   }
 
   async onModuleInit() {
+    if (this.quotaApisDisabled) {
+      this.logger.log(
+        'LOCAL_DISABLE_QUOTA_APIS 활성화 — 초기 직업 크롤링 스킵',
+      );
+      return;
+    }
+
     const [rows] = await this.pool.execute<CountRow[]>(
       'SELECT COUNT(*) as cnt FROM loa_class_summaries',
     );
@@ -107,12 +117,26 @@ export class ClassSummaryService implements OnModuleInit {
   /** 매 시간 정각 실행 — 29개 직업을 60분에 걸쳐 분산 처리 */
   @Cron('0 0 * * * *')
   async scheduledRun() {
+    if (this.quotaApisDisabled) {
+      this.logger.log(
+        'LOCAL_DISABLE_QUOTA_APIS 활성화 — 시간별 직업 크롤링 스킵',
+      );
+      return;
+    }
+
     this.logger.log('시간별 스케줄 크롤링 시작');
     await this.runAll();
   }
 
   /** 전체 직업 순차 처리 */
   async runAll() {
+    if (this.quotaApisDisabled) {
+      this.logger.log(
+        'LOCAL_DISABLE_QUOTA_APIS 활성화 — Gemini 직업 요약 갱신 스킵',
+      );
+      return;
+    }
+
     if (!this.genAI) {
       this.logger.warn('GEMINI_API_KEY 없음 — 스킵');
       return;
