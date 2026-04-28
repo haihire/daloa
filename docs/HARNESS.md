@@ -50,6 +50,8 @@ git branch -d feature/기능명
 - 파일 수정이 필요한 요청이면, 작업 전에 에이전트가 브랜치 유형을 먼저 추천한다.
 - 추천 형식: `추천 브랜치: feature/...` + 이유 1줄.
 - 사용자 확인(승인) 후에만 실제 파일 수정/커밋 절차를 진행한다.
+- 작업 완료 보고 시 에이전트는 항상 PR 작성용 `제목(title)`과 `설명(description)` 초안을 함께 제시한다.
+- PR 제목은 `type(scope): summary` 형식을 사용하고, PR 설명은 `.github/pull_request_template.md` 템플릿 순서를 따른다.
 - 기준:
   - `feature/` — 새 사이트 추가, 새 기능(UI/API)
   - `fix/` — 버그, 한글 깨짐, 로직 오류
