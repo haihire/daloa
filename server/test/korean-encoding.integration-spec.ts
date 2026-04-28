@@ -139,7 +139,7 @@ describe('한글 인코딩 통합 테스트 (loa_sites)', () => {
       'SELECT name, description FROM loa_sites_enc_test',
     );
 
-    for (const row of rows as mysql.RowDataPacket[]) {
+    for (const row of rows) {
       expect(row.name).not.toMatch(/\?{2,}/);
       expect(row.description ?? '').not.toMatch(/\?{2,}/);
     }
