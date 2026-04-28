@@ -33,7 +33,8 @@ jobs:
         run: npm run build
 
       - name: Deploy trigger (placeholder)
-        run: echo "배포 트리거 단계를 여기에 연결하세요. 예: SSH, webhook, cloud deploy action"
+        run: |
+          echo "배포 트리거 단계를 여기에 연결하세요. 예: SSH, webhook, cloud deploy action"
 
       - name: Health check (optional)
         env:
