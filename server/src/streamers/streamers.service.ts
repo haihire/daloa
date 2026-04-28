@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { google } from 'googleapis';
 import type { Redis } from 'ioredis';
+import { isLocalQuotaApisDisabled } from '../common/local-dev-flags';
 import { REDIS_CLIENT } from '../redis/redis.module';
 
 const CACHE_PREFIX = 'youtube:videos:page:';
@@ -90,6 +91,7 @@ function formatDuration(iso: string): string {
 export class StreamersService implements OnModuleInit {
   private readonly logger = new Logger(StreamersService.name);
   private readonly youtubeKeys: ReturnType<typeof google.youtube>[];
+  private readonly quotaApisDisabled: boolean;
   private currentKeyIdx = 0;
 
   private get youtube() {
@@ -107,9 +109,17 @@ export class StreamersService implements OnModuleInit {
     this.youtubeKeys = keys.map((k) =>
       google.youtube({ version: 'v3', auth: k }),
     );
+    this.quotaApisDisabled = isLocalQuotaApisDisabled(config);
   }
 
   async onModuleInit() {
+    if (this.quotaApisDisabled) {
+      this.logger.log(
+        'LOCAL_DISABLE_QUOTA_APIS 활성화 — 시작 시 YouTube 갱신 스킵',
+      );
+      return;
+    }
+
     // Redis에 캐시가 이미 있으면 API 호출 스킵 (서버 재시작 보호)
     try {
       const cached = await this.redis.get(CACHE_PREFIX + 'first');
@@ -126,6 +136,13 @@ export class StreamersService implements OnModuleInit {
   /** 매시 정각 갱신 */
   @Cron(CronExpression.EVERY_HOUR)
   async refresh() {
+    if (this.quotaApisDisabled) {
+      this.logger.log(
+        'LOCAL_DISABLE_QUOTA_APIS 활성화 — 스케줄 YouTube 갱신 스킵',
+      );
+      return;
+    }
+
     // 할당량 초과 플래그 확인
     try {
       const blocked = await this.redis.get(QUOTA_KEY);
@@ -190,6 +207,13 @@ export class StreamersService implements OnModuleInit {
       this.logger.warn('Redis get 실패', (err as Error).message);
     }
 
+    if (this.quotaApisDisabled) {
+      this.logger.log(
+        'LOCAL_DISABLE_QUOTA_APIS 활성화 — YouTube API 호출 없이 빈 결과 반환',
+      );
+      return { items: [], nextPageToken: null };
+    }
+
     // 2. 할당량 초과 상태면 빈 결과 반환
     try {
       const blocked = await this.redis.get(QUOTA_KEY);
@@ -236,6 +260,13 @@ export class StreamersService implements OnModuleInit {
       this.logger.debug(
         `popular 캐시 조회 실패(무시): ${toErrorMessage(error)}`,
       );
+    }
+
+    if (this.quotaApisDisabled) {
+      this.logger.log(
+        'LOCAL_DISABLE_QUOTA_APIS 활성화 — 인기 영상 API 호출 없이 빈 결과 반환',
+      );
+      return { items: [], nextOffset: null, hasMore: false, total: 0 };
     }
 
     try {
