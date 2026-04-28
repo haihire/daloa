@@ -21,15 +21,15 @@
 
 ## 관련 문서
 
-| 파일                                | 내용                              |
-| ----------------------------------- | --------------------------------- |
+| 파일                                     | 내용                              |
+| ---------------------------------------- | --------------------------------- |
 | [HARNESS.md](../docs/HARNESS.md)         | 테스트·문서 작성 규칙 전체        |
 | [record.md](../docs/record.md)           | 버그 수정·설계 변경 기록          |
 | [기획.md](../docs/기획.md)               | 기능 기획, UI 레이아웃, 미결 과제 |
 | [technicalRead/](../docs/technicalRead/) | 기술 학습 노트                    |
-| [server/logs/](../server/logs/)     | NestJS 런타임 로그                |
-| [client/logs/](../client/logs/)     | Next.js SSR 런타임 로그           |
-| [crawlers/logs/](../crawlers/logs/) | 크롤러 실행 로그                  |
+| [server/logs/](../server/logs/)          | NestJS 런타임 로그                |
+| [client/logs/](../client/logs/)          | Next.js SSR 런타임 로그           |
+| [crawlers/logs/](../crawlers/logs/)      | 크롤러 실행 로그                  |
 
 ---
 
