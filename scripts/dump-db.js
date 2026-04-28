@@ -1,8 +1,10 @@
 // 로컬 MySQL → SQL dump 파일 생성
-const mysql = require("mysql2/promise");
-const fs = require("fs");
-const path = require("path");
+import mysql from "mysql2/promise";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.join(__dirname, "dump.sql");
 
 async function dump() {

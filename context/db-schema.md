@@ -4,7 +4,7 @@
 **DB 엔진**: MariaDB 10.6  
 **Charset**: `utf8mb4`, `utf8mb4_general_ci`
 
-> 변경 시 `기획.md`와 이 파일을 동시에 업데이트한다.
+> 변경 시 `docs/기획.md`와 이 파일을 동시에 업데이트한다.
 
 ---
 
