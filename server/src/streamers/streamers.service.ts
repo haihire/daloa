@@ -15,7 +15,7 @@ const POPULAR_MAX_RESULTS = 50;
 const POPULAR_MAX_LIMIT = 50;
 const POPULAR_MAX_PAGES = 8;
 
-interface PopularResponse {
+export interface PopularResponse {
   items: YoutubeVideoItem[];
   nextOffset: number | null;
   hasMore: boolean;
@@ -179,6 +179,47 @@ export class StreamersService implements OnModuleInit {
       );
 
       // 할당량 초과 시 리셋 시각까지 플래그 설정
+      if (reason === 'quotaExceeded' || reason === 'dailyLimitExceeded') {
+        const ttl = secondsUntilQuotaReset();
+        await this.redis.set(QUOTA_KEY, '1', 'EX', ttl).catch(() => {});
+        this.logger.warn(
+          `YouTube 할당량 초과 — ${Math.ceil(ttl / 60)}분 후 자동 재개`,
+        );
+      }
+      return;
+    }
+
+    // popular 캐시도 함께 갱신 (캐시 미스 시 API 다중 호출 방지)
+    this.logger.log('YouTube 인기 영상 목록 갱신 시작');
+    try {
+      const allItems: YoutubeVideoItem[] = [];
+      let pageToken: string | undefined;
+      for (let page = 0; page < POPULAR_MAX_PAGES; page++) {
+        const result = await this.fetchFromYouTube(pageToken, 'date', true);
+        allItems.push(...result.items);
+        if (!result.nextPageToken) break;
+        pageToken = result.nextPageToken;
+      }
+      allItems.sort(
+        (a, b) =>
+          new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
+      );
+      await this.redis.set(
+        POPULAR_CACHE_KEY,
+        JSON.stringify({ items: allItems }),
+        'EX',
+        CACHE_TTL,
+      );
+      this.logger.log(`YouTube 인기 영상 ${allItems.length}건 캐시 저장`);
+    } catch (err: unknown) {
+      const apiErr = toYoutubeApiError(err);
+      const status = apiErr.response?.status;
+      const reason = apiErr.response?.data?.error?.errors?.[0]?.reason;
+      this.logger.error(
+        `YouTube 인기 갱신 실패 [HTTP ${status ?? 'unknown'}] reason: ${reason ?? 'unknown'}`,
+        apiErr.response?.data?.error?.message ?? toErrorMessage(err),
+      );
+
       if (reason === 'quotaExceeded' || reason === 'dailyLimitExceeded') {
         const ttl = secondsUntilQuotaReset();
         await this.redis.set(QUOTA_KEY, '1', 'EX', ttl).catch(() => {});

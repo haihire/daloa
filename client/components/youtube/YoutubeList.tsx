@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import type { YoutubeVideo } from "@/types";
 import { event as gaEvent } from "@/lib/gtag";
 
-const API = process.env.NEXT_PUBLIC_NEST_API_URL ?? "http://localhost:3001";
 const INITIAL_LIMIT = 8;
 const APPEND_LIMIT = 3;
 
@@ -41,17 +40,25 @@ function formatViewCount(n: number): string {
   return String(n);
 }
 
-export default function YoutubeList() {
-  const [items, setItems] = useState<YoutubeVideo[]>([]);
-  const [loading, setLoading] = useState(false);
+export default function YoutubeList({
+  initialItems = [],
+  initialHasMore = false,
+  initialNextOffset = null,
+}: {
+  initialItems?: YoutubeVideo[];
+  initialHasMore?: boolean;
+  initialNextOffset?: number | null;
+} = {}) {
+  const [items, setItems] = useState<YoutubeVideo[]>(initialItems);
+  const [loading, setLoading] = useState(initialItems.length === 0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [enteringCount, setEnteringCount] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
-  const [nextOffset, setNextOffset] = useState<number | null>(null);
-  const loadedOnce = useRef(false);
+  const [hasMore, setHasMore] = useState(initialHasMore);
+  const [nextOffset, setNextOffset] = useState<number | null>(initialNextOffset);
+  const loadedOnce = useRef(initialItems.length > 0);
   const topScrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
-  const itemsRef = useRef<YoutubeVideo[]>([]);
+  const itemsRef = useRef<YoutubeVideo[]>(initialItems);
   const syncingRef = useRef(false);
   const loadingMoreRef = useRef(false);
   const enteringTimerRef = useRef<number | null>(null);
@@ -85,7 +92,7 @@ export default function YoutubeList() {
   };
 
   const toEndpoint = (offset: number, limit: number) =>
-    `${API}/api/streamers/popular?offset=${offset}&limit=${limit}`;
+    `/api/streamers/popular?offset=${offset}&limit=${limit}`;
 
   const fetchChunk = async (offset: number, limit: number) => {
     const data: PopularChunkResponse = await fetch(
