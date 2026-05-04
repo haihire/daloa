@@ -19,6 +19,7 @@ daloa-key.pem
 이미지변화/
 
 # Python 크롤러
+crawlers/
 crawlers/__pycache__/
 crawlers/*.pyc
 crawlers/.venv/

@@ -1,13 +1,13 @@
 import StatBuildList from "@/components/characters/StatBuildList";
 import SiteList from "@/components/sites/SiteList";
 import YoutubeList from "@/components/youtube/YoutubeList";
-import type { Site, StatBuildTab } from "@/types";
+import type { Site, StatBuildTab, YoutubeVideo } from "@/types";
 
 // SSR: NestJS 서버에서 데이터를 직접 fetch (빌드 시 또는 요청마다)
 const API = process.env.NEST_API_URL ?? "http://localhost:3001";
 
 export default async function Home() {
-  const [sites, statBuilds] = await Promise.all([
+  const [sites, statBuilds, youtubeInitial] = await Promise.all([
     fetch(`${API}/api/sites`, { cache: "no-store" })
       .then<Site[]>((r) => r.json())
       .catch(() => [] as Site[]),
@@ -16,6 +16,11 @@ export default async function Home() {
     })
       .then<StatBuildTab[]>((r) => r.json())
       .catch(() => [] as StatBuildTab[]),
+    fetch(`${API}/api/streamers/popular?offset=0&limit=8`, {
+      next: { revalidate: 3600 },
+    })
+      .then<{ items: YoutubeVideo[]; hasMore: boolean; nextOffset: number | null }>((r) => r.json())
+      .catch(() => ({ items: [] as YoutubeVideo[], hasMore: false, nextOffset: null })),
   ]);
 
   return (
@@ -45,7 +50,11 @@ export default async function Home() {
             </section>
 
             {/* 하단 유튜브 인기 영상 */}
-            <YoutubeList />
+            <YoutubeList
+              initialItems={youtubeInitial.items}
+              initialHasMore={youtubeInitial.hasMore}
+              initialNextOffset={youtubeInitial.nextOffset}
+            />
 
             {/* 모바일에서는 특성 빌드 분포를 영상 아래로 배치 */}
             <div className="sm:hidden">
