@@ -11,17 +11,21 @@ import { KakaoService } from '../kakao/kakao.service';
 
 /**
  * 전역 예외 필터
- * - HTTP 500 이상(서버 에러)은 카카오 알림 전송
- * - 4xx 클라이언트 에러는 알림 없이 정상 응답
- * - 1분 내 동일 에러 반복 시 카카오 스팸 방지
+ * - 모든 에러(4xx, 5xx)에 대해 카카오 알림 전송
+ * - 5xx: 쿨다운 1분, 4xx: 쿨다운 5분 (스팸 방지)
+ * - 401/404는 빈번하므로 알림 제외
  */
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
 
-  // 마지막 알림 시각 (ms) - 1분 이내 중복 알림 방지
-  private lastNotifiedAt = 0;
-  private readonly NOTIFY_COOLDOWN_MS = 60_000;
+  // 상태코드별 마지막 알림 시각 (스팸 방지)
+  private readonly lastNotifiedAt = new Map<number, number>();
+  private readonly COOLDOWN_5XX_MS = 60_000;   // 5xx: 1분
+  private readonly COOLDOWN_4XX_MS = 300_000;  // 4xx: 5분
+
+  // 알림 제외 상태코드 (빈번하거나 의미 없는 에러)
+  private readonly SKIP_STATUSES = new Set([401, 404]);
 
   constructor(private readonly kakao: KakaoService) {}
 
@@ -35,25 +39,33 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
+    const errorName =
+      exception instanceof Error
+        ? exception.constructor.name
+        : 'UnknownError';
+
     const message =
       exception instanceof HttpException
         ? exception.message
         : String(exception);
 
     this.logger.error(
-      `[${request.method}] ${request.url} → ${status}: ${message}`,
+      `[${request.method}] ${request.url} → ${status} ${errorName}: ${message}`,
     );
 
-    // 서버 에러(5xx)만 카카오 알림 전송
-    if (status >= 500) {
+    // 알림 전송 (401, 404 제외)
+    if (!this.SKIP_STATUSES.has(status)) {
       const now = Date.now();
-      if (now - this.lastNotifiedAt > this.NOTIFY_COOLDOWN_MS) {
-        this.lastNotifiedAt = now;
+      const cooldown = status >= 500 ? this.COOLDOWN_5XX_MS : this.COOLDOWN_4XX_MS;
+      const lastAt = this.lastNotifiedAt.get(status) ?? 0;
+
+      if (now - lastAt > cooldown) {
+        this.lastNotifiedAt.set(status, now);
+        const emoji = status >= 500 ? '🚨' : '⚠️';
         this.kakao
           .send(
-            `🚨 [서버 에러 발생]\n` +
+            `${emoji} [${status} ${errorName}]\n` +
               `경로: ${request.method} ${request.url}\n` +
-              `상태: ${status}\n` +
               `메시지: ${message}`,
           )
           .catch((err: unknown) =>

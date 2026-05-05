@@ -10,6 +10,8 @@
  *   client/logs/error-YYYY-MM-DD.log — error / warn 전용
  */
 
+export const runtime = "nodejs";
+
 export async function register() {
   // Edge / 브라우저에서는 Node 전용 모듈이 없으므로 즉시 반환
   if (
