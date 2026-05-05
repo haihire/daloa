@@ -30,7 +30,7 @@ export async function register() {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const path = require("path") as typeof import("path");
 
-  const LOG_DIR = path.resolve(process.cwd(), "logs");
+  const LOG_DIR = path.resolve("logs");
   if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
 
   let currentDate = "";
