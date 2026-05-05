@@ -1,5 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Cron } from '@nestjs/schedule';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * 카카오톡 "나에게 보내기" 알림 서비스
@@ -142,14 +145,93 @@ export class KakaoService {
     this.accessToken = data.access_token;
     this.tokenExpiresAt = Date.now() + data.expires_in * 1000;
 
-    // 리프레시 토큰 자체가 갱신된 경우 로그 (수동으로 .env 업데이트 필요)
     if (data.refresh_token) {
-      this.logger.warn(
-        `⚠️  리프레시 토큰이 갱신되었습니다. .env의 KAKAO_REFRESH_TOKEN을 아래 값으로 교체하세요:\n${data.refresh_token}`,
-      );
+      await this.updateRefreshToken(data.refresh_token);
     }
 
     return this.accessToken;
+  }
+
+  /**
+   * 매일 오전 9시 — 리프레시 토큰 만료 D-7 이내일 때 강제 갱신 시도 및 알림
+   * KAKAO_REFRESH_TOKEN_ISSUED_AT 환경변수 기준으로 만료일 계산 (YYYY-MM-DD)
+   */
+  @Cron('0 0 9 * * *')
+  async checkRefreshTokenExpiry(): Promise<void> {
+    const issuedAtStr =
+      process.env['KAKAO_REFRESH_TOKEN_ISSUED_AT'] ??
+      this.config.get<string>('KAKAO_REFRESH_TOKEN_ISSUED_AT');
+    if (!issuedAtStr) return;
+
+    const expiresAt = new Date(
+      new Date(issuedAtStr).getTime() + 60 * 24 * 60 * 60 * 1000,
+    );
+    const daysLeft = Math.ceil(
+      (expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000),
+    );
+
+    if (daysLeft > 7) return;
+
+    // D-7 이내 → 강제 갱신 시도 (Kakao는 만료 30일 전부터 새 토큰 반환)
+    const prevToken = process.env['KAKAO_REFRESH_TOKEN'];
+    this.accessToken = null; // 캐시 무효화로 Kakao API 강제 호출
+    await this.getAccessToken();
+
+    // updateRefreshToken 내에서 이미 알림 발송됨
+    if (process.env['KAKAO_REFRESH_TOKEN'] !== prevToken) return;
+
+    // 갱신 실패 → 수동 안내
+    const expiresStr = expiresAt.toLocaleDateString('ko-KR');
+    await this.sendToMe(
+      `⚠️ 카카오 리프레시 토큰 만료 임박 (D-${daysLeft})\n만료일: ${expiresStr}\n자동 갱신 실패 — EC2 .env의 KAKAO_REFRESH_TOKEN 수동 업데이트 필요`,
+    );
+  }
+
+  /**
+   * 새 리프레시 토큰을 process.env 및 /app/.env 파일에 저장 후 카톡 알림
+   */
+  private async updateRefreshToken(newToken: string): Promise<void> {
+    const envPath = path.join(process.cwd(), '.env');
+    const issuedAt = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+    // 메모리 즉시 반영
+    process.env['KAKAO_REFRESH_TOKEN'] = newToken;
+    process.env['KAKAO_REFRESH_TOKEN_ISSUED_AT'] = issuedAt;
+
+    // .env 파일 업데이트 (재시작 후에도 유지)
+    try {
+      let content = fs.readFileSync(envPath, 'utf-8');
+
+      content = content.includes('KAKAO_REFRESH_TOKEN=')
+        ? content.replace(
+            /^KAKAO_REFRESH_TOKEN=.*/m,
+            `KAKAO_REFRESH_TOKEN=${newToken}`,
+          )
+        : content + `\nKAKAO_REFRESH_TOKEN=${newToken}`;
+
+      content = content.includes('KAKAO_REFRESH_TOKEN_ISSUED_AT=')
+        ? content.replace(
+            /^KAKAO_REFRESH_TOKEN_ISSUED_AT=.*/m,
+            `KAKAO_REFRESH_TOKEN_ISSUED_AT=${issuedAt}`,
+          )
+        : content + `\nKAKAO_REFRESH_TOKEN_ISSUED_AT=${issuedAt}`;
+
+      fs.writeFileSync(envPath, content, 'utf-8');
+      this.logger.log(`리프레시 토큰 자동 갱신 → .env 저장 완료 (${envPath})`);
+    } catch (e) {
+      this.logger.error(`리프레시 토큰 .env 쓰기 실패: ${e}`);
+    }
+
+    // 카카오톡 알림 (getAccessToken → sendToMe 경로이므로 accessToken은 이미 유효)
+    const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+    const expiresStr = expiresAt.toLocaleDateString('ko-KR');
+    try {
+      await this.sendToMe(
+        `✅ 카카오 리프레시 토큰 자동 갱신 완료\n새 만료일: ${expiresStr}\n.env 파일 자동 업데이트됨`,
+      );
+    } catch (e) {
+      this.logger.error(`갱신 알림 발송 실패: ${e}`);
+    }
   }
 }
 

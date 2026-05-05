@@ -47,9 +47,9 @@
    git checkout main ; git pull origin main ; git branch -d feature/기능명
    ```
    에이전트는 파일 수정이 필요한 요청에서 먼저 브랜치 유형(feature/fix/hotfix/refactor/chore)을 추천하고, 사용자 확인을 받은 뒤 수정을 진행한다.
-  에이전트는 작업 완료 보고 시 항상 PR 작성용 `제목(title)` 1개와 `설명(description)` 초안을 함께 제시한다.
-  PR 설명은 `목적`, `변경점`, `영향범위`를 반드시 포함하며, 전체 순서는 `제목 → 목적 → 변경점 → 영향범위`를 따른다.
-  영향범위는 영역(client/server/crawlers/infra), API 계약, DB/데이터, 캐시/비동기, 배포/운영, 테스트/검증까지 구체적으로 작성한다.
+   에이전트는 작업 완료 보고 시 PR 설명 초안을 항상 `목적`, `변경점`, `영향범위` 3개 섹션으로만 제시한다.
+   영향범위에는 반드시 `수정 파일 목록`과 `영향받는 영역`만 포함한다.
+   복붙 편의를 위해 `목적/변경점/영향범위`는 하나의 Markdown 코드블록으로 묶어 제시한다.
 1. `powershell -File scripts/dev.ps1` — 포트 정리 후 서버·클라이언트 재시작, 로그 기록
 2. `server/logs/`, `client/logs/` 에서 먼저 오늘치 `app-*.log`를 확인하고, 필요 시 `error-*.log`까지 함께 확인 → 원인 수정
 3. `powershell -File scripts/test.ps1` — 전체 테스트 실행
@@ -82,6 +82,15 @@
 - **클라이언트**: `client/.env.local` — `NEXT_PUBLIC_API_URL=http://localhost:3001` (개발)
 - **절대 금지**: 민감한 정보를 코드·로그·git에 노출하지 말 것
 - **배포**: EC2에서는 `.env`를 수동 설정하거나 GitHub Secrets 사용
+
+### 카카오 리프레시 토큰 관리
+
+- `KAKAO_REFRESH_TOKEN`: 유효기간 60일. **서버가 자동 갱신**하며 EC2 `.env` 파일에 직접 저장
+- `KAKAO_REFRESH_TOKEN_ISSUED_AT`: 토큰 발급일 (`YYYY-MM-DD`). 서버가 D-7 만료 체크에 사용, 갱신 시 자동 업데이트
+- **최초 설정 시**: EC2 `.env`에 두 항목 모두 수동 추가 필요
+- **자동 갱신 흐름**: Kakao 응답에 새 토큰 포함 시 → `process.env` + `/app/.env` 즉시 저장 → 카톡 알림
+- **D-7 크론**: 매일 오전 9시 만료 잔여일 체크 → 자동 갱신 실패 시 수동 안내 카톡 알림
+- **`.env` 볼륨 마운트** (`docker-compose.yml`): 컨테이너 재시작 후에도 갱신된 토큰 유지
 
 ---
 

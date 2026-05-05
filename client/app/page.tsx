@@ -69,9 +69,7 @@ export default async function Home() {
 
       <footer className="border-t border-slate-200/80 bg-slate-50/80 px-4 py-4 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-col gap-1 text-center text-xs text-slate-500 sm:text-sm">
-          <p className="text-[11px] text-slate-400 sm:text-xs">
-            Lost Ark and related assets belong to Smilegate RPG.
-          </p>
+          <p>© 2026 다로아</p>
         </div>
       </footer>
     </div>
