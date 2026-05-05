@@ -30,6 +30,14 @@ LOSTARK_API_KEY=...
 
 # YouTube Data API v3
 YOUTUBE_API_KEY=...
+YOUTUBE_API_KEY_2=...   # 추가 키 (선택, _3/_4 형식으로 계속 추가 가능)
+
+# YouTube 전용 Redis (로컈 개발: EC2 운영 Redis SSH 터널 연결)
+# YOUTUBE_REDIS_HOST=127.0.0.1
+# YOUTUBE_REDIS_PORT=6380
+# YOUTUBE_REDIS_PASSWORD=...
+# YOUTUBE_REDIS_DB=0
+# YOUTUBE_REDIS_READONLY=true  # 로컈에서 갱신 안 함
 
 # Redis
 REDIS_HOST=127.0.0.1
@@ -97,10 +105,13 @@ server/src/
 3. 각 캐릭터 armory 조회 → stat 파싱 → `loa_users` upsert
 4. `loa_class` 테이블과 JOIN으로 `class_engraving` 연결
 
-### 스트리머 갱신 (`streamers.service.ts`)
+### 스트리머 영상 캐시 (`streamers.service.ts`)
 
-- 서버 시작 시 즉시 조회, 이후 5분마다 YouTube API 재조회
-- 결과는 Redis에 5분 TTL로 캐시
+- 서버 시작 시 1회 + 이후 **3시간마다** Cron 갱신 (`0 */3 * * *`)
+- Redis TTL **4시간** (만료 공백 없음)
+- `YOUTUBE_API_KEY_N` 형식으로 멀티 키 지원 (할당량 초과 시 다음 키로 자동 주기)
+- 캐시 미스 시 Redis 분산 락으로 Thundering Herd 방지
+- `YOUTUBE_REDIS_HOST` 설정 시 별도 Redis 인스턴스 사용 (로컈 개발용)
 
 ### 사이트 점검 (`sites.service.ts`)
 

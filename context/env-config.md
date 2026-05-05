@@ -19,9 +19,15 @@
 | `REDIS_PORT`               | `6379`                  | -        | Redis 포트                                  |
 | `REDIS_PASSWORD`           | (없음)                  | -        | Redis 비밀번호 (없으면 미설정)              |
 | `REDIS_DB`                 | `0`                     | -        | Redis DB 번호                               |
+| `YOUTUBE_REDIS_HOST`       | (없음)                  | -        | YouTube 캐시 전용 Redis 호스트              |
+| `YOUTUBE_REDIS_PORT`       | `6379`                  | -        | YouTube 캐시 전용 Redis 포트                |
+| `YOUTUBE_REDIS_PASSWORD`   | (없음)                  | -        | YouTube 캐시 전용 Redis 비밀번호            |
+| `YOUTUBE_REDIS_DB`         | `0`                     | -        | YouTube 캐시 전용 Redis DB 번호             |
+| `YOUTUBE_REDIS_READONLY`   | `false`                 | -        | YouTube 전용 Redis를 읽기 전용으로 사용     |
 | `LOCAL_DISABLE_QUOTA_APIS` | `false`                 | -        | 로컬 개발에서 YouTube/Gemini 외부 호출 차단 |
 | `LOSTARK_API_KEY`          | -                       | **필수** | LostArk Open API 키                         |
-| `YOUTUBE_API_KEY`          | -                       | **필수** | YouTube Data API v3 키                      |
+| `YOUTUBE_API_KEY`          | -                       | **필수** | YouTube Data API v3 키 (첫 번째 키)         |
+| `YOUTUBE_API_KEY_2`        | -                       | -        | YouTube API 추가 키 (`_3`, `_4` ... 형식으로 계속 추가 가능) |
 | `GEMINI_API_KEY`           | -                       | **필수** | Google Gemini API 키                        |
 | `KAKAO_REST_API_KEY`       | -                       | **필수** | 카카오 REST API 키                          |
 | `KAKAO_REFRESH_TOKEN`      | -                       | **필수** | 카카오 OAuth 리프레시 토큰                  |
@@ -52,6 +58,13 @@ DB_PASS=1234
 
 # Redis (로컬은 패스워드 없음)
 REDIS_HOST=127.0.0.1
+
+# 로컬에서 유튜브만 운영 Redis 읽기
+YOUTUBE_REDIS_HOST=ec2-redis-host
+YOUTUBE_REDIS_PORT=6379
+YOUTUBE_REDIS_PASSWORD=your-redis-password
+YOUTUBE_REDIS_DB=0
+YOUTUBE_REDIS_READONLY=true
 
 # 로컬 개발 중 YouTube/Gemini 할당량 보호
 LOCAL_DISABLE_QUOTA_APIS=true
