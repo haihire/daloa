@@ -10,6 +10,8 @@
  *   client/logs/error-YYYY-MM-DD.log — error / warn 전용
  */
 
+export const runtime = "nodejs";
+
 export async function register() {
   // Edge / 브라우저에서는 Node 전용 모듈이 없으므로 즉시 반환
   if (
@@ -28,7 +30,7 @@ export async function register() {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const path = require("path") as typeof import("path");
 
-  const LOG_DIR = path.resolve(process.cwd(), "logs");
+  const LOG_DIR = path.resolve("logs");
   if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
 
   let currentDate = "";
