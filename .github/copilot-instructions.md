@@ -47,8 +47,9 @@
    git checkout main ; git pull origin main ; git branch -d feature/기능명
    ```
    에이전트는 파일 수정이 필요한 요청에서 먼저 브랜치 유형(feature/fix/hotfix/refactor/chore)을 추천하고, 사용자 확인을 받은 뒤 수정을 진행한다.
-   에이전트는 작업 완료 보고 시 항상 PR 작성용 `제목(title)` 1개와 `설명(description)` 초안을 함께 제시한다.
-   PR 제목 형식은 `type(scope): summary`를 기본으로 하며, 설명은 `.github/pull_request_template.md` 섹션 순서를 따른다.
+  에이전트는 작업 완료 보고 시 항상 PR 작성용 `제목(title)` 1개와 `설명(description)` 초안을 함께 제시한다.
+  PR 설명은 `목적`, `변경점`, `영향범위`를 반드시 포함하며, 전체 순서는 `제목 → 목적 → 변경점 → 영향범위`를 따른다.
+  영향범위는 영역(client/server/crawlers/infra), API 계약, DB/데이터, 캐시/비동기, 배포/운영, 테스트/검증까지 구체적으로 작성한다.
 1. `powershell -File scripts/dev.ps1` — 포트 정리 후 서버·클라이언트 재시작, 로그 기록
 2. `server/logs/`, `client/logs/` 에서 먼저 오늘치 `app-*.log`를 확인하고, 필요 시 `error-*.log`까지 함께 확인 → 원인 수정
 3. `powershell -File scripts/test.ps1` — 전체 테스트 실행

@@ -322,7 +322,7 @@ export class StreamersService implements OnModuleInit {
     // 3. 분산 락 — 동시 요청 중 첫 번째만 API 호출 (Thundering Herd 방지)
     const lockKey = `${LOCK_VIDEOS_KEY}:${pageToken ?? 'first'}`;
     const lock = await this.youtubeRedis
-      .set(lockKey, '1', 'NX', 'EX', LOCK_TTL)
+      .set(lockKey, '1', 'EX', LOCK_TTL, 'NX')
       .catch(() => null);
     if (!lock) {
       this.logger.debug('YouTube videos 락 대기 중 — 빈 결과 반환');
@@ -402,7 +402,7 @@ export class StreamersService implements OnModuleInit {
 
     // 분산 락 — 동시 요청 중 첫 번째만 API 호출 (Thundering Herd 방지)
     const popularLock = await this.youtubeRedis
-      .set(LOCK_POPULAR_KEY, '1', 'NX', 'EX', LOCK_TTL)
+      .set(LOCK_POPULAR_KEY, '1', 'EX', LOCK_TTL, 'NX')
       .catch(() => null);
     if (!popularLock) {
       this.logger.debug('YouTube popular 락 대기 중 — 빈 결과 반환');
