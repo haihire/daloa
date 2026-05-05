@@ -51,7 +51,9 @@ git branch -d feature/기능명
 - 추천 형식: `추천 브랜치: feature/...` + 이유 1줄.
 - 사용자 확인(승인) 후에만 실제 파일 수정/커밋 절차를 진행한다.
 - 작업 완료 보고 시 에이전트는 항상 PR 작성용 `제목(title)`과 `설명(description)` 초안을 함께 제시한다.
-- PR 제목은 `type(scope): summary` 형식을 사용하고, PR 설명은 `.github/pull_request_template.md` 템플릿 순서를 따른다.
+- PR 제목은 `type(scope): summary` 형식을 사용한다.
+- PR 설명은 `목적`, `변경점`, `영향범위`를 반드시 포함하고, `제목 → 목적 → 변경점 → 영향범위` 순서를 따른다.
+- 영향범위는 영역(client/server/crawlers/infra), API 계약, DB/데이터, 캐시/비동기, 배포/운영, 테스트/검증까지 구체적으로 작성한다.
 - 기준:
   - `feature/` — 새 사이트 추가, 새 기능(UI/API)
   - `fix/` — 버그, 한글 깨짐, 로직 오류

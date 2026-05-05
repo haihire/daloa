@@ -1,15 +1,18 @@
 import { Injectable, Inject, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { google } from 'googleapis';
-import type { Redis } from 'ioredis';
+import Redis, { type Redis as RedisClient } from 'ioredis';
 import { isLocalQuotaApisDisabled } from '../common/local-dev-flags';
 import { REDIS_CLIENT } from '../redis/redis.module';
 
 const CACHE_PREFIX = 'youtube:videos:page:';
 const POPULAR_CACHE_KEY = 'youtube:popular:first';
-const CACHE_TTL = 60 * 60; // 1시간
+const CACHE_TTL = 4 * 60 * 60; // 4시간 (Cron 3시간 갱신 + 여유)
 const QUOTA_KEY = 'youtube:quota_exceeded';
+const LOCK_VIDEOS_KEY = 'youtube:lock:videos';
+const LOCK_POPULAR_KEY = 'youtube:lock:popular';
+const LOCK_TTL = 60; // 락 최대 60초 유지
 const MAX_RESULTS = 20;
 const POPULAR_MAX_RESULTS = 50;
 const POPULAR_MAX_LIMIT = 50;
@@ -87,11 +90,18 @@ function formatDuration(iso: string): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+function isTruthy(value?: string): boolean {
+  if (!value) return false;
+  return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
+}
+
 @Injectable()
 export class StreamersService implements OnModuleInit {
   private readonly logger = new Logger(StreamersService.name);
   private readonly youtubeKeys: ReturnType<typeof google.youtube>[];
   private readonly quotaApisDisabled: boolean;
+  private readonly youtubeRedis: RedisClient;
+  private readonly youtubeRedisReadOnly: boolean;
   private currentKeyIdx = 0;
 
   private get youtube() {
@@ -99,20 +109,50 @@ export class StreamersService implements OnModuleInit {
   }
 
   constructor(
-    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    @Inject(REDIS_CLIENT) private readonly redis: RedisClient,
     private readonly config: ConfigService,
   ) {
-    const keys = [
-      config.get<string>('YOUTUBE_API_KEY', ''),
-      config.get<string>('YOUTUBE_API_KEY_2', ''),
-    ].filter((k) => !!k);
+    const keys: string[] = [];
+    const first = config.get<string>('YOUTUBE_API_KEY', '');
+    if (first) keys.push(first);
+    for (let i = 2; ; i++) {
+      const k = config.get<string>(`YOUTUBE_API_KEY_${i}`, '');
+      if (!k) break;
+      keys.push(k);
+    }
     this.youtubeKeys = keys.map((k) =>
       google.youtube({ version: 'v3', auth: k }),
     );
     this.quotaApisDisabled = isLocalQuotaApisDisabled(config);
+    this.youtubeRedisReadOnly = isTruthy(
+      config.get<string>('YOUTUBE_REDIS_READONLY'),
+    );
+
+    const youtubeRedisHost = config.get<string>('YOUTUBE_REDIS_HOST');
+    if (youtubeRedisHost) {
+      this.youtubeRedis = new Redis({
+        host: youtubeRedisHost,
+        port: config.get<number>('YOUTUBE_REDIS_PORT', 6379),
+        password: config.get<string>('YOUTUBE_REDIS_PASSWORD') || undefined,
+        db: config.get<number>('YOUTUBE_REDIS_DB', 0),
+        lazyConnect: true,
+      });
+      this.logger.log(
+        `YouTube 전용 Redis 사용 — ${youtubeRedisHost}:${config.get<number>('YOUTUBE_REDIS_PORT', 6379)}`,
+      );
+    } else {
+      this.youtubeRedis = this.redis;
+    }
   }
 
   async onModuleInit() {
+    if (this.youtubeRedisReadOnly) {
+      this.logger.log(
+        'YOUTUBE_REDIS_READONLY 활성화 — 시작 시 YouTube 갱신 스킵',
+      );
+      return;
+    }
+
     if (this.quotaApisDisabled) {
       this.logger.log(
         'LOCAL_DISABLE_QUOTA_APIS 활성화 — 시작 시 YouTube 갱신 스킵',
@@ -133,9 +173,16 @@ export class StreamersService implements OnModuleInit {
     await this.refresh();
   }
 
-  /** 매시 정각 갱신 */
-  @Cron(CronExpression.EVERY_HOUR)
+  /** 3시간마다 갱신 */
+  @Cron('0 */3 * * *')
   async refresh() {
+    if (this.youtubeRedisReadOnly) {
+      this.logger.log(
+        'YOUTUBE_REDIS_READONLY 활성화 — 스케줄 YouTube 갱신 스킵',
+      );
+      return;
+    }
+
     if (this.quotaApisDisabled) {
       this.logger.log(
         'LOCAL_DISABLE_QUOTA_APIS 활성화 — 스케줄 YouTube 갱신 스킵',
@@ -145,9 +192,9 @@ export class StreamersService implements OnModuleInit {
 
     // 할당량 초과 플래그 확인
     try {
-      const blocked = await this.redis.get(QUOTA_KEY);
+      const blocked = await this.youtubeRedis.get(QUOTA_KEY);
       if (blocked) {
-        const ttl = await this.redis.ttl(QUOTA_KEY);
+        const ttl = await this.youtubeRedis.ttl(QUOTA_KEY);
         this.logger.warn(
           `YouTube 할당량 초과 상태 — ${Math.ceil(ttl / 60)}분 후 리셋`,
         );
@@ -162,7 +209,7 @@ export class StreamersService implements OnModuleInit {
     this.logger.log('YouTube 영상 목록 갱신 시작');
     try {
       const result = await this.fetchFromYouTube();
-      await this.redis.set(
+      await this.youtubeRedis.set(
         CACHE_PREFIX + 'first',
         JSON.stringify(result),
         'EX',
@@ -181,7 +228,7 @@ export class StreamersService implements OnModuleInit {
       // 할당량 초과 시 리셋 시각까지 플래그 설정
       if (reason === 'quotaExceeded' || reason === 'dailyLimitExceeded') {
         const ttl = secondsUntilQuotaReset();
-        await this.redis.set(QUOTA_KEY, '1', 'EX', ttl).catch(() => {});
+        await this.youtubeRedis.set(QUOTA_KEY, '1', 'EX', ttl).catch(() => {});
         this.logger.warn(
           `YouTube 할당량 초과 — ${Math.ceil(ttl / 60)}분 후 자동 재개`,
         );
@@ -204,7 +251,7 @@ export class StreamersService implements OnModuleInit {
         (a, b) =>
           new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
       );
-      await this.redis.set(
+      await this.youtubeRedis.set(
         POPULAR_CACHE_KEY,
         JSON.stringify({ items: allItems }),
         'EX',
@@ -222,7 +269,7 @@ export class StreamersService implements OnModuleInit {
 
       if (reason === 'quotaExceeded' || reason === 'dailyLimitExceeded') {
         const ttl = secondsUntilQuotaReset();
-        await this.redis.set(QUOTA_KEY, '1', 'EX', ttl).catch(() => {});
+        await this.youtubeRedis.set(QUOTA_KEY, '1', 'EX', ttl).catch(() => {});
         this.logger.warn(
           `YouTube 할당량 초과 — ${Math.ceil(ttl / 60)}분 후 자동 재개`,
         );
@@ -238,14 +285,21 @@ export class StreamersService implements OnModuleInit {
 
     // 1. Redis 캐시 확인
     try {
-      const cached = await this.redis.get(cacheKey);
+      const cached = await this.youtubeRedis.get(cacheKey);
       if (cached)
         return JSON.parse(cached) as {
           items: YoutubeVideoItem[];
           nextPageToken: string | null;
         };
     } catch (err) {
-      this.logger.warn('Redis get 실패', (err as Error).message);
+      this.logger.warn('YouTube Redis get 실패', (err as Error).message);
+    }
+
+    if (this.youtubeRedisReadOnly) {
+      this.logger.log(
+        'YOUTUBE_REDIS_READONLY 활성화 — YouTube 캐시 미스 시 빈 결과 반환',
+      );
+      return { items: [], nextPageToken: null };
     }
 
     if (this.quotaApisDisabled) {
@@ -257,7 +311,7 @@ export class StreamersService implements OnModuleInit {
 
     // 2. 할당량 초과 상태면 빈 결과 반환
     try {
-      const blocked = await this.redis.get(QUOTA_KEY);
+      const blocked = await this.youtubeRedis.get(QUOTA_KEY);
       if (blocked) return { items: [], nextPageToken: null };
     } catch (error: unknown) {
       this.logger.debug(
@@ -265,19 +319,37 @@ export class StreamersService implements OnModuleInit {
       );
     }
 
-    // 3. YouTube API 호출
+    // 3. 분산 락 — 동시 요청 중 첫 번째만 API 호출 (Thundering Herd 방지)
+    const lockKey = `${LOCK_VIDEOS_KEY}:${pageToken ?? 'first'}`;
+    const lock = await this.youtubeRedis
+      .set(lockKey, '1', 'EX', LOCK_TTL, 'NX')
+      .catch(() => null);
+    if (!lock) {
+      this.logger.debug('YouTube videos 락 대기 중 — 빈 결과 반환');
+      return { items: [], nextPageToken: null };
+    }
+
+    // 4. YouTube API 호출
     let result: { items: YoutubeVideoItem[]; nextPageToken: string | null };
     try {
       result = await this.fetchFromYouTube(pageToken);
     } catch (err: unknown) {
       this.logger.error(`getStreamers 실패: ${toErrorMessage(err)}`);
+      await this.youtubeRedis.del(lockKey).catch(() => {});
       return { items: [], nextPageToken: null };
     }
 
     try {
-      await this.redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL);
+      await this.youtubeRedis.set(
+        cacheKey,
+        JSON.stringify(result),
+        'EX',
+        CACHE_TTL,
+      );
     } catch (err) {
-      this.logger.warn('Redis set 실패', (err as Error).message);
+      this.logger.warn('YouTube Redis set 실패', (err as Error).message);
+    } finally {
+      await this.youtubeRedis.del(lockKey).catch(() => {});
     }
 
     return result;
@@ -292,7 +364,7 @@ export class StreamersService implements OnModuleInit {
     const safeLimit = Math.min(Math.max(0, limit), POPULAR_MAX_LIMIT);
 
     try {
-      const cached = await this.redis.get(POPULAR_CACHE_KEY);
+      const cached = await this.youtubeRedis.get(POPULAR_CACHE_KEY);
       if (cached) {
         const parsed = JSON.parse(cached) as { items: YoutubeVideoItem[] };
         return this.slicePopular(parsed.items, safeOffset, safeLimit);
@@ -303,6 +375,13 @@ export class StreamersService implements OnModuleInit {
       );
     }
 
+    if (this.youtubeRedisReadOnly) {
+      this.logger.log(
+        'YOUTUBE_REDIS_READONLY 활성화 — 인기 영상 캐시 미스 시 빈 결과 반환',
+      );
+      return { items: [], nextOffset: null, hasMore: false, total: 0 };
+    }
+
     if (this.quotaApisDisabled) {
       this.logger.log(
         'LOCAL_DISABLE_QUOTA_APIS 활성화 — 인기 영상 API 호출 없이 빈 결과 반환',
@@ -311,7 +390,7 @@ export class StreamersService implements OnModuleInit {
     }
 
     try {
-      const blocked = await this.redis.get(QUOTA_KEY);
+      const blocked = await this.youtubeRedis.get(QUOTA_KEY);
       if (blocked) {
         return { items: [], nextOffset: null, hasMore: false, total: 0 };
       }
@@ -319,6 +398,15 @@ export class StreamersService implements OnModuleInit {
       this.logger.debug(
         `할당량 플래그 조회 실패(무시): ${toErrorMessage(error)}`,
       );
+    }
+
+    // 분산 락 — 동시 요청 중 첫 번째만 API 호출 (Thundering Herd 방지)
+    const popularLock = await this.youtubeRedis
+      .set(LOCK_POPULAR_KEY, '1', 'EX', LOCK_TTL, 'NX')
+      .catch(() => null);
+    if (!popularLock) {
+      this.logger.debug('YouTube popular 락 대기 중 — 빈 결과 반환');
+      return { items: [], nextOffset: null, hasMore: false, total: 0 };
     }
 
     let popular: { items: YoutubeVideoItem[] };
@@ -338,11 +426,12 @@ export class StreamersService implements OnModuleInit {
       popular = { items: allItems };
     } catch (err: unknown) {
       this.logger.error(`searchPopularVideos 실패: ${toErrorMessage(err)}`);
+      await this.youtubeRedis.del(LOCK_POPULAR_KEY).catch(() => {});
       return { items: [], nextOffset: null, hasMore: false, total: 0 };
     }
 
     try {
-      await this.redis.set(
+      await this.youtubeRedis.set(
         POPULAR_CACHE_KEY,
         JSON.stringify(popular),
         'EX',
@@ -352,6 +441,8 @@ export class StreamersService implements OnModuleInit {
       this.logger.debug(
         `popular 캐시 저장 실패(무시): ${toErrorMessage(error)}`,
       );
+    } finally {
+      await this.youtubeRedis.del(LOCK_POPULAR_KEY).catch(() => {});
     }
 
     return this.slicePopular(popular.items, safeOffset, safeLimit);

@@ -41,7 +41,19 @@ Write-Host "[1/4] 오래된 로그 정리 중..."
 & "$Root\scripts\cleanup-logs.ps1" -Days 30 | Out-Null
 Write-Host "[1/4] 완료`n"
 
-# 2) 기존 포트 정리
+# 2) SSH 터널 (EC2 Redis → 로컬 6380)
+$pemPath = Join-Path $Root "daloa-key.pem"
+$tunnelRunning = netstat -ano | Select-String ":6380\s" | Where-Object { $_ -match 'LISTENING' }
+if (-not $tunnelRunning) {
+    Write-Host "[dev] SSH 터널 시작 (EC2 Redis → localhost:6380)..."
+    Start-Process ssh -ArgumentList "-i `"$pemPath`" -N -L 6380:172.18.0.2:6379 -o StrictHostKeyChecking=no ubuntu@3.39.239.9" -WindowStyle Hidden
+    Start-Sleep -Seconds 2
+    Write-Host "[dev] SSH 터널 시작 완료`n"
+} else {
+    Write-Host "[dev] SSH 터널 이미 실행 중 (localhost:6380)`n"
+}
+
+# 3) 기존 포트 정리
 Write-Host "[2/4] 기존 포트 정리 중..."
 Kill-Port $ServerPort
 Kill-Port $ClientPort
