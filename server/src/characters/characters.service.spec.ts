@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CharactersService, classifyStatBuild } from './characters.service';
 import { DB_POOL } from '../db/db.module';
+import { REDIS_CLIENT } from '../redis/redis.module';
 
 // ────────────────────────────────────────────────────────────────────────────
 // 순수 함수 classifyStatBuild 단위 테스트
@@ -49,12 +50,18 @@ describe('classifyStatBuild', () => {
 describe('CharactersService', () => {
   let service: CharactersService;
   let mockPool: { execute: jest.Mock };
+  let mockRedis: { get: jest.Mock; set: jest.Mock };
 
   beforeEach(async () => {
     mockPool = { execute: jest.fn() };
+    mockRedis = { get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue('OK') };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [CharactersService, { provide: DB_POOL, useValue: mockPool }],
+      providers: [
+        CharactersService,
+        { provide: DB_POOL, useValue: mockPool },
+        { provide: REDIS_CLIENT, useValue: mockRedis },
+      ],
     }).compile();
 
     service = module.get<CharactersService>(CharactersService);
