@@ -1,14 +1,18 @@
+import { Suspense } from "react";
 import StatBuildList from "@/components/characters/StatBuildList";
 import SiteList from "@/components/sites/SiteList";
-import YoutubeList from "@/components/youtube/YoutubeList";
-import type { Site, StatBuildTab, YoutubeVideo } from "@/types";
+import YoutubeSection from "@/components/youtube/YoutubeSection";
+import type { Site, StatBuildTab } from "@/types";
 
-// SSR: NestJS 서버에서 데이터를 직접 fetch (빌드 시 또는 요청마다)
+// Vercel 함수 리전: 서울(icn1) 고정 — API(EC2 한국)와 왕복 지연 최소화
+export const preferredRegion = "icn1";
+
+// ISR: NestJS 서버에서 데이터를 fetch (revalidate 주기마다 백그라운드 갱신)
 const API = process.env.NEST_API_URL ?? "http://localhost:3001";
 
 export default async function Home() {
-  const [sites, statBuilds, youtubeInitial] = await Promise.all([
-    fetch(`${API}/api/sites`, { cache: "no-store" })
+  const [sites, statBuilds] = await Promise.all([
+    fetch(`${API}/api/sites`, { next: { revalidate: 300 } })
       .then<Site[]>((r) => r.json())
       .catch(() => [] as Site[]),
     fetch(`${API}/api/characters/stat-builds`, {
@@ -16,11 +20,6 @@ export default async function Home() {
     })
       .then<StatBuildTab[]>((r) => r.json())
       .catch(() => [] as StatBuildTab[]),
-    fetch(`${API}/api/streamers/popular?offset=0&limit=8`, {
-      next: { revalidate: 3600 },
-    })
-      .then<{ items: YoutubeVideo[]; hasMore: boolean; nextOffset: number | null }>((r) => r.json())
-      .catch(() => ({ items: [] as YoutubeVideo[], hasMore: false, nextOffset: null })),
   ]);
 
   return (
@@ -49,12 +48,24 @@ export default async function Home() {
               </div>
             </section>
 
-            {/* 하단 유튜브 인기 영상 */}
-            <YoutubeList
-              initialItems={youtubeInitial.items}
-              initialHasMore={youtubeInitial.hasMore}
-              initialNextOffset={youtubeInitial.nextOffset}
-            />
+            {/* 하단 유튜브 인기 영상 — 별도 스트림으로 분리, 먼저 스켈레톤 노출 */}
+            <Suspense
+              fallback={
+                <div className="animate-pulse space-y-2 pt-2">
+                  <div className="h-5 w-36 rounded bg-slate-200" />
+                  <div className="flex gap-3 overflow-hidden">
+                    {[0, 1, 2].map((i) => (
+                      <div
+                        key={i}
+                        className="h-[190px] w-[270px] shrink-0 rounded-lg bg-slate-200"
+                      />
+                    ))}
+                  </div>
+                </div>
+              }
+            >
+              <YoutubeSection />
+            </Suspense>
 
             {/* 모바일에서는 특성 빌드 분포를 영상 아래로 배치 */}
             <div className="sm:hidden">

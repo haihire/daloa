@@ -51,10 +51,13 @@ export default function YoutubeList({
 } = {}) {
   const [items, setItems] = useState<YoutubeVideo[]>(initialItems);
   const [loading, setLoading] = useState(initialItems.length === 0);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [enteringCount, setEnteringCount] = useState(0);
   const [hasMore, setHasMore] = useState(initialHasMore);
-  const [nextOffset, setNextOffset] = useState<number | null>(initialNextOffset);
+  const [nextOffset, setNextOffset] = useState<number | null>(
+    initialNextOffset,
+  );
   const loadedOnce = useRef(initialItems.length > 0);
   const topScrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -184,6 +187,28 @@ export default function YoutubeList({
     } finally {
       setLoadingMore(false);
       loadingMoreRef.current = false;
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (refreshing || loading) return;
+    setRefreshing(true);
+    preloadedRef.current = null;
+    try {
+      const data: PopularChunkResponse = await fetch(
+        toEndpoint(0, INITIAL_LIMIT),
+        { cache: "no-store" },
+      ).then((r) => r.json());
+      const raw: YoutubeVideo[] = Array.isArray(data.items) ? data.items : [];
+      const freshItems = mergeUniqueByVideoId([], toSortedItems(raw));
+      itemsRef.current = freshItems;
+      setItems(freshItems);
+      setHasMore(Boolean(data.hasMore));
+      setNextOffset(data.nextOffset ?? null);
+    } catch {
+      // 조용히 무시
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -320,6 +345,26 @@ export default function YoutubeList({
           </span>
         </div>
         <div className="flex items-center gap-1 shrink-0 sm:gap-2">
+          <button
+            onClick={() => void handleRefresh()}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-red-300 hover:text-red-500 hover:shadow-md disabled:cursor-default disabled:opacity-40"
+            aria-label="새로고침"
+            disabled={loading || refreshing}
+            title="최신 영상으로 새로고침"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+            >
+              <path
+                fillRule="evenodd"
+                d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H3.989a.75.75 0 0 0-.75.75v4.242a.75.75 0 0 0 1.5 0v-2.43l.31.31a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.389Zm1.23-3.723a.75.75 0 0 0 .219-.53V2.929a.75.75 0 0 0-1.5 0V5.36l-.31-.31A7 7 0 0 0 3.239 8.188a.75.75 0 1 0 1.448.389A5.5 5.5 0 0 1 13.89 6.11l.311.31h-2.432a.75.75 0 0 0 0 1.5h4.243a.75.75 0 0 0 .53-.219Z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
           <button
             onClick={() => scroll("left")}
             className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-xl text-slate-500 shadow-sm transition hover:border-red-300 hover:text-red-500 hover:shadow-md disabled:cursor-default disabled:opacity-40"

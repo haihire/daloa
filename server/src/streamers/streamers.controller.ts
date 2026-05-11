@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Header, Query } from '@nestjs/common';
 import { StreamersService } from './streamers.service';
 
 @Controller('api/streamers')
@@ -19,6 +19,7 @@ export class StreamersController {
    * 로스트아크 최근 30일 동영상 조회수순 (Redis 2시간 캐시)
    */
   @Get('popular')
+  @Header('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=300')
   searchPopular(
     @Query('offset') offsetRaw?: string,
     @Query('limit') limitRaw?: string,
