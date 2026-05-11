@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   prepare-and-check:
     runs-on: ubuntu-latest
@@ -32,15 +36,37 @@ jobs:
         working-directory: server
         run: npm run build
 
-      - name: Deploy to EC2
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy to EC2 via SSM
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ubuntu@3.39.239.9 "cd /home/ubuntu/daloa && git pull && cd server && npm run build && cd .. && docker compose up -d --build nest"
-          rm ~/.ssh/deploy_key
+          command_id=$(aws ssm send-command \
+            --region "$AWS_REGION" \
+            --document-name "AWS-RunShellScript" \
+            --instance-ids "$EC2_INSTANCE_ID" \
+            --comment "main-post-merge auto deploy" \
+            --parameters 'commands=["set -e","cd /home/ubuntu/daloa","git pull origin main","cd server && npm run build","cd ..","docker compose up -d --build nest"]' \
+            --query 'Command.CommandId' \
+            --output text)
+
+          aws ssm wait command-executed \
+            --region "$AWS_REGION" \
+            --command-id "$command_id" \
+            --instance-id "$EC2_INSTANCE_ID"
+
+          aws ssm get-command-invocation \
+            --region "$AWS_REGION" \
+            --command-id "$command_id" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --query '{Status:Status,StdOut:StandardOutputContent,StdErr:StandardErrorContent}' \
+            --output json
 
       - name: Health check (optional)
         env:
