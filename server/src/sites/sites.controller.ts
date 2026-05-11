@@ -6,7 +6,7 @@ export class SitesController {
   constructor(private readonly sitesService: SitesService) {}
 
   @Get()
-  @Header('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=60')
+  @Header('Cache-Control', 'public, s-maxage=1000, stale-while-revalidate=60')
   findAll() {
     return this.sitesService.findAll();
   }
