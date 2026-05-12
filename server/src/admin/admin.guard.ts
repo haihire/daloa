@@ -44,7 +44,7 @@ export class AdminGuard implements CanActivate {
       REQUIRE_OWNER,
       context.getHandler(),
     );
-    if (requireOwner && payload.role !== 'owner') {
+    if (requireOwner && payload.role !== 'master') {
       throw new ForbiddenException('소유자 권한이 필요합니다');
     }
 
@@ -75,10 +75,10 @@ export class AdminWriteGuard implements CanActivate {
       throw new UnauthorizedException('유효하지 않은 토큰입니다');
     }
 
-    if (payload.role !== 'owner') {
+    if (payload.role !== 'master') {
       const role = payload.role as AdminRole;
-      if (role === 'demo') {
-        throw new ForbiddenException('데모 계정은 읽기 전용입니다');
+      if (role === 'guest') {
+        throw new ForbiddenException('게스트 계정은 읽기 전용입니다');
       }
     }
 

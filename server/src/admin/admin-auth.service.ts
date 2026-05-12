@@ -12,7 +12,7 @@ import type { Pool } from 'mysql2/promise';
 import type { RowDataPacket } from 'mysql2';
 import { DB_POOL } from '../db/db.module';
 
-export type AdminRole = 'owner' | 'demo';
+export type AdminRole = 'master' | 'guest';
 
 export interface AdminJwtPayload {
   sub: number;
@@ -65,8 +65,8 @@ export class AdminAuthService implements OnModuleInit {
       return;
     }
 
-    await this.upsertAccount('admin', ownerPw, 'owner');
-    await this.upsertAccount('demo', demoPw, 'demo');
+    await this.upsertAccount('admin', ownerPw, 'master');
+    await this.upsertAccount('guest', demoPw, 'guest');
     this.logger.log('관리자 계정 시딩 완료');
   }
 
