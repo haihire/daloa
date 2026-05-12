@@ -65,7 +65,7 @@ export class AdminAuthService implements OnModuleInit {
       return;
     }
 
-    await this.upsertAccount('admin', ownerPw, 'master');
+    await this.upsertAccount('master', ownerPw, 'master');
     await this.upsertAccount('guest', demoPw, 'guest');
     this.logger.log('관리자 계정 시딩 완료');
   }
