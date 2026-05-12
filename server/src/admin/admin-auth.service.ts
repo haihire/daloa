@@ -75,11 +75,15 @@ export class AdminAuthService implements OnModuleInit {
     plainPassword: string,
     role: AdminRole,
   ) {
+    const [rows] = await this.pool.execute<AdminUserRow[]>(
+      'SELECT id FROM admin_users WHERE username = ? LIMIT 1',
+      [username],
+    );
+    if (rows[0]) return; // 이미 존재하면 스킵
+
     const hash = await bcrypt.hash(plainPassword, 12);
     await this.pool.execute(
-      `INSERT INTO admin_users (username, password_hash, role)
-       VALUES (?, ?, ?)
-       ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash), role = VALUES(role)`,
+      'INSERT INTO admin_users (username, password_hash, role) VALUES (?, ?, ?)',
       [username, hash, role],
     );
   }
