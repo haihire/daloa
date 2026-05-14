@@ -1,0 +1,84 @@
+name: DB Migrate
+
+# 수동 트리거 전용: EC2 daloa-mysql 컨테이너에 마이그레이션 SQL 실행 + NestJS 재기동
+# 사용법: gh workflow run db-migrate.yml -f sql_file=scripts/migrate-youtube-snapshots.sql [-f restart_nest=true]
+
+on:
+  workflow_dispatch:
+    inputs:
+      sql_file:
+        description: "리포지토리 루트 기준 SQL 파일 경로 (예: scripts/migrate-youtube-snapshots.sql)"
+        required: true
+        default: "scripts/migrate-youtube-snapshots.sql"
+      restart_nest:
+        description: "마이그레이션 후 NestJS 컨테이너 재시작 여부"
+        required: false
+        default: "true"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Run SQL migration on EC2 via SSM
+        env:
+          EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          SQL_FILE: ${{ inputs.sql_file }}
+          RESTART_NEST: ${{ inputs.restart_nest }}
+        run: |
+          set -e
+
+          # 원격에서 실행할 셸 스크립트
+          remote_script="cd /home/ubuntu/daloa \
+            && git pull origin main \
+            && test -f \"$SQL_FILE\" \
+            && set -a && source .env && set +a \
+            && docker exec -i daloa-mysql mysql -uroot -p\"\$DB_ROOT_PASS\" --default-character-set=utf8mb4 \"\$DB_NAME\" < \"$SQL_FILE\" \
+            && echo MIGRATION_OK"
+
+          if [ "$RESTART_NEST" = "true" ]; then
+            remote_script="$remote_script && docker compose restart nest && echo NEST_RESTARTED"
+          fi
+
+          # JSON 안전하게 만들기 위해 base64 인코딩 후 원격에서 디코딩
+          encoded=$(printf '%s' "$remote_script" | base64 -w0)
+
+          command_id=$(aws ssm send-command \
+            --region "$AWS_REGION" \
+            --document-name "AWS-RunShellScript" \
+            --instance-ids "$EC2_INSTANCE_ID" \
+            --comment "db-migrate: $SQL_FILE" \
+            --parameters "commands=[\"set -e\",\"sudo -u ubuntu -H bash -lc \\\"echo $encoded | base64 -d | bash\\\"\"]" \
+            --query 'Command.CommandId' \
+            --output text)
+
+          echo "SSM CommandId: $command_id"
+
+          set +e
+          aws ssm wait command-executed \
+            --region "$AWS_REGION" \
+            --command-id "$command_id" \
+            --instance-id "$EC2_INSTANCE_ID"
+          wait_exit=$?
+          set -e
+
+          aws ssm get-command-invocation \
+            --region "$AWS_REGION" \
+            --command-id "$command_id" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --query '{Status:Status,StdOut:StandardOutputContent,StdErr:StandardErrorContent}' \
+            --output json
+
+          if [ "$wait_exit" -ne 0 ]; then
+            exit "$wait_exit"
+          fi
