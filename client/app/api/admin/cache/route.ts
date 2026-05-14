@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   const res = await fetch(`${NEST_API}/api/admin/cache/purge`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${token}`,
+      "x-admin-session": token,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
@@ -27,7 +27,7 @@ export async function DELETE() {
   const token = await getToken();
   const res = await fetch(`${NEST_API}/api/admin/cache/purge-all`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { "x-admin-session": token },
   });
   const data = await res.json();
   return NextResponse.json(data, { status: res.status });

@@ -18,14 +18,30 @@ function Kill-Port {
         ($_ -split '\s+')[-1]
     } | Sort-Object -Unique | Where-Object { $_ -match '^\d+$' }
 
-    foreach ($pid in $pids) {
+    foreach ($procId in $pids) {
         try {
-            Stop-Process -Id $pid -Force -ErrorAction Stop
-            Write-Host "[dev] 포트 $Port 점유 프로세스 (PID $pid) 종료"
+            Stop-Process -Id $procId -Force -ErrorAction Stop
+            Write-Host "[dev] 포트 $Port 점유 프로세스 (PID $procId) 종료"
         } catch {
             # 이미 종료됨
         }
     }
+}
+
+function Wait-PortOpen {
+    param(
+        [int]$Port,
+        [int]$TimeoutSec = 20
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-NetConnection -ComputerName 127.0.0.1 -Port $Port -InformationLevel Quiet -WarningAction SilentlyContinue) {
+            return $true
+        }
+        Start-Sleep -Milliseconds 700
+    }
+    return $false
 }
 
 Write-Host ""
@@ -46,7 +62,7 @@ $pemPath = Join-Path $Root "daloa-key.pem"
 $tunnelRunning = netstat -ano | Select-String ":6380\s" | Where-Object { $_ -match 'LISTENING' }
 if (-not $tunnelRunning) {
     Write-Host "[dev] SSH 터널 시작 (EC2 Redis → localhost:6380)..."
-    Start-Process ssh -ArgumentList "-i `"$pemPath`" -N -L 6380:172.18.0.2:6379 -o StrictHostKeyChecking=no ubuntu@3.39.239.9" -WindowStyle Hidden
+    Start-Process ssh -ArgumentList "-i `"$pemPath`" -N -L 6380:172.18.0.4:6379 -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=3 ubuntu@3.39.239.9" -WindowStyle Hidden
     Start-Sleep -Seconds 2
     Write-Host "[dev] SSH 터널 시작 완료`n"
 } else {
@@ -71,26 +87,43 @@ if (-not (Test-Path $clientLogDir)) { New-Item -ItemType Directory -Path $client
 
 # 4) 서버 시작 (별도 창 — 로그를 파일로도 저장)
 Write-Host "[3/4] 서버 시작 (포트 $ServerPort)..."
-$serverCmd = "cd '$Root\server'; npm run start:dev *>&1 | Tee-Object -FilePath '$serverLogFile' -Append"
-Start-Process powershell -ArgumentList "-NoExit", "-Command", $serverCmd -WindowStyle Normal
+$serverCmd = "cd '$Root\server'; npm run start:dev"
+Start-Process powershell -ArgumentList "-NoProfile", "-Command", $serverCmd -WindowStyle Hidden | Out-Null
+
+if (-not (Wait-PortOpen -Port $ServerPort -TimeoutSec 20)) {
+    Write-Host "[dev] 서버 포트 오픈 실패. 안정 모드(npx nest start)로 재시도..."
+    Kill-Port $ServerPort
+    $serverFallbackCmd = "cd '$Root\server'; npx nest start"
+    Start-Process powershell -ArgumentList "-NoProfile", "-Command", $serverFallbackCmd -WindowStyle Hidden | Out-Null
+
+    if (-not (Wait-PortOpen -Port $ServerPort -TimeoutSec 20)) {
+        Write-Host "[dev] 서버 시작 실패 (포트 $ServerPort 미오픈)"
+    } else {
+        Write-Host "[dev] 서버 재시도 성공 (포트 $ServerPort)"
+    }
+}
 
 Start-Sleep -Seconds 3
 
-# 5) 클라이언트 시작 (별도 창 — 로그를 파일로도 저장)
-Write-Host "[4/4] 클라이언트 시작 (포트 $ClientPort)..."
+# 5) Client start (separate window, also tee logs to file)
+Write-Host "[4/4] Client start (port $ClientPort)..."
 $clientCmd = "cd '$Root\client'; npm run dev *>&1 | Tee-Object -FilePath '$clientLogFile' -Append"
-Start-Process powershell -ArgumentList "-NoExit", "-Command", $clientCmd -WindowStyle Normal
+Start-Process powershell -ArgumentList "-NoProfile", "-Command", $clientCmd -WindowStyle Hidden | Out-Null
+
+if (-not (Wait-PortOpen -Port $ClientPort -TimeoutSec 20)) {
+    Write-Host "[dev] 클라이언트 시작 실패 (포트 $ClientPort 미오픈)"
+}
 
 Write-Host ""
-Write-Host "[dev] 시작 완료."
-Write-Host "  로그 정리: 30일 이상 경과한 로그 자동 삭제됨"
-Write-Host "  서버 로그 : $serverLogFile"
-Write-Host "  클라이언트 로그 : $clientLogFile"
+Write-Host "[dev] Startup complete."
+Write-Host "  Log cleanup: files older than 30 days are removed automatically"
+Write-Host "  Server log : $serverLogFile"
+Write-Host "  Client log : $clientLogFile"
 Write-Host ""
-Write-Host "  테스트 실행 (별도 터미널):"
+Write-Host "  Run tests (separate terminal):"
 Write-Host "    cd server  ;  npm test"
 Write-Host "    cd client  ;  npm test"
 Write-Host ""
-Write-Host "  로그 수동 정리 (필요 시):"
+Write-Host "  Manual log cleanup (optional):"
 Write-Host "    powershell -File scripts/cleanup-logs.ps1 -Days 7 -Verbose"
 Write-Host ""

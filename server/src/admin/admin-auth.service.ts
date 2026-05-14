@@ -5,16 +5,18 @@ import {
   Logger,
   Inject,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import type { Pool } from 'mysql2/promise';
 import type { RowDataPacket } from 'mysql2';
+import type Redis from 'ioredis';
 import { DB_POOL } from '../db/db.module';
+import { REDIS_CLIENT } from '../redis/redis.module';
 
 export type AdminRole = 'master' | 'guest';
 
-export interface AdminJwtPayload {
+export interface AdminSessionPayload {
   sub: number;
   username: string;
   role: AdminRole;
@@ -27,13 +29,16 @@ interface AdminUserRow extends RowDataPacket {
   role: AdminRole;
 }
 
+const SESSION_TTL = 60 * 60 * 8; // 8시간
+const SESSION_PREFIX = 'admin:session:';
+
 @Injectable()
 export class AdminAuthService implements OnModuleInit {
   private readonly logger = new Logger(AdminAuthService.name);
 
   constructor(
     @Inject(DB_POOL) private readonly pool: Pool,
-    private readonly jwtService: JwtService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly config: ConfigService,
   ) {}
 
@@ -91,7 +96,7 @@ export class AdminAuthService implements OnModuleInit {
   async login(
     username: string,
     password: string,
-  ): Promise<{ accessToken: string; role: AdminRole }> {
+  ): Promise<{ sessionId: string; role: AdminRole }> {
     const [rows] = await this.pool.execute<AdminUserRow[]>(
       'SELECT id, username, password_hash, role FROM admin_users WHERE username = ? LIMIT 1',
       [username],
@@ -103,16 +108,28 @@ export class AdminAuthService implements OnModuleInit {
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) throw new UnauthorizedException('인증 실패');
 
-    const payload: AdminJwtPayload = {
+    const sessionId = crypto.randomUUID();
+    const payload: AdminSessionPayload = {
       sub: user.id,
       username: user.username,
       role: user.role,
     };
-    const accessToken = this.jwtService.sign(payload);
-    return { accessToken, role: user.role };
+    await this.redis.set(
+      `${SESSION_PREFIX}${sessionId}`,
+      JSON.stringify(payload),
+      'EX',
+      SESSION_TTL,
+    );
+    return { sessionId, role: user.role };
   }
 
-  verifyToken(token: string): AdminJwtPayload {
-    return this.jwtService.verify<AdminJwtPayload>(token);
+  async verifySession(sessionId: string): Promise<AdminSessionPayload | null> {
+    const raw = await this.redis.get(`${SESSION_PREFIX}${sessionId}`);
+    if (!raw) return null;
+    return JSON.parse(raw) as AdminSessionPayload;
+  }
+
+  async logout(sessionId: string): Promise<void> {
+    await this.redis.del(`${SESSION_PREFIX}${sessionId}`);
   }
 }

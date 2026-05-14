@@ -23,20 +23,17 @@ export class AdminGuard implements CanActivate {
     private readonly reflector: Reflector,
   ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>();
-    const authHeader = req.headers['authorization'];
+    const sessionId = req.headers['x-admin-session'] as string | undefined;
 
-    if (!authHeader?.startsWith('Bearer ')) {
-      throw new UnauthorizedException('인증 토큰이 없습니다');
+    if (!sessionId) {
+      throw new UnauthorizedException('세션이 없습니다');
     }
 
-    const token = authHeader.slice(7);
-    let payload: ReturnType<AdminAuthService['verifyToken']>;
-    try {
-      payload = this.authService.verifyToken(token);
-    } catch {
-      throw new UnauthorizedException('유효하지 않은 토큰입니다');
+    const payload = await this.authService.verifySession(sessionId);
+    if (!payload) {
+      throw new UnauthorizedException('유효하지 않은 세션입니다');
     }
 
     // owner 전용 엔드포인트 체크
@@ -59,27 +56,22 @@ export class AdminGuard implements CanActivate {
 export class AdminWriteGuard implements CanActivate {
   constructor(private readonly authService: AdminAuthService) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>();
-    const authHeader = req.headers['authorization'];
+    const sessionId = req.headers['x-admin-session'] as string | undefined;
 
-    if (!authHeader?.startsWith('Bearer ')) {
-      throw new UnauthorizedException('인증 토큰이 없습니다');
+    if (!sessionId) {
+      throw new UnauthorizedException('세션이 없습니다');
     }
 
-    const token = authHeader.slice(7);
-    let payload: ReturnType<AdminAuthService['verifyToken']>;
-    try {
-      payload = this.authService.verifyToken(token);
-    } catch {
-      throw new UnauthorizedException('유효하지 않은 토큰입니다');
+    const payload = await this.authService.verifySession(sessionId);
+    if (!payload) {
+      throw new UnauthorizedException('유효하지 않은 세션입니다');
     }
 
-    if (payload.role !== 'master') {
-      const role = payload.role as AdminRole;
-      if (role === 'guest') {
-        throw new ForbiddenException('게스트 계정은 읽기 전용입니다');
-      }
+    const role = payload.role as AdminRole;
+    if (role === 'guest') {
+      throw new ForbiddenException('게스트 계정은 읽기 전용입니다');
     }
 
     (req as any).adminUser = payload;

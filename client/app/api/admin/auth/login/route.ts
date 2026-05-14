@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   });
 
   const data = (await upstream.json()) as {
-    accessToken?: string;
+    sessionId?: string;
     role?: string;
     message?: string;
   };
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   }
 
   const res = NextResponse.json({ role: data.role });
-  res.cookies.set("admin_token", data.accessToken ?? "", {
+  res.cookies.set("admin_token", data.sessionId ?? "", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

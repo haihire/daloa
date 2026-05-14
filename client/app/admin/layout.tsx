@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 const NAV = [
   { href: "/admin/sites", label: "사이트 관리" },
+  { href: "/admin/characters", label: "캐릭터 목록" },
   { href: "/admin/cache", label: "캐시 무효화" },
 ];
 
@@ -22,7 +23,7 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 flex">
+    <div className="h-screen bg-gray-950 text-gray-100 flex overflow-hidden">
       {/* Sidebar */}
       <aside className="w-48 bg-gray-900 border-r border-gray-800 flex flex-col">
         <div className="px-4 py-5 border-b border-gray-800">

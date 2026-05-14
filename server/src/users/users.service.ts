@@ -18,6 +18,7 @@ interface ArmoryData {
     ServerName: string;
     CharacterClassName: string;
     ItemAvgLevel: string;
+    CombatPower?: string | null;
     Stats?: { Type: string; Value: string }[];
   } | null;
   ArkPassive?: {
@@ -101,6 +102,18 @@ export class UsersService {
     return rows.length > 0;
   }
 
+  async needsCombatPower(name: string): Promise<boolean> {
+    const [rows] = await this.pool.execute<RowDataPacket[]>(
+      'SELECT 1 FROM loa_users WHERE name = ? AND combat_power IS NULL LIMIT 1',
+      [name],
+    );
+    // 없으면(rows.length === 0) 두 가지 경우: 아예 없거나(INSERT 필요) or cp 있음(스킵)
+    // 아예 없는지 추가 확인
+    if (rows.length > 0) return true; // 있는데 cp 없음 → 업데이트 필요
+    const exists = await this.existsByName(name);
+    return !exists; // 아예 없으면 INSERT 필요 → true
+  }
+
   async searchAndUpsert(characterName: string): Promise<{
     saved: number;
     expeditionKey: string;
@@ -135,6 +148,7 @@ export class UsersService {
       server: string;
       name: string;
       level: number;
+      combatPower: number | null;
       classIdx: number | null;
       thesix: number;
       expeditionKey: string;
@@ -163,12 +177,16 @@ export class UsersService {
       let statCrit = 0;
       let statSpec = 0;
       let statSwift = 0;
+      let combatPower: number | null = null;
       try {
         // API 요청은 lostark.service의 직렬 큐 + rate limiter로 한 건씩 순차 전송
         const armory = await this.lostark.fetchArmory<ArmoryData | null>(
           sib.CharacterName,
         );
         classDetail = armory?.ArkPassive?.Title ?? null;
+
+        const cpStr = armory?.ArmoryProfile?.CombatPower ?? null;
+        if (cpStr) combatPower = parseFloat(cpStr.replace(/,/g, '')) || null;
 
         for (const st of armory?.ArmoryProfile?.Stats ?? []) {
           const v = parseInt(st.Value ?? '0', 10);
@@ -210,6 +228,7 @@ export class UsersService {
         server: sib.ServerName,
         name: sib.CharacterName,
         level,
+        combatPower,
         classIdx,
         thesix,
         expeditionKey,
@@ -234,12 +253,13 @@ export class UsersService {
     // 5. 원정대 전체를 단일 배치 INSERT (N번 → 1번)
     if (buffer.length > 0) {
       const placeholders = buffer
-        .map(() => '(?,?,?,?,?,?,?,?,?,?,?,?)')
+        .map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?)')
         .join(',');
       const params = buffer.flatMap((r) => [
         r.server,
         r.name,
         r.level,
+        r.combatPower,
         r.classIdx,
         r.thesix,
         r.expeditionKey,
@@ -252,11 +272,12 @@ export class UsersService {
       ]);
       await this.pool.execute(
         `INSERT INTO loa_users
-           (server, name, level, class, thesix, expedition_key,
+           (server, name, level, combat_power, class, thesix, expedition_key,
             core_sun, core_moon, core_star, stat_crit, stat_spec, stat_swift)
          VALUES ${placeholders}
          ON DUPLICATE KEY UPDATE
            level          = VALUES(level),
+           combat_power   = COALESCE(VALUES(combat_power), combat_power),
            class          = VALUES(class),
            thesix         = VALUES(thesix),
            expedition_key = VALUES(expedition_key),

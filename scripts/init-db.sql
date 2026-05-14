@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS loa_users (
   seq             INT AUTO_INCREMENT PRIMARY KEY,
   server          VARCHAR(50)  COLLATE utf8mb4_general_ci,
   level           FLOAT,
+  combat_power    DECIMAL(10,2),
   class           INT,
   thesix          INT,
   name            VARCHAR(50)  COLLATE utf8mb4_general_ci,

@@ -11,7 +11,7 @@ async function getToken(): Promise<string> {
 export async function GET() {
   const token = await getToken();
   const res = await fetch(`${NEST_API}/api/admin/sites`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { "x-admin-session": token },
     cache: "no-store",
   });
   const data = await res.json();
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   const res = await fetch(`${NEST_API}/api/admin/sites`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${token}`,
+      "x-admin-session": token,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),

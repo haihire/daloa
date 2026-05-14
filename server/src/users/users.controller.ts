@@ -30,6 +30,12 @@ export class UsersController {
     return { exists: found };
   }
 
+  @Get('needs-cp/:name')
+  async needsCp(@Param('name') name: string) {
+    const needed = await this.usersService.needsCombatPower(name);
+    return { needsUpdate: needed };
+  }
+
   @Get('stats')
   async stats() {
     return this.usersService.getStats();

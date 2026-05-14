@@ -18,7 +18,7 @@ export async function PUT(
   const res = await fetch(`${NEST_API}/api/admin/sites/${id}`, {
     method: "PUT",
     headers: {
-      Authorization: `Bearer ${token}`,
+      "x-admin-session": token,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
@@ -35,7 +35,7 @@ export async function DELETE(
   const token = await getToken();
   const res = await fetch(`${NEST_API}/api/admin/sites/${id}`, {
     method: "DELETE",
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { "x-admin-session": token },
   });
   const data = await res.json();
   return NextResponse.json(data, { status: res.status });
