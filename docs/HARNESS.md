@@ -32,6 +32,37 @@ git checkout -b refactor/리팩터링명 # 동작 변경 없는 코드 정리
 | `chore/`    | 설정·스크립트·문서 변경      | `chore/add-cleanup-logs`      |
 | `refactor/` | 동작 변경 없는 코드 정리     | `refactor/sites-service`      |
 
+**작업 분류별 브랜치 전략**
+
+전체 작업은 3가지 분류로 나뉜다. 각 분류의 목적에 따라 브랜치 접두사를 결정한다:
+
+| 작업 분류       | 브랜치 패턴      | 예시                        | 설명                                              |
+| --------------- | ---------------- | --------------------------- | ------------------------------------------------- |
+| **지침서 변경** | `chore/docs-*`   | `chore/docs-harness`        | `.github/copilot-instructions.md`, `AGENTS.md` 등 |
+| **README 변경** | `chore/readme-*` | `chore/readme-deployment`   | 프로젝트 문서, `docs/` 폴더 내 마크다운 파일      |
+| **코드 변경**   | 기능별 선택      | `feature/admin-youtube-tab` | 기능별로 분리하여 각각 브랜치 생성 및 PR          |
+
+**코드 변경 시 기능별 브랜치 분리 규칙**
+
+- **같은 기능 영역의 여러 작업**은 각각 별도 브랜치로 분리한다:
+  - ✅ `feature/admin-youtube-tab` (관리자 유튜브 탭 추가)
+  - ✅ `feature/admin-dashboard` (관리자 대시보드)
+  - ✅ `feature/admin-settings` (관리자 설정 페이지)
+
+- **의존성 있는 기능**은 선행 브랜치 머지 후 base 재설정:
+
+  ```powershell
+  # 예: feature/admin-dashboard가 feature/admin-youtube-tab에 의존하는 경우
+  # 1) feature/admin-youtube-tab을 먼저 main에 머지
+  # 2) feature/admin-dashboard를 새로 생성하되:
+  git checkout main
+  git pull origin main
+  git checkout -b feature/admin-dashboard
+  # 이제 feature/admin-dashboard는 최신 main(youtube-tab 포함)을 base로 함
+  ```
+
+- **간단한 기능**은 한 브랜치에서 여러 커밋으로 진행 후 한 번에 PR 가능
+
 ```powershell
 # 2) 작업 완료 후 브랜치 푸시 → GitHub에서 PR 생성
 git add .
@@ -48,14 +79,22 @@ git branch -d feature/기능명
 **에이전트 작업 규칙 (필수)**
 
 - 파일 수정이 필요한 요청이면, 작업 전에 에이전트가 브랜치 유형을 먼저 추천한다.
+- 파일 수정이 필요한 요청이면, 에이전트는 항상 아래 순서로 먼저 제시한다.
+  1. 현재 요청이 속한 작업 분류 리스트(지침서 변경 / README 변경 / 코드 변경)
+  2. 추천 브랜치 리스트(우선 추천 1개 + 대안)
+  3. "이 분류/브랜치로 진행할까요?" 확인 질문
 - 추천 형식: `추천 브랜치: feature/...` + 이유 1줄.
 - 사용자 확인(승인) 후에만 실제 파일 수정/커밋 절차를 진행한다.
 - 커밋 직전에는 반드시 관련 테스트를 실행하고 통과 여부를 확인한다.
 - 새로 추가/수정한 기능에 대응하는 테스트가 없으면 테스트를 먼저 추가한 뒤 실행한다.
+- **`git commit` 명령을 실행하기 전에 항상 "커밋하시겠어요?" 형태로 사용자에게 확인을 먼저 받는다.** 확인 없이 커밋을 자동 실행하지 않는다.
 - 작업 완료 보고 시 에이전트는 PR 설명을 초안이 아닌 최종 제출 가능한 완성본으로 `목적`, `변경점`, `영향범위` 3개 섹션으로만 제시한다.
 - 에이전트는 PR 내용을 사용자에게 제시하기 전에 반드시 커밋과 푸시를 먼저 완료한다.
 - 영향범위에는 반드시 `수정 파일 목록`과 `영향받는 영역`만 포함한다.
 - 복붙 편의를 위해 `목적/변경점/영향범위`는 하나의 Markdown 코드블록으로 묶어 제시한다.
+- Markdown 파일만 수정한 경우(`*.md`만 변경, 코드/설정 파일 미변경)에는 테스트 실행을 생략할 수 있다.
+- 단, Markdown-only 변경도 브랜치 생성, 커밋, 푸시, PR 생성 절차는 동일하게 유지한다(`main` 직접 반영 금지).
+- Markdown-only 변경은 PR 생성 후 코드 머지 없이 문서 반영을 진행하되, 필요 시 문서 링크/렌더링만 경량 확인한다.
 - 기준:
   - `feature/` — 새 사이트 추가, 새 기능(UI/API)
   - `fix/` — 버그, 한글 깨짐, 로직 오류
@@ -133,6 +172,7 @@ powershell -File scripts/test.ps1 -E2E
 - `[PASS]` 전부 확인 후에만 작업 완료로 간주
 - 커밋 전에는 반드시 관련 테스트를 최소 1회 실행한다.
 - 새 기능/변경 기능에 대한 테스트가 없다면 테스트를 먼저 작성한 뒤 테스트를 실행한다.
+- 예외: 변경 파일이 Markdown(`*.md`)만인 경우 테스트 실행 생략 가능
 
 ### 단계 4 — 기록
 
