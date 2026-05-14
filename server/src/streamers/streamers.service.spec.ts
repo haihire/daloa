@@ -41,7 +41,11 @@ function createService(options?: {
     }),
   } as unknown as ConfigService;
 
-  const service = new StreamersService(redis as never, config);
+  const db = {
+    query: jest.fn().mockResolvedValue([[], []]),
+  };
+
+  const service = new StreamersService(redis as never, db as never, config);
   return { service, redis };
 }
 

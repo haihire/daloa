@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { google } from 'googleapis';
 import Redis, { type Redis as RedisClient } from 'ioredis';
-import type { Pool } from 'mysql2/promise';
+import type { Pool, RowDataPacket } from 'mysql2/promise';
 import { isLocalQuotaApisDisabled } from '../common/local-dev-flags';
 import { DB_POOL } from '../db/db.module';
 import { REDIS_CLIENT } from '../redis/redis.module';
@@ -316,7 +316,7 @@ export class StreamersService implements OnModuleInit {
   async getViewHistory(days: number): Promise<{ date: string; avg: number }[]> {
     const safeDay = Math.min(Math.max(1, days), 365);
     try {
-      const [rows] = await this.db.query<Array<{ date: string; avg: number }>>(
+      const [rows] = await this.db.query<Array<RowDataPacket & { date: string; avg: number }>>(
         `SELECT
            DATE_FORMAT(recorded_date, '%Y-%m-%d') AS date,
            ROUND(AVG(view_count))                 AS avg
