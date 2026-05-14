@@ -44,7 +44,13 @@ export class AdminAuthService implements OnModuleInit {
 
   async onModuleInit() {
     await this.ensureTable();
-    await this.seedAccounts();
+    try {
+      await this.seedAccounts();
+    } catch (err: unknown) {
+      this.logger.error(
+        `관리자 계정 시딩 실패 (서버는 정상 기동): ${String(err)}`,
+      );
+    }
   }
 
   private async ensureTable() {
@@ -53,7 +59,7 @@ export class AdminAuthService implements OnModuleInit {
         id            INT AUTO_INCREMENT PRIMARY KEY,
         username      VARCHAR(50)  NOT NULL UNIQUE,
         password_hash VARCHAR(255) NOT NULL,
-        role          ENUM('owner','demo') NOT NULL DEFAULT 'demo',
+        role          ENUM('master','guest') NOT NULL DEFAULT 'guest',
         created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
     `);
