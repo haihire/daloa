@@ -46,13 +46,25 @@ jobs:
         env:
           EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
+          NEXT_REVALIDATE_SECRET: ${{ secrets.NEXT_REVALIDATE_SECRET }}
         run: |
+          remote_script="set -e
+          cd /home/ubuntu/daloa
+          git pull origin main
+          grep -q '^NEXT_REVALIDATE_URL=' .env || echo 'NEXT_REVALIDATE_URL=https://www.daloa.kr/api/revalidate' >> .env
+          sed -i '/^NEXT_REVALIDATE_SECRET=/d' .env
+          echo 'NEXT_REVALIDATE_SECRET=${NEXT_REVALIDATE_SECRET}' >> .env
+          cd server && npm run build && cd ..
+          docker compose up -d --build nest"
+
+          encoded=$(printf '%s' "$remote_script" | base64 -w0)
+
           command_id=$(aws ssm send-command \
             --region "$AWS_REGION" \
             --document-name "AWS-RunShellScript" \
             --instance-ids "$EC2_INSTANCE_ID" \
             --comment "main-post-merge auto deploy" \
-            --parameters 'commands=["set -e","sudo -u ubuntu -H bash -lc '\''cd /home/ubuntu/daloa && git pull origin main && cd server && npm run build && cd .. && docker compose up -d --build nest'\''"]' \
+            --parameters "commands=[\"set -e\",\"sudo -u ubuntu -H bash -lc \\\"echo $encoded | base64 -d | bash\\\"\"]" \
             --query 'Command.CommandId' \
             --output text)
 

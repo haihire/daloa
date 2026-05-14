@@ -31,6 +31,8 @@
 | `GEMINI_API_KEY`           | -                       | **필수** | Google Gemini API 키                        |
 | `KAKAO_REST_API_KEY`       | -                       | **필수** | 카카오 REST API 키                          |
 | `KAKAO_REFRESH_TOKEN`      | -                       | **필수** | 카카오 OAuth 리프레시 토큰                  |
+| `NEXT_REVALIDATE_URL`      | (없음)                  | -        | Vercel ISR 무효화 엔드포인트 URL (`https://www.daloa.kr/api/revalidate`) |
+| `NEXT_REVALIDATE_SECRET`   | (없음)                  | -        | Vercel ISR 무효화 시크릿 (Vercel `REVALIDATE_SECRET`과 동일값) |
 
 ### CORS 설정 주의
 
@@ -43,7 +45,8 @@
 
 | 변수명         | 기본값                  | 필수 | 설명                      |
 | -------------- | ----------------------- | ---- | ------------------------- |
-| `NEST_API_URL` | `http://localhost:3001` | -    | SSR fetch 대상 NestJS URL |
+| `NEST_API_URL`        | `http://localhost:3001` | -        | SSR fetch 대상 NestJS URL |
+| `REVALIDATE_SECRET`   | (없음)                  | **필수** | ISR 캐시 무효화 인증 시크릿 (NestJS `NEXT_REVALIDATE_SECRET`과 동일값) |
 
 > Next.js에서 서버 전용 변수는 `NEXT_PUBLIC_` 접두사 없이 사용.  
 > 브라우저에서 NestJS를 직접 호출하는 코드 없음.

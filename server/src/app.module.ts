@@ -11,6 +11,7 @@ import { StreamersModule } from './streamers/streamers.module';
 import { UsersModule } from './users/users.module';
 import { ClassSummaryModule } from './class-summary/class-summary.module';
 import { AdminModule } from './admin/admin.module';
+import { RevalidateService } from './revalidate/revalidate.service';
 
 @Module({
   imports: [
@@ -27,5 +28,6 @@ import { AdminModule } from './admin/admin.module';
     ClassSummaryModule,
     AdminModule,
   ],
+  providers: [RevalidateService],
 })
 export class AppModule {}
