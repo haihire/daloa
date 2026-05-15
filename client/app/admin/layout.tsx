@@ -27,33 +27,32 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="h-screen bg-gray-50 text-gray-900 flex overflow-hidden">
+    <div className="admin-shell h-screen flex overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-48 bg-gray-900 border-r border-gray-800 flex flex-col shrink-0">
-        <div className="px-4 py-5 border-b border-gray-800">
-          <span className="text-sm font-semibold text-indigo-400">
-            다로아 관리자
+      <aside className="admin-sidebar w-56 flex flex-col shrink-0">
+        <div className="px-5 py-6 border-b border-[color:var(--admin-sidebar-border)]">
+          <span className="admin-sidebar-brand text-base font-bold">
+            다로아 <span className="text-blue-400">Admin</span>
           </span>
         </div>
-        <nav className="flex-1 py-4">
-          {NAV.map(({ href, label }) => (
-            <Link
-              key={href}
-              href={href}
-              className={`block px-4 py-2 text-sm hover:bg-gray-800 transition-colors ${
-                pathname.startsWith(href)
-                  ? "bg-gray-800 text-white font-medium"
-                  : "text-gray-400"
-              }`}
-            >
-              {label}
-            </Link>
-          ))}
+        <nav className="flex-1 py-4 px-3 space-y-1">
+          {NAV.map(({ href, label }) => {
+            const active = pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={`admin-sidebar-link block px-3 py-2 rounded-lg text-sm ${active ? "is-active" : ""}`}
+              >
+                {label}
+              </Link>
+            );
+          })}
         </nav>
-        <div className="px-4 py-4 border-t border-gray-800">
+        <div className="px-5 py-4 border-t border-[color:var(--admin-sidebar-border)]">
           <button
             onClick={logout}
-            className="w-full text-left text-xs text-gray-500 hover:text-gray-300 transition-colors"
+            className="admin-sidebar-logout w-full text-left text-xs"
           >
             로그아웃
           </button>
@@ -61,7 +60,7 @@ export default function AdminLayout({
       </aside>
 
       {/* Main */}
-      <main className="flex-1 p-8 overflow-auto bg-gray-50">{children}</main>
+      <main className="flex-1 p-8 overflow-auto">{children}</main>
     </div>
   );
 }

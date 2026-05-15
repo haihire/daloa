@@ -35,7 +35,7 @@ function SiteCardPreview({ form }: { form: typeof EMPTY_FORM }) {
   })();
 
   return (
-    <div className="relative flex flex-col rounded-xl border border-gray-200 bg-gray-50 p-3 min-h-[80px]">
+    <div className="relative flex flex-col rounded-xl border border-[color:var(--admin-border)] bg-[color:var(--admin-surface-muted)] p-3 min-h-[80px]">
       <div className="flex items-start justify-between gap-2 pr-1">
         <div className="flex min-w-0 items-center gap-1.5">
           {iconSrc && (
@@ -48,16 +48,22 @@ function SiteCardPreview({ form }: { form: typeof EMPTY_FORM }) {
               className="shrink-0 rounded-sm"
             />
           )}
-          <span className="truncate font-semibold text-gray-900 text-sm">
-            {form.name || <span className="text-gray-400">이름</span>}
+          <span className="truncate font-semibold text-[color:var(--admin-text)] text-sm">
+            {form.name || (
+              <span className="text-[color:var(--admin-text-subtle)]">
+                이름
+              </span>
+            )}
           </span>
         </div>
-        <span className="shrink-0 rounded-full px-2 py-0.5 text-xs text-gray-600 bg-gray-100 border border-gray-200">
+        <span className="admin-badge admin-badge-neutral">
           {form.category || "카테고리"}
         </span>
       </div>
-      <p className="mt-1.5 text-xs text-gray-600 line-clamp-2">
-        {form.description || <span className="text-gray-400">설명</span>}
+      <p className="mt-1.5 text-xs text-[color:var(--admin-text-muted)] line-clamp-2">
+        {form.description || (
+          <span className="text-[color:var(--admin-text-subtle)]">설명</span>
+        )}
       </p>
     </div>
   );
@@ -345,45 +351,28 @@ export default function AdminSitesPage() {
   }
 
   const isProcessing = busyMessage !== null;
-  const rowActionBaseClass =
-    "inline-flex items-center justify-center rounded-md border px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45";
   const totalSites = sites.length;
   const activeSites = sites.filter((site) => site.is_active === 1).length;
   const inactiveSites = totalSites - activeSites;
 
   return (
-    <div className="space-y-5 p-4 admin-content-shell rounded-xl">
-      <div className="px-5 py-4 admin-content-panel rounded-lg">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900">사이트 관리</h1>
-            <p className="mt-1 text-xs text-gray-500">
-              등록된 사이트 상태를 한 곳에서 관리하고 즉시 반영 여부를 확인합니다.
-            </p>
-          </div>
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="border border-gray-200 bg-gray-50 rounded-lg px-3 py-2">
-              <p className="text-[10px] text-gray-500">전체</p>
-              <p className="text-sm font-semibold text-gray-900">{totalSites}</p>
-            </div>
-            <div className="border border-emerald-200 bg-emerald-50 rounded-lg px-3 py-2">
-              <p className="text-[10px] text-emerald-600">활성</p>
-              <p className="text-sm font-semibold text-emerald-700">{activeSites}</p>
-            </div>
-            <div className="border border-rose-200 bg-rose-50 rounded-lg px-3 py-2">
-              <p className="text-[10px] text-rose-500">비활성</p>
-              <p className="text-sm font-semibold text-rose-600">{inactiveSites}</p>
-            </div>
-          </div>
+    <div>
+      {/* 헤더 */}
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+        <div>
+          <h1 className="admin-page-title">사이트 관리</h1>
+          <p className="admin-page-subtitle mt-1">
+            등록된 사이트 상태를 관리하고 즉시 반영 여부를 확인합니다.
+          </p>
         </div>
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="flex gap-2">
           <button
             onClick={handlePurge}
             disabled={purging || isProcessing}
-            className="text-sm border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 px-3 py-2 rounded-lg transition-colors"
+            className="admin-btn admin-btn-secondary"
             title="Redis 사이트 캐시 즉시 삭제"
           >
-            {purging ? "처리 중..." : "새로고침"}
+            {purging ? "처리 중..." : "캐시 새로고침"}
           </button>
           <button
             onClick={() => {
@@ -393,30 +382,50 @@ export default function AdminSitesPage() {
               setFormError("");
             }}
             disabled={isProcessing}
-            className="text-sm border border-blue-600 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+            className="admin-btn admin-btn-primary"
           >
             + 사이트 추가
           </button>
         </div>
       </div>
 
+      {/* 통계 카드 */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="admin-stat-card">
+          <p className="admin-stat-label">전체 사이트</p>
+          <p className="admin-stat-value mt-1">{totalSites}</p>
+        </div>
+        <div className="admin-stat-card">
+          <p className="admin-stat-label">활성</p>
+          <p className="admin-stat-value mt-1 text-emerald-600">
+            {activeSites}
+          </p>
+        </div>
+        <div className="admin-stat-card">
+          <p className="admin-stat-label">비활성</p>
+          <p className="admin-stat-value mt-1 text-gray-400">
+            {inactiveSites}
+          </p>
+        </div>
+      </div>
+
       {/* 모달 */}
       {showForm && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          className="admin-modal-overlay"
           onClick={(e) => {
             if (!isProcessing && e.target === e.currentTarget) cancelEdit();
           }}
         >
-          <div className="bg-white border border-gray-200 rounded-xl p-6 w-full max-w-2xl shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-gray-900">
-                {editingId ? `사이트 수정 — #${editingId}` : "새 사이트 추가"}
+          <div className="admin-modal w-full max-w-2xl p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-base font-semibold text-[color:var(--admin-text)]">
+                {editingId ? `사이트 수정 · #${editingId}` : "새 사이트 추가"}
               </h2>
               <button
                 onClick={cancelEdit}
                 disabled={isProcessing}
-                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+                className="text-[color:var(--admin-text-subtle)] hover:text-[color:var(--admin-text)] text-lg leading-none"
               >
                 ✕
               </button>
@@ -432,9 +441,7 @@ export default function AdminSitesPage() {
                       key={field}
                       className={field === "description" ? "col-span-2" : ""}
                     >
-                      <label className="block text-xs text-gray-600 mb-1 capitalize">
-                        {field}
-                      </label>
+                      <label className="admin-label capitalize">{field}</label>
                       <input
                         type="text"
                         value={form[field]}
@@ -442,7 +449,7 @@ export default function AdminSitesPage() {
                         onChange={(e) =>
                           setForm((p) => ({ ...p, [field]: e.target.value }))
                         }
-                        className="w-full bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        className="admin-input"
                       />
                     </div>
                   ))}
@@ -454,14 +461,14 @@ export default function AdminSitesPage() {
                   <button
                     onClick={handleSave}
                     disabled={saving || isProcessing}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm px-4 py-1.5 rounded-lg transition-colors"
+                    className="admin-btn admin-btn-primary"
                   >
                     {saving ? "저장 중..." : "저장"}
                   </button>
                   <button
                     onClick={cancelEdit}
                     disabled={isProcessing}
-                    className="text-gray-500 hover:text-gray-700 border border-gray-300 bg-white text-sm px-4 py-1.5 rounded-lg transition-colors"
+                    className="admin-btn admin-btn-secondary"
                   >
                     취소
                   </button>
@@ -470,7 +477,9 @@ export default function AdminSitesPage() {
 
               {/* 카드 미리보기 */}
               <div className="w-52 shrink-0">
-                <p className="text-xs text-gray-400 mb-2">미리보기</p>
+                <p className="text-xs text-[color:var(--admin-text-muted)] mb-2 font-medium">
+                  미리보기
+                </p>
                 <SiteCardPreview form={form} />
               </div>
             </div>
@@ -479,101 +488,112 @@ export default function AdminSitesPage() {
       )}
 
       {error && (
-        <div className="border border-red-200 bg-red-50 rounded-lg px-3 py-2">
+        <div className="admin-card mb-4 px-4 py-3 border-red-200 bg-red-50">
           <p className="text-sm text-red-600">{error}</p>
         </div>
       )}
       {loading ? (
-        <div className="px-4 py-8 text-center admin-content-panel rounded-lg">
-          <p className="text-sm text-gray-400">불러오는 중...</p>
+        <div className="admin-card admin-card-padded text-center">
+          <p className="text-sm text-[color:var(--admin-text-muted)]">
+            불러오는 중...
+          </p>
         </div>
       ) : (
-        <div className="overflow-x-auto admin-content-table rounded-xl shadow-sm">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 text-gray-600 text-center">
-                <th className="py-3 pr-4 w-10 font-medium">#</th>
-                <th className="py-3 pr-4 font-medium">이름</th>
-                <th className="py-3 pr-4 font-medium">URL</th>
-                <th className="py-3 pr-4 font-medium">설명</th>
-                <th className="py-3 pr-4 font-medium">카테고리</th>
-                <th className="py-3 pr-4 font-medium">활성</th>
-                <th className="py-3 font-medium">액션</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {sites.map((site) => (
-                <tr
-                  key={site.seq}
-                  className="hover:bg-gray-50 transition-colors"
-                >
-                  <td className="py-3 pr-4 text-center text-gray-400">{site.seq}</td>
-                  <td className="py-3 pr-4 text-center text-gray-900 font-medium">{site.name}</td>
-                  <td className="py-3 pr-4">
-                    <a
-                      href={site.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mx-auto block max-w-xs truncate text-center text-blue-600 hover:text-blue-700 hover:underline"
-                    >
-                      {site.href}
-                    </a>
-                  </td>
-                  <td className="py-3 pr-4 text-center text-gray-600">
-                    {site.description ?? "-"}
-                  </td>
-                  <td className="py-3 pr-4 text-center text-gray-600">
-                    {site.category ? (
-                      <span className="inline-flex items-center justify-center border border-gray-200 bg-gray-100 rounded-full px-2 py-0.5 text-xs text-gray-700">
-                        {site.category}
-                      </span>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                  <td className="py-3 pr-4 text-center">
-                    <button
-                      onClick={() => handleToggleActive(site)}
-                      disabled={isProcessing}
-                      className={`${rowActionBaseClass} min-w-[64px] ${
-                        site.is_active
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                          : "border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100"
-                      }`}
-                    >
-                      {site.is_active ? "활성" : "비활성"}
-                    </button>
-                  </td>
-                  <td className="py-3">
-                    <div className="flex justify-center gap-2">
-                      <button
-                        onClick={() => startEdit(site)}
-                        disabled={isProcessing}
-                        className={`${rowActionBaseClass} border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100`}
-                      >
-                        수정
-                      </button>
-                      <button
-                        onClick={() => handleDelete(site.seq)}
-                        disabled={isProcessing}
-                        className={`${rowActionBaseClass} border-red-200 bg-red-50 text-red-600 hover:bg-red-100`}
-                      >
-                        삭제
-                      </button>
-                    </div>
-                  </td>
+        <div className="admin-card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th className="w-12 text-center">#</th>
+                  <th>이름</th>
+                  <th>URL</th>
+                  <th>설명</th>
+                  <th>카테고리</th>
+                  <th className="text-center">활성</th>
+                  <th className="text-center">액션</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {sites.map((site) => (
+                  <tr key={site.seq}>
+                    <td className="text-center text-[color:var(--admin-text-subtle)] tabular-nums">
+                      {site.seq}
+                    </td>
+                    <td className="font-medium">{site.name}</td>
+                    <td>
+                      <a
+                        href={site.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block max-w-xs truncate text-blue-600 hover:text-blue-700 hover:underline"
+                      >
+                        {site.href}
+                      </a>
+                    </td>
+                    <td className="text-[color:var(--admin-text-muted)] max-w-xs truncate">
+                      {site.description ?? "-"}
+                    </td>
+                    <td>
+                      {site.category ? (
+                        <span
+                          className={`admin-badge ${getCategoryTone(site.category)}`}
+                        >
+                          {site.category}
+                        </span>
+                      ) : (
+                        <span className="text-[color:var(--admin-text-subtle)]">
+                          -
+                        </span>
+                      )}
+                    </td>
+                    <td className="text-center">
+                      <button
+                        onClick={() => handleToggleActive(site)}
+                        disabled={isProcessing}
+                        className={`admin-badge ${
+                          site.is_active
+                            ? "admin-badge-success cursor-pointer"
+                            : "admin-badge-neutral cursor-pointer"
+                        }`}
+                      >
+                        {site.is_active ? "활성" : "비활성"}
+                      </button>
+                    </td>
+                    <td>
+                      <div className="flex justify-center gap-2">
+                        <button
+                          onClick={() => startEdit(site)}
+                          disabled={isProcessing}
+                          className="admin-btn admin-btn-sm admin-btn-secondary"
+                        >
+                          수정
+                        </button>
+                        <button
+                          onClick={() => handleDelete(site.seq)}
+                          disabled={isProcessing}
+                          className="admin-btn admin-btn-sm admin-btn-danger"
+                        >
+                          삭제
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
       {isProcessing && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
-          <div className="rounded-xl border border-gray-200 bg-white px-6 py-5 text-center shadow-2xl">
-            <p className="text-sm font-semibold text-gray-900">처리중입니다...</p>
-            <p className="mt-1 text-xs text-gray-500">{busyMessage}</p>
+        <div className="admin-modal-overlay">
+          <div className="admin-modal px-6 py-5 text-center">
+            <p className="text-sm font-semibold text-[color:var(--admin-text)]">
+              처리중입니다...
+            </p>
+            <p className="mt-1 text-xs text-[color:var(--admin-text-muted)]">
+              {busyMessage}
+            </p>
           </div>
         </div>
       )}

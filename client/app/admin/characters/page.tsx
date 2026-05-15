@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useState } from "react";
 
@@ -29,13 +29,13 @@ interface ListResult {
 const STAT_BUILDS = [
   "",
   "치신",
-  "?�치",
+  "특치",
   "치특",
-  "?�치",
-  "?�특",
-  "?�신",
-  "치특??,
-  "미설??,
+  "신치",
+  "신특",
+  "특신",
+  "치특신",
+  "미설정",
 ];
 const PAGE_SIZE = 20;
 
@@ -63,7 +63,7 @@ export default function AdminCharactersPage() {
         cache: "no-store",
       });
       if (!res.ok) {
-        setError("?�이??로드 ?�패");
+        setError("데이터 로드 실패");
         setLoading(false);
         return;
       }
@@ -74,7 +74,6 @@ export default function AdminCharactersPage() {
   );
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load(page);
   }, [load, page]);
 
@@ -93,7 +92,7 @@ export default function AdminCharactersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key: "characters" }),
       });
-      alert("캐릭??캐시가 무효?�됐?�니??");
+      alert("캐릭터 캐시가 무효화됐습니다.");
     } finally {
       setPurging(false);
     }
@@ -106,170 +105,183 @@ export default function AdminCharactersPage() {
       className="flex flex-col h-full"
       style={{ maxHeight: "calc(100vh - 64px)" }}
     >
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-semibold">캐릭??목록</h1>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-500">
-            총 {result?.total.toLocaleString() ?? "-"}개
-          </span>
+      {/* 헤더 */}
+      <div className="flex items-end justify-between mb-5 shrink-0">
+        <div>
+          <h1 className="admin-page-title">캐릭터 목록</h1>
+          <p className="admin-page-subtitle mt-1">
+            총 {result?.total.toLocaleString() ?? "-"}명의 캐릭터가 등록되어 있습니다.
+          </p>
+        </div>
+        <button
+          onClick={handlePurge}
+          disabled={purging}
+          className="admin-btn admin-btn-secondary"
+          title="Redis 캐릭터 캐시 즉시 삭제"
+        >
+          {purging ? "처리 중..." : "캐시 새로고침"}
+        </button>
+      </div>
+
+      {/* 필터 */}
+      <div className="admin-card admin-card-padded mb-4 shrink-0">
+        <div className="flex gap-2 flex-wrap items-end">
+          <div className="w-48">
+            <label className="admin-label">캐릭터명</label>
+            <input
+              type="text"
+              placeholder="검색어 입력"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              className="admin-input"
+            />
+          </div>
+          <div className="w-40">
+            <label className="admin-label">직업</label>
+            <input
+              type="text"
+              placeholder="예: 버서커"
+              value={classDetail}
+              onChange={(e) => setClassDetail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              className="admin-input"
+            />
+          </div>
+          <div className="w-36">
+            <label className="admin-label">빌드</label>
+            <select
+              value={statBuild}
+              onChange={(e) => setStatBuild(e.target.value)}
+              className="admin-select"
+            >
+              {STAT_BUILDS.map((b) => (
+                <option key={b} value={b}>
+                  {b || "전체 빌드"}
+                </option>
+              ))}
+            </select>
+          </div>
           <button
-            onClick={handlePurge}
-            disabled={purging}
-            className="text-sm border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 px-3 py-1.5 rounded-lg transition-colors"
-            title="Redis 캐릭터 캐시 즉시 삭제"
+            onClick={handleSearch}
+            className="admin-btn admin-btn-primary"
           >
-            {purging ? "처리 중..." : "새로고침"}
+            검색
           </button>
         </div>
       </div>
 
-      {/* ?�터 */}
-      <div className="flex gap-2 mb-3 flex-wrap shrink-0">
-        <input
-          type="text"
-          placeholder="캐릭?�명 검??
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-          className="bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:border-blue-500 w-48"
-        />
-        <input
-          type="text"
-          placeholder="직업 (?? 버서�?"
-          value={classDetail}
-          onChange={(e) => setClassDetail(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-          className="bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:border-blue-500 w-40"
-        />
-        <select
-          value={statBuild}
-          onChange={(e) => setStatBuild(e.target.value)}
-          className="bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:border-blue-500"
-        >
-          {STAT_BUILDS.map((b) => (
-            <option key={b} value={b}>
-              {b || "?�체 빌드"}
-            </option>
-          ))}
-        </select>
-        <button
-          onClick={handleSearch}
-          className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-1.5 rounded-lg transition-colors"
-        >
-          검??
-        </button>
-      </div>
-
-      {error && <p className="text-red-400 text-sm mb-3 shrink-0">{error}</p>}
+      {error && (
+        <p className="text-red-500 text-sm mb-3 shrink-0">{error}</p>
+      )}
 
       {loading ? (
-        <p className="text-gray-400 text-sm">불러?�는 �?..</p>
+        <div className="admin-card admin-card-padded text-center">
+          <p className="text-sm text-[color:var(--admin-text-muted)]">
+            불러오는 중...
+          </p>
+        </div>
       ) : (
         <div className="flex flex-col flex-1 min-h-0">
-          <div className="overflow-auto flex-1">
-            <table className="w-full text-sm table-fixed">
-              <colgroup>
-                <col style={{ width: "36px" }} />
-                <col style={{ width: "90px" }} />
-                <col style={{ width: "70px" }} />
-                <col style={{ width: "80px" }} />
-                <col style={{ width: "60px" }} />
-                <col style={{ width: "80px" }} />
-                <col style={{ width: "160px" }} />
-                <col style={{ width: "90px" }} />
-                <col style={{ width: "90px" }} />
-                <col style={{ width: "90px" }} />
-                <col style={{ width: "60px" }} />
-              </colgroup>
-              <thead>
-                <tr className="border-b border-gray-200 text-gray-500 text-center">
-                  <th className="py-2">#</th>
-                  <th className="py-2">캐릭?�명</th>
-                  <th className="py-2">?�이?�레�?/th>
-                  <th className="py-2">?�투??/th>
-                  <th className="py-2">?�버</th>
-                  <th className="py-2">직업</th>
-                  <th className="py-2">각인</th>
-                  <th className="py-2">?�양코어</th>
-                  <th className="py-2">?�코??/th>
-                  <th className="py-2">별코??/th>
-                  <th className="py-2">빌드</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result?.items.map((c, idx) => (
-                  <tr
-                    key={c.name}
-                    className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                  >
-                    <td className="py-1.5 text-gray-400 text-center text-xs">
-                      {(page - 1) * PAGE_SIZE + idx + 1}
-                    </td>
-                    <td className="py-1.5 text-gray-900 font-medium text-center truncate overflow-hidden">
-                      {c.name}
-                    </td>
-                    <td className="py-1.5 text-center text-gray-700 tabular-nums text-xs">
-                      {c.level.toLocaleString()}
-                    </td>
-                    <td className="py-1.5 text-center text-yellow-300 tabular-nums text-xs">
-                      {c.combatPower != null
-                        ? c.combatPower.toLocaleString()
-                        : "-"}
-                    </td>
-                    <td className="py-1.5 text-center text-gray-500 text-xs truncate overflow-hidden">
-                      {c.server ?? "-"}
-                    </td>
-                    <td className="py-1.5 text-center text-gray-600 text-xs truncate overflow-hidden">
-                      {c.classDetail ?? "-"}
-                    </td>
-                    <td className="py-1.5 text-center text-gray-500 text-xs truncate overflow-hidden">
-                      {c.classEngraving ?? "-"}
-                    </td>
-                    <td className="py-1.5 text-center text-yellow-400 text-xs truncate overflow-hidden">
-                      {c.coreSun ?? "-"}
-                    </td>
-                    <td className="py-1.5 text-center text-blue-400 text-xs truncate overflow-hidden">
-                      {c.coreMoon ?? "-"}
-                    </td>
-                    <td className="py-1.5 text-center text-purple-400 text-xs truncate overflow-hidden">
-                      {c.coreStar ?? "-"}
-                    </td>
-                    <td className="py-1.5 text-center">
-                      <span
-                        className={`text-xs px-1.5 py-0.5 rounded ${
-                          c.statBuild === "미설??
-                            ? "bg-gray-100 text-gray-400"
-                            : "bg-blue-50 text-blue-600"
-                        }`}
-                      >
-                        {c.statBuild}
-                      </span>
-                    </td>
+          <div className="admin-card overflow-hidden flex-1 flex flex-col min-h-0">
+            <div className="overflow-auto flex-1">
+              <table className="admin-table table-fixed">
+                <colgroup>
+                  <col style={{ width: "44px" }} />
+                  <col style={{ width: "120px" }} />
+                  <col style={{ width: "80px" }} />
+                  <col style={{ width: "90px" }} />
+                  <col style={{ width: "80px" }} />
+                  <col style={{ width: "100px" }} />
+                  <col style={{ width: "180px" }} />
+                  <col style={{ width: "100px" }} />
+                  <col style={{ width: "100px" }} />
+                  <col style={{ width: "100px" }} />
+                  <col style={{ width: "80px" }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th className="text-center">#</th>
+                    <th>캐릭터명</th>
+                    <th className="text-center">아이템</th>
+                    <th className="text-center">전투력</th>
+                    <th>서버</th>
+                    <th>직업</th>
+                    <th>각인</th>
+                    <th>해코어</th>
+                    <th>달코어</th>
+                    <th>별코어</th>
+                    <th className="text-center">빌드</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {result?.items.map((c, idx) => (
+                    <tr key={c.name}>
+                      <td className="text-center text-[color:var(--admin-text-subtle)] tabular-nums">
+                        {(page - 1) * PAGE_SIZE + idx + 1}
+                      </td>
+                      <td className="font-medium truncate">{c.name}</td>
+                      <td className="text-center tabular-nums">
+                        {c.level.toLocaleString()}
+                      </td>
+                      <td className="text-center tabular-nums text-amber-600 font-medium">
+                        {c.combatPower != null
+                          ? c.combatPower.toLocaleString()
+                          : "-"}
+                      </td>
+                      <td className="text-[color:var(--admin-text-muted)] truncate">
+                        {c.server ?? "-"}
+                      </td>
+                      <td className="truncate">{c.classDetail ?? "-"}</td>
+                      <td className="text-[color:var(--admin-text-muted)] text-xs truncate">
+                        {c.classEngraving ?? "-"}
+                      </td>
+                      <td className="text-amber-600 text-xs truncate">
+                        {c.coreSun ?? "-"}
+                      </td>
+                      <td className="text-blue-600 text-xs truncate">
+                        {c.coreMoon ?? "-"}
+                      </td>
+                      <td className="text-violet-600 text-xs truncate">
+                        {c.coreStar ?? "-"}
+                      </td>
+                      <td className="text-center">
+                        <span
+                          className={`admin-badge ${
+                            c.statBuild === "미설정"
+                              ? "admin-badge-neutral"
+                              : "admin-badge-info"
+                          }`}
+                        >
+                          {c.statBuild}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          {/* ?�이지?�이??*/}
+          {/* 페이지네이션 */}
           {totalPages > 1 && (
-            <div className="flex items-center gap-2 mt-3 justify-center shrink-0">
+            <div className="flex items-center gap-3 mt-4 justify-center shrink-0">
               <button
                 onClick={() => setPage((p) => Math.max(p - 1, 1))}
                 disabled={page === 1}
-                className="text-xs px-3 py-1 rounded border border-gray-300 text-gray-500 hover:text-gray-900 disabled:opacity-30 transition-colors"
+                className="admin-btn admin-btn-sm admin-btn-secondary"
               >
-                ?�전
+                이전
               </button>
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-[color:var(--admin-text-muted)] tabular-nums">
                 {page} / {totalPages}
               </span>
               <button
                 onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
                 disabled={page === totalPages}
-                className="text-xs px-3 py-1 rounded border border-gray-300 text-gray-500 hover:text-gray-900 disabled:opacity-30 transition-colors"
+                className="admin-btn admin-btn-sm admin-btn-secondary"
               >
-                ?�음
+                다음
               </button>
             </div>
           )}
