@@ -4,17 +4,15 @@ import SiteList from "@/components/sites/SiteList";
 import YoutubeSection from "@/components/youtube/YoutubeSection";
 import type { Site, StatBuildTab } from "@/types";
 
-// ISR: NestJS 서버에서 데이터를 fetch (revalidate 주기마다 백그라운드 갱신)
+// Always fetch fresh data so normal refresh reflects latest crawler/admin changes.
 const API = process.env.NEST_API_URL ?? "http://localhost:3001";
 
 export default async function Home() {
   const [sites, statBuilds] = await Promise.all([
-    fetch(`${API}/api/sites`, { next: { revalidate: 86400 } })
+    fetch(`${API}/api/sites`, { cache: "no-store" })
       .then<Site[]>((r) => r.json())
       .catch(() => [] as Site[]),
-    fetch(`${API}/api/characters/stat-builds`, {
-      next: { revalidate: 86400 },
-    })
+    fetch(`${API}/api/characters/stat-builds`, { cache: "no-store" })
       .then<StatBuildTab[]>((r) => r.json())
       .catch(() => [] as StatBuildTab[]),
   ]);
