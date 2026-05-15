@@ -52,3 +52,12 @@ server/tsconfig.build.tsbuildinfo
 # 이력서 (로컬 개인정보)
 이력서_개선안.md
 server/dist/
+
+# 개인 노트 / AI 대화 기록 / 포폴 초안 (로컬 전용)
+docs/private/
+docs/
+notes/
+
+# 에이전트 지침서 (로컬 운영용)
+.github/copilot-instructions.md
+docs/HARNESS.md
