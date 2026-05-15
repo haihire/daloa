@@ -40,12 +40,15 @@ async function main() {
   let processed = 0;
 
   while (true) {
-    const [rows] = await pool.execute<(Row & mysql.RowDataPacket)[]>(
+    // Use pool.query (not execute) for the LIMIT placeholder because some
+    // MySQL/MariaDB versions reject integer parameters in prepared LIMIT clauses
+    // ("Incorrect arguments to mysqld_stmt_execute"). BATCH is a hardcoded
+    // integer constant so inlining it is safe.
+    const [rows] = await pool.query<(Row & mysql.RowDataPacket)[]>(
       `SELECT seq, stat_crit, stat_spec, stat_swift
          FROM loa_users
         WHERE stat_build IS NULL OR stat_build = ''
-        LIMIT ?`,
-      [BATCH],
+        LIMIT ${BATCH}`,
     );
     if (rows.length === 0) break;
 
