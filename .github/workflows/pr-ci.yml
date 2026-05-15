@@ -4,46 +4,127 @@ on:
   pull_request:
     branches: [main]
 
-jobs:
-  quality-gate:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+concurrency:
+  group: pr-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
-      - name: Setup Node
+jobs:
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      server: ${{ steps.filter.outputs.server }}
+      client: ${{ steps.filter.outputs.client }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            server:
+              - 'server/**'
+            client:
+              - 'client/**'
+
+  server:
+    name: Server (lint + test + build)
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: |
-            client/package-lock.json
-            server/package-lock.json
+          cache-dependency-path: server/package-lock.json
 
-      - name: Install client dependencies
-        working-directory: client
+      - name: Install dependencies
         run: npm ci
 
-      - name: Install server dependencies
-        working-directory: server
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test -- --passWithNoTests
+
+      - name: Build
+        run: npm run build
+
+  client:
+    name: Client (lint + test + build)
+    needs: changes
+    if: needs.changes.outputs.client == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies
         run: npm ci
 
-      - name: Lint client
-        working-directory: client
+      - name: Lint
         run: npm run lint
 
-      - name: Lint server
-        working-directory: server
-        run: npm run lint
+      - name: Test
+        run: npm test
 
-      - name: Run shared test harness
-        shell: pwsh
-        run: ./scripts/test.ps1
-
-      - name: Build client
-        working-directory: client
+      - name: Build
         run: npm run build
+        env:
+          NEXT_PUBLIC_NEST_API_URL: http://localhost:3001
 
-      - name: Build server
-        working-directory: server
-        run: npm run build
+  quality-gate:
+    runs-on: ubuntu-latest
+    needs: [changes, server, client]
+    if: always()
+    steps:
+      - name: Check all required jobs passed
+        run: |
+          server_needed="${{ needs.changes.outputs.server }}"
+          client_needed="${{ needs.changes.outputs.client }}"
+          server_result="${{ needs.server.result }}"
+          client_result="${{ needs.client.result }}"
+
+          failed=0
+
+          if [ "$server_needed" = "true" ] && [ "$server_result" != "success" ]; then
+            echo "❌ Server job: $server_result"
+            failed=1
+          elif [ "$server_needed" = "true" ]; then
+            echo "✅ Server job: passed"
+          else
+            echo "⏭️  Server job: skipped (no server changes)"
+          fi
+
+          if [ "$client_needed" = "true" ] && [ "$client_result" != "success" ]; then
+            echo "❌ Client job: $client_result"
+            failed=1
+          elif [ "$client_needed" = "true" ]; then
+            echo "✅ Client job: passed"
+          else
+            echo "⏭️  Client job: skipped (no client changes)"
+          fi
+
+          if [ "$failed" -eq 1 ]; then
+            echo ""
+            echo "Quality gate failed. Fix the above errors before merging."
+            exit 1
+          fi
+
+          echo ""
+          echo "Quality gate passed."
