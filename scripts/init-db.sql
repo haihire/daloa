@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS `youtube_view_snapshots` (
   `title`         VARCHAR(500)        NOT NULL DEFAULT '',
   `channel_title` VARCHAR(255)        NOT NULL DEFAULT '',
   `thumbnail_url` VARCHAR(500)        NOT NULL DEFAULT '',
-  `published_at`  DATE                NOT NULL,
+  `published_at`  DATETIME            NOT NULL,
   `duration`      VARCHAR(20)         NOT NULL DEFAULT '',
   `view_count`    INT UNSIGNED        NOT NULL DEFAULT 0,
   `recorded_date` DATE                NOT NULL,
