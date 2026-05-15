@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useState } from "react";
 
@@ -78,7 +78,11 @@ function getCategoryTone(category: string | null) {
   if (value.includes("커뮤니티") || value.includes("community")) {
     return "border-violet-200 bg-violet-50 text-violet-700";
   }
-  if (value.includes("도구") || value.includes("tool") || value.includes("계산")) {
+  if (
+    value.includes("도구") ||
+    value.includes("tool") ||
+    value.includes("계산")
+  ) {
     return "border-amber-200 bg-amber-50 text-amber-700";
   }
 
@@ -105,24 +109,24 @@ export default function AdminSitesPage() {
         setLoading(true);
       }
 
-    try {
-      const res = await fetch("/api/admin/sites", { cache: "no-store" });
-      if (!res.ok) {
+      try {
+        const res = await fetch("/api/admin/sites", { cache: "no-store" });
+        if (!res.ok) {
+          setError("목록 로드 실패");
+          return null;
+        }
+        const data = (await res.json()) as Site[];
+        setSites(data);
+        setError("");
+        return data;
+      } catch {
         setError("목록 로드 실패");
         return null;
+      } finally {
+        if (withSpinner) {
+          setLoading(false);
+        }
       }
-      const data = (await res.json()) as Site[];
-      setSites(data);
-      setError("");
-      return data;
-    } catch {
-      setError("목록 로드 실패");
-      return null;
-    } finally {
-      if (withSpinner) {
-        setLoading(false);
-      }
-    }
     },
     [],
   );
@@ -264,7 +268,8 @@ export default function AdminSitesPage() {
                 normalizeNullable(payload.category) &&
               normalizeNullable(created.description) ===
                 normalizeNullable(payload.description) &&
-              normalizeNullable(created.icon) === normalizeNullable(payload.icon)
+              normalizeNullable(created.icon) ===
+                normalizeNullable(payload.icon)
             );
           }
 
@@ -403,9 +408,7 @@ export default function AdminSitesPage() {
         </div>
         <div className="admin-stat-card">
           <p className="admin-stat-label">비활성</p>
-          <p className="admin-stat-value mt-1 text-gray-400">
-            {inactiveSites}
-          </p>
+          <p className="admin-stat-value mt-1 text-gray-400">{inactiveSites}</p>
         </div>
       </div>
 
