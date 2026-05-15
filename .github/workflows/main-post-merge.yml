@@ -3,6 +3,9 @@ name: Main Post Merge
 on:
   push:
     branches: [main]
+    paths:
+      - 'server/**'
+      - 'client/**'
 
 permissions:
   contents: read
