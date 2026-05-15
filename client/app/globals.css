@@ -75,3 +75,23 @@ body {
 .youtube-card-enter {
   animation: youtube-card-drop-in 0.36s ease-out both;
 }
+
+.admin-content-shell {
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.admin-content-panel {
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+
+.admin-content-table {
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+
+.admin-content-table thead tr {
+  background: #f9fafb;
+}

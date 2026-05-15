@@ -27,9 +27,9 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="h-screen bg-gray-950 text-gray-100 flex overflow-hidden">
+    <div className="h-screen bg-gray-50 text-gray-900 flex overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-48 bg-gray-900 border-r border-gray-800 flex flex-col">
+      <aside className="w-48 bg-gray-900 border-r border-gray-800 flex flex-col shrink-0">
         <div className="px-4 py-5 border-b border-gray-800">
           <span className="text-sm font-semibold text-indigo-400">
             다로아 관리자
@@ -61,7 +61,7 @@ export default function AdminLayout({
       </aside>
 
       {/* Main */}
-      <main className="flex-1 p-8 overflow-auto">{children}</main>
+      <main className="flex-1 p-8 overflow-auto bg-gray-50">{children}</main>
     </div>
   );
 }
