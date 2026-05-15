@@ -159,6 +159,12 @@ export class SitesService {
     return rows;
   }
 
+  /** 캐시 수동 무효화 (admin 쓰기 작업 후 호출) */
+  async invalidateCache(): Promise<void> {
+    await this.redis.del(CACHE_KEY);
+    this.logger.debug('sites: 캐시 수동 무효화');
+  }
+
   /**
    * 매일 오전 9시 — 각 사이트 상태·타이틀 점검
    * 변경 감지 시 카카오톡 알림 전송
