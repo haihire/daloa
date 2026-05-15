@@ -8,5 +8,6 @@ import { KakaoModule } from '../kakao/kakao.module';
   imports: [DbModule, KakaoModule],
   controllers: [SitesController],
   providers: [SitesService],
+  exports: [SitesService],
 })
 export class SitesModule {}

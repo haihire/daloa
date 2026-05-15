@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { revalidatePath } from "next/cache";
 
 const NEST_API = process.env.NEST_API_URL ?? "http://localhost:3001";
 
@@ -24,6 +25,7 @@ export async function PUT(
     body: JSON.stringify(body),
   });
   const data = await res.json();
+  if (res.ok) revalidatePath("/");
   return NextResponse.json(data, { status: res.status });
 }
 
@@ -38,5 +40,6 @@ export async function DELETE(
     headers: { "x-admin-session": token },
   });
   const data = await res.json();
+  if (res.ok) revalidatePath("/");
   return NextResponse.json(data, { status: res.status });
 }

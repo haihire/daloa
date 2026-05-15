@@ -6,9 +6,10 @@ import { AdminCacheController } from './admin-cache.controller';
 import { AdminCharactersController } from './admin-characters.controller';
 import { AdminGuard, AdminWriteGuard } from './admin.guard';
 import { StreamersModule } from '../streamers/streamers.module';
+import { SitesModule } from '../sites/sites.module';
 
 @Module({
-  imports: [StreamersModule],
+  imports: [StreamersModule, SitesModule],
   controllers: [
     AdminAuthController,
     AdminSitesController,
