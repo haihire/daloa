@@ -19,12 +19,12 @@ export default function AdminLoginPage() {
       });
       if (!res.ok) {
         const data = (await res.json()) as { message?: string };
-        setError(data.message ?? "로그인 실패");
+        setError(data.message ?? "로그???�패");
         return;
       }
       window.location.replace("/admin/sites");
     } catch {
-      setError("네트워크 오류가 발생했습니다");
+      setError("?�트?�크 ?�류가 발생?�습?�다");
     } finally {
       setLoading(false);
     }
@@ -40,39 +40,39 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-      <div className="w-full max-w-sm bg-gray-900 rounded-lg p-8 border border-gray-800">
-        <h1 className="text-xl font-semibold text-white mb-6">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="w-full max-w-sm bg-white rounded-xl p-8 border border-gray-200 shadow-sm">
+        <h1 className="text-xl font-semibold text-gray-900 mb-6">
           다로아 관리자 로그인
         </h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm text-gray-400 mb-1">아이디</label>
+            <label className="block text-sm text-gray-600 mb-1">아이디</label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
               autoComplete="username"
-              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+              className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">비밀번호</label>
+            <label className="block text-sm text-gray-600 mb-1">비밀번호</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               autoComplete="current-password"
-              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+              className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             />
           </div>
-          {error && <p className="text-red-400 text-sm">{error}</p>}
+          {error && <p className="text-red-500 text-sm">{error}</p>}
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded py-2 text-sm font-medium transition-colors"
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg py-2 text-sm font-medium transition-colors"
           >
             {loading ? "로그인 중..." : "로그인"}
           </button>
@@ -80,7 +80,7 @@ export default function AdminLoginPage() {
             type="button"
             disabled={loading}
             onClick={handleGuestLogin}
-            className="w-full bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-300 rounded py-2 text-sm font-medium transition-colors"
+            className="w-full border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 rounded-lg py-2 text-sm font-medium transition-colors"
           >
             게스트로 둘러보기
           </button>
