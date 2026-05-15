@@ -308,7 +308,7 @@ export class StreamersService implements OnModuleInit {
         v.title,
         v.channelTitle,
         v.thumbnailUrl,
-        v.publishedAt.slice(0, 10), // DATE 형식 (YYYY-MM-DD)
+        v.publishedAt.slice(0, 19).replace('T', ' '), // DATETIME 형식 (YYYY-MM-DD HH:MM:SS)
         v.duration,
         v.viewCount,
         today,
