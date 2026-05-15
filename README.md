@@ -16,11 +16,11 @@
 
 시스템 흐름:
 
-<a href="docs/architecture.svg?raw=true" target="_blank" rel="noopener">
+<a href="https://raw.githubusercontent.com/haihire/daloa/main/docs/architecture.svg" target="_blank" rel="noopener">
   <img src="docs/architecture.svg" alt="아키텍처 다이어그램" width="100%" />
 </a>
 
-원본 크기로 보기: [docs/architecture.svg](docs/architecture.svg?raw=true)
+원본 크기로 보기: [docs/architecture.svg](https://raw.githubusercontent.com/haihire/daloa/main/docs/architecture.svg)
 
 1. 사용자는 프론트엔드(Next.js)에서 페이지를 요청
 2. 프론트엔드는 서버 렌더링/클라이언트 요청으로 API를 호출
