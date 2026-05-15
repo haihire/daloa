@@ -49,13 +49,21 @@ async function main() {
     );
     if (rows.length === 0) break;
 
+    // 배치 전체를 CASE 문으로 한 번의 쿼리로 업데이트 (라운드트립 1회)
+    const caseClause = rows.map(() => 'WHEN ? THEN ?').join(' ');
+    const inClause = rows.map(() => '?').join(',');
+    const params: (number | string)[] = [];
     for (const r of rows) {
-      const build = classifyStatBuild(r.stat_crit, r.stat_spec, r.stat_swift);
-      await pool.execute(`UPDATE loa_users SET stat_build = ? WHERE seq = ?`, [
-        build,
+      params.push(
         r.seq,
-      ]);
+        classifyStatBuild(r.stat_crit, r.stat_spec, r.stat_swift),
+      );
     }
+    const seqParams = rows.map((r) => r.seq);
+    await pool.execute(
+      `UPDATE loa_users SET stat_build = CASE seq ${caseClause} END WHERE seq IN (${inClause})`,
+      [...params, ...seqParams],
+    );
     processed += rows.length;
     console.log(`backfilled: ${processed}`);
     if (rows.length < BATCH) break;
