@@ -16,6 +16,7 @@ import type { Pool } from 'mysql2/promise';
 import type { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { DB_POOL } from '../db/db.module';
 import { AdminGuard, AdminWriteGuard } from './admin.guard';
+import { SitesService } from '../sites/sites.service';
 
 interface SiteRow extends RowDataPacket {
   seq: number;
@@ -30,7 +31,10 @@ interface SiteRow extends RowDataPacket {
 @Controller('api/admin/sites')
 @UseGuards(AdminGuard)
 export class AdminSitesController {
-  constructor(@Inject(DB_POOL) private readonly pool: Pool) {}
+  constructor(
+    @Inject(DB_POOL) private readonly pool: Pool,
+    private readonly sitesService: SitesService,
+  ) {}
 
   @Get()
   async findAll() {
@@ -65,6 +69,7 @@ export class AdminSitesController {
         body.icon ?? null,
       ],
     );
+    await this.sitesService.invalidateCache();
     return { seq: result.insertId };
   }
 
@@ -124,6 +129,7 @@ export class AdminSitesController {
       `UPDATE loa_sites SET ${fields.join(', ')} WHERE seq = ?`,
       values as (string | number | boolean | null)[],
     );
+    await this.sitesService.invalidateCache();
     return { ok: true };
   }
 
@@ -137,6 +143,7 @@ export class AdminSitesController {
     if (!rows[0]) throw new NotFoundException('사이트를 찾을 수 없습니다');
 
     await this.pool.execute('DELETE FROM loa_sites WHERE seq = ?', [id]);
+    await this.sitesService.invalidateCache();
     return { ok: true };
   }
 }
