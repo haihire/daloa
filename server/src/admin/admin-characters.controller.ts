@@ -116,13 +116,13 @@ export class AdminCharactersController {
     );
     const total = countRows[0]?.total ?? 0;
 
-    const [rows] = await this.pool.execute<CharacterRow[]>(
+    const [rows] = await this.pool.query<CharacterRow[]>(
       `SELECT ${selectColumns}
        ${fromJoin}
        ${where}
        ORDER BY u.level DESC
-       LIMIT ? OFFSET ?`,
-      [...params, limit, offset],
+       LIMIT ${limit} OFFSET ${offset}`,
+      params,
     );
     const items = rows.map(mapRow);
     return { total, page: pageNum, pageSize: limit, items };

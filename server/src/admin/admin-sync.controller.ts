@@ -169,7 +169,7 @@ export class AdminSyncController {
           // 0) target에 master 계정으로 로그인하여 sessionId 획득
           emit('progress', {
             phase: 'login',
-            message: '원격 서버 로그인 중...',
+            message: '원격 서버 로그인 중',
             percent: 0,
           });
           const loginRes = (await callTargetRaw(
