@@ -217,10 +217,14 @@ export class AdminSyncController {
       this.config.get<string>('NODE_ENV', '').trim() !== 'production';
 
     if (syncDirection === 'local-to-prod' && !isLocalRuntime) {
-      throw new BadRequestException('local-to-prod is allowed only on local runtime');
+      throw new BadRequestException(
+        'local-to-prod is allowed only on local runtime',
+      );
     }
     if (syncDirection === 'prod-to-local' && isLocalRuntime) {
-      throw new BadRequestException('prod-to-local is allowed only on production runtime');
+      throw new BadRequestException(
+        'prod-to-local is allowed only on production runtime',
+      );
     }
 
     return new Observable<MessageEvent>((subscriber) => {
@@ -296,13 +300,12 @@ export class AdminSyncController {
             for (const rows of splitRowsByPayloadSize(values)) {
               if (cancelled) break;
 
-              const res =
-                await callTargetRaw(
-                  targetUrl,
-                  `/api/admin/sync/${table}/chunk`,
-                  remoteToken,
-                  { rows },
-                );
+              const res = await callTargetRaw(
+                targetUrl,
+                `/api/admin/sync/${table}/chunk`,
+                remoteToken,
+                { rows },
+              );
               const inserted = Number(
                 (res as { inserted?: number })?.inserted ?? 0,
               );
@@ -433,7 +436,9 @@ async function callTargetRaw(
   });
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(`target ${path} failed (${res.status}): ${text.slice(0, 300)}`);
+    throw new Error(
+      `target ${path} failed (${res.status}): ${text.slice(0, 300)}`,
+    );
   }
   try {
     return JSON.parse(text) as unknown;
