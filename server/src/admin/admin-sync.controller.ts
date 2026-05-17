@@ -66,9 +66,9 @@ const TABLE_SPECS: Record<TableKey, TableSpec> = {
 };
 
 // Keep each JSON payload below the default Nest/Express body limit.
-const SYNC_CHUNK_SIZE = 100;
-const SYNC_MAX_PAYLOAD_BYTES = 75 * 1024;
-const SYNC_CHUNK_DELAY_MS = 50;
+const SYNC_CHUNK_SIZE = 25;
+const SYNC_MAX_PAYLOAD_BYTES = 32 * 1024;
+const SYNC_CHUNK_DELAY_MS = 1000;
 
 function specOrThrow(table: string): TableSpec {
   if (!(table in TABLE_SPECS)) {
