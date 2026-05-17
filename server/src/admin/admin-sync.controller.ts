@@ -64,6 +64,7 @@ const TABLE_SPECS: Record<TableKey, TableSpec> = {
 
 // Keep each JSON payload below the default Nest/Express body limit.
 const SYNC_CHUNK_SIZE = 100;
+const SYNC_MAX_PAYLOAD_BYTES = 75 * 1024;
 
 function specOrThrow(table: string): TableSpec {
   if (!(table in TABLE_SPECS)) {
@@ -233,24 +234,33 @@ export class AdminSyncController {
             const last = chunkRows[chunkRows.length - 1];
             lastSeq = Number(last.seq);
 
-            const res = await callTargetRaw(
-              targetUrl,
-              `/api/admin/sync/${table}/chunk`,
-              remoteToken,
-              { rows: values },
-            );
-            const inserted = Number(
-              (res as { inserted?: number })?.inserted ?? 0,
-            );
-            transferred += inserted;
+            for (const rows of splitRowsByPayloadSize(values)) {
+              if (cancelled) break;
 
-            emit('progress', {
-              phase: 'chunk',
-              total,
-              transferred,
-              percent: Math.min(99, Math.floor((transferred / total) * 100)),
-              lastSeq,
-            });
+              const res = await callTargetRaw(
+                targetUrl,
+                `/api/admin/sync/${table}/chunk`,
+                remoteToken,
+                { rows },
+              );
+              const inserted = Number(
+                (res as { inserted?: number })?.inserted ?? 0,
+              );
+              transferred += inserted;
+
+              emit('progress', {
+                phase: 'chunk',
+                total,
+                transferred,
+                percent: Math.min(
+                  99,
+                  Math.floor((transferred / total) * 100),
+                ),
+                lastSeq,
+              });
+            }
+
+            if (cancelled) break;
           }
 
           if (cancelled) {
@@ -283,6 +293,34 @@ function normalize(v: unknown): unknown {
     return `${v.getFullYear()}-${pad(v.getMonth() + 1)}-${pad(v.getDate())} ${pad(v.getHours())}:${pad(v.getMinutes())}:${pad(v.getSeconds())}`;
   }
   return v;
+}
+
+function splitRowsByPayloadSize(rows: unknown[][]): unknown[][][] {
+  const batches: unknown[][][] = [];
+  let current: unknown[][] = [];
+
+  for (const row of rows) {
+    const next = [...current, row];
+    if (
+      current.length > 0 &&
+      payloadSize({ rows: next }) > SYNC_MAX_PAYLOAD_BYTES
+    ) {
+      batches.push(current);
+      current = [row];
+    } else {
+      current = next;
+    }
+  }
+
+  if (current.length > 0) {
+    batches.push(current);
+  }
+
+  return batches;
+}
+
+function payloadSize(body: unknown): number {
+  return Buffer.byteLength(JSON.stringify(body), 'utf8');
 }
 
 async function callTargetRaw(
