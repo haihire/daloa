@@ -54,7 +54,10 @@ describe('CharactersService', () => {
 
   beforeEach(async () => {
     mockPool = { execute: jest.fn() };
-    mockRedis = { get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue('OK') };
+    mockRedis = {
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn().mockResolvedValue('OK'),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [

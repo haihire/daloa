@@ -79,10 +79,16 @@ export class CharactersService {
 
   async findStatBuilds() {
     const cached = await this.redis.get(CACHE_KEY);
-    if (cached) return JSON.parse(cached) as ReturnType<typeof this._buildResult>;
+    if (cached)
+      return JSON.parse(cached) as ReturnType<typeof this._buildResult>;
 
     const result = await this._buildResult();
-    await this.redis.set(CACHE_KEY, JSON.stringify(result), 'EX', CACHE_TTL_SEC);
+    await this.redis.set(
+      CACHE_KEY,
+      JSON.stringify(result),
+      'EX',
+      CACHE_TTL_SEC,
+    );
     return result;
   }
 

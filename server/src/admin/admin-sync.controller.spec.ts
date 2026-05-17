@@ -27,7 +27,11 @@ function createController(nodeEnv = 'production') {
     login: jest.fn(),
   } as never;
 
-  const controller = new AdminSyncController(pool as never, config, authService);
+  const controller = new AdminSyncController(
+    pool as never,
+    config,
+    authService,
+  );
   return { controller, pool };
 }
 
@@ -35,8 +39,18 @@ function mockResponse(body: string) {
   return {
     ok: true,
     status: 200,
-    text: async () => body,
+    text: () => Promise.resolve(body),
   } as Response;
+}
+
+function requestUrl(input: RequestInfo | URL | undefined): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.href;
+  if (input && typeof input === 'object' && 'url' in input) {
+    const url = input.url;
+    return typeof url === 'string' ? url : '';
+  }
+  return '';
 }
 
 function collectEvents<T>(stream: Observable<T>) {
@@ -104,24 +118,33 @@ describe('AdminSyncController', () => {
 
   it('prod-to-local sends local rows to the remote target without truncating the local DB', async () => {
     const { controller, pool } = createController('production');
-    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockImplementation(
-      async (input: RequestInfo | URL) => {
-        const url = String(input);
+    const fetchSpy = jest
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation((input: RequestInfo | URL) => {
+        const url = requestUrl(input);
         if (url.endsWith('/begin')) {
-          return mockResponse('{"ok":true}') as never;
+          return Promise.resolve(mockResponse('{"ok":true}')) as never;
         }
         if (url.endsWith('/chunk')) {
-          return mockResponse('{"inserted":2}') as never;
+          return Promise.resolve(mockResponse('{"inserted":2}')) as never;
         }
-        throw new Error(`unexpected fetch: ${url}`);
-      },
-    );
-    jest.spyOn(globalThis, 'setTimeout').mockImplementation((cb: TimerHandler) => {
-      if (typeof cb === 'function') {
-        cb();
-      }
-      return 0 as never;
-    });
+        if (url.endsWith('/auth/logout')) {
+          return Promise.resolve(mockResponse('{"ok":true}')) as never;
+        }
+        return Promise.reject(
+          new Error(`unexpected fetch: ${requestUrl(input)}`),
+        ) as never;
+      });
+
+    jest
+      .spyOn(globalThis, 'setTimeout')
+      .mockImplementation((cb: TimerHandler): never => {
+        if (typeof cb === 'function') {
+          const fn = cb as () => void;
+          fn();
+        }
+        return 0 as never;
+      });
 
     pool.query
       .mockResolvedValueOnce([[{ total: 2 }]])
@@ -162,9 +185,9 @@ describe('AdminSyncController', () => {
     expect(pool.getConnection).not.toHaveBeenCalled();
     expect(pool.query).toHaveBeenCalledTimes(3);
     expect(fetchSpy).toHaveBeenCalledTimes(3);
-    expect(String(fetchSpy.mock.calls[0]?.[0])).toContain('/begin');
-    expect(String(fetchSpy.mock.calls[1]?.[0])).toContain('/chunk');
-    expect(String(fetchSpy.mock.calls[2]?.[0])).toContain('/auth/logout');
+    expect(requestUrl(fetchSpy.mock.calls[0]?.[0])).toContain('/begin');
+    expect(requestUrl(fetchSpy.mock.calls[1]?.[0])).toContain('/chunk');
+    expect(requestUrl(fetchSpy.mock.calls[2]?.[0])).toContain('/auth/logout');
     expect(events.some((event) => event.type === 'done')).toBe(true);
   });
 });
