@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/http-exception.filter';
 import { FileLoggerService } from './common/file-logger.service';
@@ -6,7 +7,14 @@ import { KakaoService } from './kakao/kakao.service';
 
 async function bootstrap() {
   const logger = new FileLoggerService();
-  const app = await NestFactory.create(AppModule, { logger });
+  const app = await NestFactory.create(AppModule, {
+    logger,
+    bodyParser: false,
+  });
+  const bodyLimit = process.env.BODY_LIMIT ?? '50mb';
+
+  app.use(json({ limit: bodyLimit }));
+  app.use(urlencoded({ extended: true, limit: bodyLimit }));
 
   // Next.js SSR 서버(localhost:3000)에서의 요청 허용
   const rawOrigin = process.env.CLIENT_ORIGIN ?? 'http://localhost:3000';
