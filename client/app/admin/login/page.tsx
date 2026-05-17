@@ -35,8 +35,10 @@ export default function AdminLoginPage() {
     await login(username, password);
   }
 
-  async function handleGuestLogin() {
-    await login("guest", "1237");
+  function handleGuestFill() {
+    setUsername("guest");
+    setPassword("");
+    setError("");
   }
 
   return (
@@ -82,10 +84,10 @@ export default function AdminLoginPage() {
           <button
             type="button"
             disabled={loading}
-            onClick={handleGuestLogin}
+            onClick={handleGuestFill}
             className="admin-btn admin-btn-secondary w-full"
           >
-            게스트로 둘러보기
+            게스트 아이디 채우기
           </button>
         </form>
       </div>

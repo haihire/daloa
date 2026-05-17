@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Phase = "idle" | "login" | "begin" | "count" | "chunk" | "done" | "error";
+type SyncDirection = "local-to-prod" | "prod-to-local";
 
 interface SyncState {
   phase: Phase;
@@ -26,12 +27,12 @@ const TABLES: { key: "users" | "sites"; label: string; desc: string }[] = [
   {
     key: "users",
     label: "loa_users (캐릭터)",
-    desc: "전체 캐릭터 데이터를 프로덕션 DB로 덮어씁니다. 기존 프로덕션 데이터는 모두 삭제됩니다.",
+    desc: "선택한 방향 기준으로 전체 데이터를 다시 동기화합니다.",
   },
   {
     key: "sites",
     label: "loa_sites (사이트 모음)",
-    desc: "전체 사이트 데이터를 프로덕션 DB로 덮어씁니다. 기존 프로덕션 데이터는 모두 삭제됩니다.",
+    desc: "선택한 방향 기준으로 전체 데이터를 다시 동기화합니다.",
   },
 ];
 
@@ -44,16 +45,31 @@ export default function SyncPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [direction, setDirection] = useState<SyncDirection>("local-to-prod");
   const [state, setState] = useState<SyncState>(INITIAL);
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const host = window.location.hostname;
+    const isLocalHost =
+      host === "localhost" || host === "127.0.0.1" || host === "::1";
+    setDirection(isLocalHost ? "local-to-prod" : "prod-to-local");
+  }, []);
 
   const running =
     state.phase !== "idle" && state.phase !== "done" && state.phase !== "error";
 
+  const directionLabel =
+    direction === "local-to-prod" ? "Local → Prod" : "Prod → Local";
+
   const handleSyncClick = (tableKey: "users" | "sites") => {
     const table = TABLES.find((item) => item.key === tableKey);
+    const actionText =
+      direction === "local-to-prod"
+        ? "프로덕션 테이블을 삭제 후 로컬 데이터로 재삽입"
+        : "로컬 테이블을 삭제 후 프로덕션 데이터로 재삽입";
     const ok = window.confirm(
-      `[${table?.label ?? tableKey}]\n\n프로덕션의 해당 테이블을 전체 삭제 후 로컬 데이터로 재삽입합니다.\n계속하시겠습니까?`,
+      `[${table?.label ?? tableKey}] (${directionLabel})\n\n${actionText} 합니다.\n계속하시겠습니까?`,
     );
     if (!ok) return;
 
@@ -65,15 +81,17 @@ export default function SyncPage() {
   async function start(sessionId: string) {
     if (!activeTable) return;
 
-    setState({ ...INITIAL, phase: "login", message: "시작 중..." });
+    setState({
+      ...INITIAL,
+      phase: "login",
+      message: `${directionLabel} 준비 중...`,
+    });
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
     try {
       const res = await fetch(
-        `/api/admin/sync/${activeTable}?sessionId=${encodeURIComponent(
-          sessionId,
-        )}`,
+        `/api/admin/sync/${activeTable}?sessionId=${encodeURIComponent(sessionId)}&direction=${encodeURIComponent(direction)}`,
         {
           method: "GET",
           signal: ctrl.signal,
@@ -106,7 +124,8 @@ export default function SyncPage() {
       setState((s) => ({
         ...s,
         phase: "error",
-        error: err instanceof Error ? err.message : "동기화 중 오류가 발생했습니다.",
+        error:
+          err instanceof Error ? err.message : "동기화 중 오류가 발생했습니다.",
       }));
     } finally {
       abortRef.current = null;
@@ -162,13 +181,39 @@ export default function SyncPage() {
     <div>
       <div className="space-y-6">
         <header>
-          <h1 className="text-2xl font-bold">서버 동기화 (Local → Prod)</h1>
+          <h1 className="text-2xl font-bold">서버 동기화</h1>
           <p className="mt-2 text-sm text-gray-400">
-            로컬 DB 내용을 프로덕션 DB로 단방향 복제합니다. 프로덕션의 해당
-            테이블은 <strong className="text-red-400">TRUNCATE</strong> 후 전체
-            재삽입됩니다.
+            동기화 방향을 선택한 뒤 실행합니다. 대상 측 테이블은{" "}
+            <strong className="text-red-400">TRUNCATE</strong> 후 전체 재삽입됩니다.
           </p>
         </header>
+
+        <div className="flex gap-2 text-sm">
+          <button
+            type="button"
+            disabled={running}
+            onClick={() => setDirection("local-to-prod")}
+            className={`rounded px-3 py-2 ${
+              direction === "local-to-prod"
+                ? "bg-blue-700 text-white"
+                : "bg-gray-800 text-gray-300"
+            }`}
+          >
+            Local → Prod
+          </button>
+          <button
+            type="button"
+            disabled={running}
+            onClick={() => setDirection("prod-to-local")}
+            className={`rounded px-3 py-2 ${
+              direction === "prod-to-local"
+                ? "bg-blue-700 text-white"
+                : "bg-gray-800 text-gray-300"
+            }`}
+          >
+            Prod → Local
+          </button>
+        </div>
 
         <div className="grid gap-4 md:grid-cols-2">
           {TABLES.map((t) => {
@@ -218,10 +263,7 @@ export default function SyncPage() {
                       {phaseLabel(tableState.phase)}
                     </span>
                     {tableState.message && (
-                      <span className="text-gray-500">
-                        {" "}
-                        · {tableState.message}
-                      </span>
+                      <span className="text-gray-500"> · {tableState.message}</span>
                     )}
                   </div>
                   {tableState.error && (
