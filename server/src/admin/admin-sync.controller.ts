@@ -75,7 +75,6 @@ function specOrThrow(table: string): TableSpec {
 }
 
 @Controller('api/admin/sync')
-// @UseGuards(AdminGuard)
 export class AdminSyncController {
   constructor(
     @Inject(DB_POOL) private readonly pool: Pool,
@@ -178,6 +177,8 @@ export class AdminSyncController {
             throw new Error('원격 관리자 세션이 없습니다');
           }
 
+          // run은 로컬 DB를 읽는 orchestrator입니다.
+          // 원격 세션은 Next의 sync/check가 EC2에서 발급받아 전달합니다.
           emit('progress', {
             phase: 'login',
             message: '원격 관리자 세션 확인 중',
