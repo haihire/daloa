@@ -174,11 +174,14 @@ export class AdminSyncController {
     const seqIndex = seqIndexOrThrow(spec);
     const afterSeq = Number(body?.afterSeq ?? 0);
     const limit = Number(body?.limit ?? SYNC_CHUNK_SIZE);
-    const safeLimit = Math.max(1, Math.min(SYNC_CHUNK_SIZE, limit));
+    const safeAfterSeq = Number.isFinite(afterSeq) ? afterSeq : 0;
+    const safeLimitInput = Number.isFinite(limit) ? limit : SYNC_CHUNK_SIZE;
+    const safeLimit = Math.max(1, Math.min(SYNC_CHUNK_SIZE, safeLimitInput));
     const colList = spec.columns.map((c) => `\`${c}\``).join(', ');
 
     const [rows] = await this.pool.query<RowDataPacket[]>(
-      `SELECT ${colList} FROM \`${spec.table}\` WHERE seq > ${afterSeq} ORDER BY seq ASC LIMIT ${safeLimit}`,
+      `SELECT ${colList} FROM \`${spec.table}\` WHERE seq > ? ORDER BY seq ASC LIMIT ?`,
+      [safeAfterSeq, safeLimit],
     );
     const values = rows.map((r) => spec.columns.map((c) => normalize(r[c])));
     const lastRow = rows[rows.length - 1];
@@ -222,6 +225,8 @@ export class AdminSyncController {
 
     return new Observable<MessageEvent>((subscriber) => {
       let cancelled = false;
+      const targetLabel =
+        syncDirection === 'local-to-prod' ? 'production' : 'local';
 
       const emit = (
         type: 'progress' | 'done' | 'error',
@@ -241,37 +246,24 @@ export class AdminSyncController {
 
           emit('progress', {
             phase: 'login',
-            message:
-              syncDirection === 'local-to-prod'
-                ? 'validating remote session'
-                : 'validating remote source session',
+            message: 'validating remote session',
             percent: 0,
           });
 
           emit('progress', {
             phase: 'begin',
-            message:
-              syncDirection === 'local-to-prod'
-                ? `${spec.table} remote TRUNCATE`
-                : `${spec.table} local TRUNCATE`,
+            message: `${spec.table} ${targetLabel} TRUNCATE`,
             percent: 0,
           });
 
-          if (syncDirection === 'local-to-prod') {
-            await callTargetRaw(
-              targetUrl,
-              `/api/admin/sync/${table}/begin`,
-              remoteToken,
-              {},
-            );
-          } else {
-            await this.begin(table);
-          }
+          await callTargetRaw(
+            targetUrl,
+            `/api/admin/sync/${table}/begin`,
+            remoteToken,
+            {},
+          );
 
-          const total =
-            syncDirection === 'local-to-prod'
-              ? await readLocalCount(this.pool, spec.table)
-              : await readRemoteCount(targetUrl, table, remoteToken);
+          const total = await readLocalCount(this.pool, spec.table);
 
           emit('progress', {
             phase: 'count',
@@ -290,17 +282,12 @@ export class AdminSyncController {
           let lastSeq = 0;
 
           while (!cancelled) {
-            const values =
-              syncDirection === 'local-to-prod'
-                ? await readLocalChunk(this.pool, spec, lastSeq, SYNC_CHUNK_SIZE)
-                : await readRemoteChunk(
-                    targetUrl,
-                    table,
-                    spec,
-                    remoteToken,
-                    lastSeq,
-                    SYNC_CHUNK_SIZE,
-                  );
+            const values = await readLocalChunk(
+              this.pool,
+              spec,
+              lastSeq,
+              SYNC_CHUNK_SIZE,
+            );
 
             if (values.length === 0) break;
             const last = values[values.length - 1];
@@ -310,14 +297,12 @@ export class AdminSyncController {
               if (cancelled) break;
 
               const res =
-                syncDirection === 'local-to-prod'
-                  ? await callTargetRaw(
-                      targetUrl,
-                      `/api/admin/sync/${table}/chunk`,
-                      remoteToken,
-                      { rows },
-                    )
-                  : await this.chunk(table, { rows });
+                await callTargetRaw(
+                  targetUrl,
+                  `/api/admin/sync/${table}/chunk`,
+                  remoteToken,
+                  { rows },
+                );
               const inserted = Number(
                 (res as { inserted?: number })?.inserted ?? 0,
               );
@@ -383,41 +368,10 @@ async function readLocalChunk(
 ): Promise<unknown[][]> {
   const colList = spec.columns.map((c) => `\`${c}\``).join(', ');
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT ${colList} FROM \`${spec.table}\` WHERE seq > ${lastSeq} ORDER BY seq ASC LIMIT ${limit}`,
+    `SELECT ${colList} FROM \`${spec.table}\` WHERE seq > ? ORDER BY seq ASC LIMIT ?`,
+    [lastSeq, limit],
   );
   return rows.map((r) => spec.columns.map((c) => normalize(r[c])));
-}
-
-async function readRemoteCount(
-  baseUrl: string,
-  table: string,
-  token: string,
-): Promise<number> {
-  const res = await callTargetRaw(baseUrl, `/api/admin/sync/${table}/count`, token, {});
-  return Number((res as { total?: number })?.total ?? 0);
-}
-
-async function readRemoteChunk(
-  baseUrl: string,
-  table: string,
-  spec: TableSpec,
-  token: string,
-  lastSeq: number,
-  limit: number,
-): Promise<unknown[][]> {
-  const res = await callTargetRaw(
-    baseUrl,
-    `/api/admin/sync/${table}/chunk-read`,
-    token,
-    { afterSeq: lastSeq, limit },
-  );
-  const rows = Array.isArray((res as { rows?: unknown[][] })?.rows)
-    ? ((res as { rows: unknown[][] }).rows as unknown[][])
-    : [];
-
-  return rows.map((row) =>
-    spec.columns.map((_, idx) => (Array.isArray(row) ? row[idx] ?? null : null)),
-  );
 }
 
 function normalize(v: unknown): unknown {
