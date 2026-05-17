@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { buildGuestNotice, useAdminRole } from "@/lib/admin-role";
 
 interface Site {
   seq: number;
@@ -93,7 +94,10 @@ export default function AdminSitesPage() {
   const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [accessNotice, setAccessNotice] = useState("");
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
+  const role = useAdminRole();
+  const isGuest = role === "guest";
 
   // 추가/수정 폼
   const [showForm, setShowForm] = useState(false);
@@ -101,6 +105,12 @@ export default function AdminSitesPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+
+  function requireMaster(action: string) {
+    if (!isGuest) return true;
+    setAccessNotice(buildGuestNotice(action));
+    return false;
+  }
 
   const load = useCallback(
     async (options?: { withSpinner?: boolean }): Promise<Site[] | null> => {
@@ -136,6 +146,7 @@ export default function AdminSitesPage() {
   }, [load]);
 
   function startEdit(site: Site) {
+    if (!requireMaster("사이트 수정")) return;
     setShowForm(true);
     setEditingId(site.seq);
     setForm({
@@ -206,6 +217,7 @@ export default function AdminSitesPage() {
   }
 
   async function handleSave() {
+    if (!requireMaster("사이트 추가/수정")) return;
     if (!form.name || !form.href) {
       setFormError("이름과 URL은 필수입니다");
       return;
@@ -299,6 +311,7 @@ export default function AdminSitesPage() {
   }
 
   async function handleToggleActive(site: Site) {
+    if (!requireMaster("사이트 활성 상태 변경")) return;
     const nextActive = site.is_active === 0;
 
     await runWithBusyMessage("활성 상태 반영 확인 중입니다...", async () => {
@@ -326,6 +339,7 @@ export default function AdminSitesPage() {
   }
 
   async function handleDelete(seq: number) {
+    if (!requireMaster("사이트 삭제")) return;
     if (!confirm("정말 삭제하시겠습니까?")) return;
 
     await runWithBusyMessage("삭제 반영 확인 중입니다...", async () => {
@@ -349,6 +363,7 @@ export default function AdminSitesPage() {
   const [purging, setPurging] = useState(false);
 
   async function handlePurge() {
+    if (!requireMaster("사이트 캐시 새로고침")) return;
     setPurging(true);
     await purgeSitesCache();
     setPurging(false);
@@ -369,6 +384,11 @@ export default function AdminSitesPage() {
           <p className="admin-page-subtitle mt-1">
             등록된 사이트 상태를 관리하고 즉시 반영 여부를 확인합니다.
           </p>
+          {accessNotice && (
+            <pre className="mt-3 whitespace-pre-wrap rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              {accessNotice}
+            </pre>
+          )}
         </div>
         <div className="flex gap-2">
           <button
@@ -381,6 +401,7 @@ export default function AdminSitesPage() {
           </button>
           <button
             onClick={() => {
+              if (!requireMaster("사이트 추가")) return;
               setShowForm(true);
               setEditingId(null);
               setForm(EMPTY_FORM);

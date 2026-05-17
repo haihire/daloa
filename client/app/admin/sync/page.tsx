@@ -1,8 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { buildGuestNotice, useAdminRole } from "@/lib/admin-role";
 
 type Phase = "idle" | "login" | "begin" | "count" | "chunk" | "done" | "error";
+type SyncDirection = "local-to-prod" | "prod-to-local";
 
 interface SyncState {
   phase: Phase;
@@ -26,34 +28,57 @@ const TABLES: { key: "users" | "sites"; label: string; desc: string }[] = [
   {
     key: "users",
     label: "loa_users (캐릭터)",
-    desc: "전체 캐릭터 데이터를 프로덕션 DB로 덮어씁니다. 기존 프로덕션 데이터는 모두 삭제됩니다.",
+    desc: "선택한 방향 기준으로 전체 데이터를 다시 동기화합니다.",
   },
   {
     key: "sites",
     label: "loa_sites (사이트 모음)",
-    desc: "전체 사이트 데이터를 프로덕션 DB로 덮어씁니다. 기존 프로덕션 데이터는 모두 삭제됩니다.",
+    desc: "선택한 방향 기준으로 전체 데이터를 다시 동기화합니다.",
   },
 ];
 
 export default function SyncPage() {
   const [showForm, setShowForm] = useState(false);
-  const [activeTable, setActiveTable] = useState<"users" | "sites" | null>(
-    null,
-  );
+  const [activeTable, setActiveTable] = useState<"users" | "sites" | null>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [direction, setDirection] = useState<SyncDirection>("local-to-prod");
+  const [accessNotice, setAccessNotice] = useState("");
   const [state, setState] = useState<SyncState>(INITIAL);
   const abortRef = useRef<AbortController | null>(null);
+  const role = useAdminRole();
+  const isGuest = role === "guest";
+
+  useEffect(() => {
+    const host = window.location.hostname;
+    const isLocalHost =
+      host === "localhost" || host === "127.0.0.1" || host === "::1";
+    setDirection(isLocalHost ? "local-to-prod" : "prod-to-local");
+  }, []);
 
   const running =
     state.phase !== "idle" && state.phase !== "done" && state.phase !== "error";
 
+  const directionLabel =
+    direction === "local-to-prod" ? "프로덕션으로 동기화" : "로컬과 동기화";
+
+  function requireMaster(action: string) {
+    if (!isGuest) return true;
+    setAccessNotice(buildGuestNotice(action));
+    return false;
+  }
+
   const handleSyncClick = (tableKey: "users" | "sites") => {
+    if (!requireMaster("DB 동기화")) return;
     const table = TABLES.find((item) => item.key === tableKey);
+    const actionText =
+      direction === "local-to-prod"
+        ? "프로덕션 테이블을 비우고 로컬 데이터를 복사합니다."
+        : "로컬 테이블을 비우고 프로덕션 데이터를 복사합니다.";
     const ok = window.confirm(
-      `[${table?.label ?? tableKey}]\n\n프로덕션의 해당 테이블을 전체 삭제 후 로컬 데이터로 재삽입합니다.\n계속하시겠습니까?`,
+      `[${table?.label ?? tableKey}] (${directionLabel})\n\n${actionText}\n계속하시겠습니까?`,
     );
     if (!ok) return;
 
@@ -65,15 +90,17 @@ export default function SyncPage() {
   async function start(sessionId: string) {
     if (!activeTable) return;
 
-    setState({ ...INITIAL, phase: "login", message: "시작 중..." });
+    setState({
+      ...INITIAL,
+      phase: "login",
+      message: `${directionLabel} 준비 중...`,
+    });
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
     try {
       const res = await fetch(
-        `/api/admin/sync/${activeTable}?sessionId=${encodeURIComponent(
-          sessionId,
-        )}`,
+        `/api/admin/sync/${activeTable}?sessionId=${encodeURIComponent(sessionId)}&direction=${encodeURIComponent(direction)}`,
         {
           method: "GET",
           signal: ctrl.signal,
@@ -106,7 +133,10 @@ export default function SyncPage() {
       setState((s) => ({
         ...s,
         phase: "error",
-        error: err instanceof Error ? err.message : "동기화 중 오류가 발생했습니다.",
+        error:
+          err instanceof Error
+            ? err.message
+            : "동기화 중 오류가 발생했습니다.",
       }));
     } finally {
       abortRef.current = null;
@@ -115,7 +145,7 @@ export default function SyncPage() {
 
   function cancel() {
     abortRef.current?.abort();
-    setState((s) => ({ ...s, phase: "error", error: "사용자가 취소함" }));
+    setState((s) => ({ ...s, phase: "error", error: "사용자가 취소했습니다." }));
   }
 
   async function syncCheck(u: string, p: string) {
@@ -146,7 +176,9 @@ export default function SyncPage() {
       await start(data.sessionId);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "원격 관리자 인증 중 오류가 발생했습니다.",
+        err instanceof Error
+          ? err.message
+          : "원격 관리자 인증 중 오류가 발생했습니다.",
       );
     } finally {
       setLoading(false);
@@ -162,13 +194,44 @@ export default function SyncPage() {
     <div>
       <div className="space-y-6">
         <header>
-          <h1 className="text-2xl font-bold">서버 동기화 (Local → Prod)</h1>
+          <h1 className="text-2xl font-bold">서버 동기화</h1>
           <p className="mt-2 text-sm text-gray-400">
-            로컬 DB 내용을 프로덕션 DB로 단방향 복제합니다. 프로덕션의 해당
-            테이블은 <strong className="text-red-400">TRUNCATE</strong> 후 전체
-            재삽입됩니다.
+            동기화 방향을 선택한 뒤 실행합니다. 대상 테이블은{" "}
+            <strong className="text-red-400">TRUNCATE</strong> 후 전체 복사됩니다.
           </p>
+          {accessNotice && (
+            <pre className="mt-3 whitespace-pre-wrap rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              {accessNotice}
+            </pre>
+          )}
         </header>
+
+        <div className="flex gap-2 text-sm">
+          <button
+            type="button"
+            disabled={running}
+            onClick={() => setDirection("local-to-prod")}
+            className={`rounded px-3 py-2 ${
+              direction === "local-to-prod"
+                ? "bg-blue-700 text-white"
+                : "bg-gray-800 text-gray-300"
+            }`}
+          >
+            프로덕션으로 동기화
+          </button>
+          <button
+            type="button"
+            disabled={running}
+            onClick={() => setDirection("prod-to-local")}
+            className={`rounded px-3 py-2 ${
+              direction === "prod-to-local"
+                ? "bg-blue-700 text-white"
+                : "bg-gray-800 text-gray-300"
+            }`}
+          >
+            로컬과 동기화
+          </button>
+        </div>
 
         <div className="grid gap-4 md:grid-cols-2">
           {TABLES.map((t) => {
@@ -178,7 +241,7 @@ export default function SyncPage() {
                 className="rounded-xl border border-gray-700 bg-gray-900 p-5"
                 key={t.key}
               >
-                <h2 className="text-lg font-semibold">{t.label}</h2>
+                <h2 className="text-lg font-semibold text-gray-100">{t.label}</h2>
                 <p className="mt-1 text-xs text-gray-400">{t.desc}</p>
 
                 <div className="mt-4 space-y-2">
@@ -218,10 +281,7 @@ export default function SyncPage() {
                       {phaseLabel(tableState.phase)}
                     </span>
                     {tableState.message && (
-                      <span className="text-gray-500">
-                        {" "}
-                        · {tableState.message}
-                      </span>
+                      <span className="text-gray-500"> · {tableState.message}</span>
                     )}
                   </div>
                   {tableState.error && (
@@ -313,11 +373,11 @@ function phaseLabel(p: Phase): string {
     case "idle":
       return "대기";
     case "login":
-      return "원격 로그인";
+      return "원격 관리자 인증";
     case "begin":
       return "TRUNCATE";
     case "count":
-      return "카운트 조회";
+      return "건수 조회";
     case "chunk":
       return "전송 중";
     case "done":
@@ -352,16 +412,14 @@ function handleEvent(
     if (evt === "progress") {
       if (typeof data.phase === "string") next.phase = data.phase as Phase;
       if (typeof data.total === "number") next.total = data.total;
-      if (typeof data.transferred === "number")
-        next.transferred = data.transferred;
+      if (typeof data.transferred === "number") next.transferred = data.transferred;
       if (typeof data.percent === "number") next.percent = data.percent;
       if (typeof data.message === "string") next.message = data.message;
     } else if (evt === "done") {
       next.phase = "done";
       next.percent = 100;
       if (typeof data.total === "number") next.total = data.total;
-      if (typeof data.transferred === "number")
-        next.transferred = data.transferred;
+      if (typeof data.transferred === "number") next.transferred = data.transferred;
       next.message = "동기화 완료";
     } else if (evt === "error") {
       next.phase = "error";

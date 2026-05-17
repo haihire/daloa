@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AdminLoginPage from "./page";
 
 describe("AdminLoginPage", () => {
@@ -16,6 +16,7 @@ describe("AdminLoginPage", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("로그인 성공 시 window.location.replace로 /admin/sites 이동", async () => {
@@ -35,8 +36,6 @@ describe("AdminLoginPage", () => {
     await waitFor(() => {
       expect(replaceSpy).toHaveBeenCalledWith("/admin/sites");
     });
-
-    vi.unstubAllGlobals();
   });
 
   it("로그인 실패 시 에러 메시지 표시", async () => {
@@ -59,23 +58,19 @@ describe("AdminLoginPage", () => {
     await waitFor(() => {
       expect(screen.getByText("인증 실패")).toBeTruthy();
     });
-
-    vi.unstubAllGlobals();
   });
 
-  it("게스트 로그인 성공 시 window.location.replace로 /admin/sites 이동", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }),
+  it("게스트 아이디 채우기 버튼 클릭 시 아이디만 guest로 채워짐", async () => {
+    render(<AdminLoginPage />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "게스트 아이디 채우기" }),
     );
 
-    render(<AdminLoginPage />);
-    await userEvent.click(screen.getByRole("button", { name: /게스트/ }));
-
-    await waitFor(() => {
-      expect(replaceSpy).toHaveBeenCalledWith("/admin/sites");
-    });
-
-    vi.unstubAllGlobals();
+    expect(screen.getByRole("textbox")).toHaveValue("guest");
+    const passwordInput = document.querySelector<HTMLInputElement>(
+      'input[type="password"]',
+    )!;
+    expect(passwordInput).toHaveValue("");
   });
 });

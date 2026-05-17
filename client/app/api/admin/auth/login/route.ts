@@ -19,18 +19,26 @@ export async function POST(req: Request) {
 
   if (!upstream.ok) {
     return NextResponse.json(
-      { message: data.message ?? "인증 실패" },
+      { message: data.message ?? "인증에 실패했습니다." },
       { status: upstream.status },
     );
   }
 
   const res = NextResponse.json({ role: data.role });
-  res.cookies.set("admin_token", data.sessionId ?? "", {
-    httpOnly: true,
+  const cookieBase = {
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: "lax" as const,
     path: "/",
-    maxAge: 60 * 60 * 8, // 8시간
+    maxAge: 60 * 60 * 8,
+  };
+
+  res.cookies.set("admin_token", data.sessionId ?? "", {
+    ...cookieBase,
+    httpOnly: true,
+  });
+  res.cookies.set("admin_role", data.role ?? "", {
+    ...cookieBase,
+    httpOnly: false,
   });
   return res;
 }
