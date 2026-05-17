@@ -62,7 +62,8 @@ const TABLE_SPECS: Record<TableKey, TableSpec> = {
   },
 };
 
-const CHUNK_SIZE = 1000;
+// Keep each JSON payload below the default Nest/Express body limit.
+const SYNC_CHUNK_SIZE = 100;
 
 function specOrThrow(table: string): TableSpec {
   if (!(table in TABLE_SPECS)) {
@@ -221,7 +222,7 @@ export class AdminSyncController {
 
           while (!cancelled) {
             const [chunkRows] = await this.pool.query<RowDataPacket[]>(
-              `SELECT ${colList} FROM \`${spec.table}\` WHERE seq > ${lastSeq} ORDER BY seq ASC LIMIT ${CHUNK_SIZE}`,
+              `SELECT ${colList} FROM \`${spec.table}\` WHERE seq > ${lastSeq} ORDER BY seq ASC LIMIT ${SYNC_CHUNK_SIZE}`,
             );
             if (chunkRows.length === 0) break;
 
