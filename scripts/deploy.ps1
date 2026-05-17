@@ -3,11 +3,21 @@
 # 효과: git pull → dist 삭제 → npm run build → Nest/Nginx 재생성 → Redis 캐시 플러시
 
 param(
-    [string]$KeyPath = "C:\Users\tjdtn\Desktop\내가생각하는미래\개발\로아사이트 모음\daloa-key.pem",
-    [string]$Host    = "ubuntu@3.39.239.9",
-    [switch]$FlushRedis,    # -FlushRedis 시 Redis 캐시 전체 삭제
-    [switch]$Full           # -Full 시 MySQL/Redis/Nginx 포함 전체 재시작
+    [string]$KeyPath = "",
+    [string]$SshHost = "ubuntu@3.39.239.9",
+    [switch]$FlushRedis,
+    [switch]$Full
 )
+
+$Root = Split-Path -Parent $PSScriptRoot
+if (-not $KeyPath) {
+    $KeyPath = Join-Path $Root "daloa-key.pem"
+}
+
+if (-not (Test-Path -LiteralPath $KeyPath)) {
+    Write-Host "[deploy] SSH key not found: $KeyPath"
+    exit 1
+}
 
 Write-Host ""
 Write-Host "========================================"
@@ -40,7 +50,7 @@ $remoteCmd = $commands -join " && "
 Write-Host "[deploy] SSH 접속 + 배포 시작..."
 Write-Host ""
 
-ssh -i $KeyPath -o StrictHostKeyChecking=no $Host $remoteCmd
+ssh -i "$KeyPath" -o StrictHostKeyChecking=no $SshHost $remoteCmd
 
 $exitCode = $LASTEXITCODE
 
