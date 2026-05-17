@@ -36,59 +36,40 @@ const TABLES: { key: "users" | "sites"; label: string; desc: string }[] = [
 ];
 
 export default function SyncPage() {
-  return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold">서버 동기화 (Local → Prod)</h1>
-        <p className="mt-2 text-sm text-gray-400">
-          로컬 DB 내용을 프로덕션 DB로 단방향 복제합니다. 프로덕션의 해당
-          테이블은 <strong className="text-red-400">TRUNCATE</strong> 후 전체
-          재삽입됩니다.
-        </p>
-      </header>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        {TABLES.map((t) => (
-          <SyncCard key={t.key} table={t.key} label={t.label} desc={t.desc} />
-        ))}
-      </div>
-    </div>
+  const [showForm, setShowForm] = useState(false);
+  const [activeTable, setActiveTable] = useState<"users" | "sites" | null>(
+    null,
   );
-}
 
-function SyncCard({
-  table,
-  label,
-  desc,
-}: {
-  table: "users" | "sites";
-  label: string;
-  desc: string;
-}) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
   const [state, setState] = useState<SyncState>(INITIAL);
   const abortRef = useRef<AbortController | null>(null);
 
   const running =
-    state.phase !== "idle" &&
-    state.phase !== "done" &&
-    state.phase !== "error";
+    state.phase !== "idle" && state.phase !== "done" && state.phase !== "error";
 
-  async function start() {
-    const ok = window.confirm(
-      `[${label}]\n\n프로덕션의 해당 테이블을 전체 삭제 후 로컬 데이터로 재삽입합니다.\n계속하시겠습니까?`,
-    );
-    if (!ok) return;
+  async function start(sessionId: string) {
+    if (!activeTable) return;
 
     setState({ ...INITIAL, phase: "login", message: "시작 중..." });
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
     try {
-      const res = await fetch(`/api/admin/sync/${table}`, {
-        method: "GET",
-        signal: ctrl.signal,
-        headers: { accept: "text/event-stream" },
-      });
+      const res = await fetch(
+        `/api/admin/sync/${activeTable}?sessionId=${encodeURIComponent(
+          sessionId,
+        )}`,
+        {
+          method: "GET",
+          signal: ctrl.signal,
+          headers: { accept: "text/event-stream" },
+        },
+      );
       if (!res.ok || !res.body) {
         const txt = await res.text().catch(() => "");
         throw new Error(`연결 실패 (${res.status}): ${txt}`);
@@ -122,83 +103,193 @@ function SyncCard({
     }
   }
 
+  const handleSyncClick = (tableKey: "users" | "sites") => {
+    const table = TABLES.find((item) => item.key === tableKey);
+    const ok = window.confirm(
+      `[${table?.label ?? tableKey}]\n\n프로덕션의 해당 테이블을 전체 삭제 후 로컬 데이터로 재삽입합니다.\n계속하시겠습니까?`,
+    );
+    if (!ok) return;
+
+    setActiveTable(tableKey);
+    setError("");
+    setShowForm(true);
+  };
+
   function cancel() {
     abortRef.current?.abort();
     setState((s) => ({ ...s, phase: "error", error: "사용자가 취소함" }));
   }
+  async function syncCheck(u: string, p: string) {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/sync/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: u, password: p }),
+      });
+      if (!res.ok) {
+        const data = (await res.json()) as { message?: string };
+        setError(data.message ?? "로그인 실패");
+        return;
+      }
 
+      const data = (await res.json()) as { sessionId: string; role: string };
+      if (!data.sessionId) {
+        setError("인증 세션 정보가 없습니다.");
+        return;
+      }
+      setShowForm(false);
+      await start(data.sessionId);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "원격 관리자 인증 중 오류가 발생했습니다.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    await syncCheck(username, password);
+  }
   return (
-    <section className="rounded-xl border border-gray-700 bg-gray-900 p-5">
-      <h2 className="text-lg font-semibold">{label}</h2>
-      <p className="mt-1 text-xs text-gray-400">{desc}</p>
+    <div>
+      <div className="space-y-6">
+        <header>
+          <h1 className="text-2xl font-bold">서버 동기화 (Local → Prod)</h1>
+          <p className="mt-2 text-sm text-gray-400">
+            로컬 DB 내용을 프로덕션 DB로 단방향 복제합니다. 프로덕션의 해당
+            테이블은 <strong className="text-red-400">TRUNCATE</strong> 후 전체
+            재삽입됩니다.
+          </p>
+        </header>
 
-      <div className="mt-4 space-y-2">
-        <div className="flex justify-between text-xs text-gray-300">
-          <span>
-            진행:{" "}
-            <strong>
-              {state.transferred.toLocaleString()} /{" "}
-              {state.total.toLocaleString()}
-            </strong>
-          </span>
-          <span>{state.percent}%</span>
+        <div className="grid gap-4 md:grid-cols-2">
+          {TABLES.map((t) => {
+            const isActive = activeTable === t.key;
+            const tableState = isActive ? state : INITIAL;
+            return (
+              <section
+                className="rounded-xl border border-gray-700 bg-gray-900 p-5"
+                key={t.key}
+              >
+                <h2 className="text-lg font-semibold white">{t.label}</h2>
+                <p className="mt-1 text-xs text-gray-400">{t.desc}</p>
+
+                <div className="mt-4 space-y-2">
+                  <div className="flex justify-between text-xs text-gray-300">
+                    <span>
+                      진행:{" "}
+                      <strong>
+                        {tableState.transferred.toLocaleString()} /{" "}
+                        {tableState.total.toLocaleString()}
+                      </strong>
+                    </span>
+                    <span>{tableState.percent}%</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded bg-gray-700">
+                    <div
+                      className={`h-full transition-all ${
+                        tableState.phase === "error"
+                          ? "bg-red-500"
+                          : tableState.phase === "done"
+                            ? "bg-green-500"
+                            : "bg-blue-500"
+                      }`}
+                      style={{ width: `${tableState.percent}%` }}
+                    />
+                  </div>
+                  <div className="text-xs">
+                    상태:{" "}
+                    <span
+                      className={
+                        tableState.phase === "error"
+                          ? "text-red-400"
+                          : tableState.phase === "done"
+                            ? "text-green-400"
+                            : "text-gray-300"
+                      }
+                    >
+                      {phaseLabel(tableState.phase)}
+                    </span>
+                    {tableState.message && (
+                      <span className="text-gray-500">
+                        {" "}
+                        · {tableState.message}
+                      </span>
+                    )}
+                  </div>
+                  {tableState.error && (
+                    <pre className="whitespace-pre-wrap rounded bg-red-950/40 p-2 text-xs text-red-300">
+                      {tableState.error}
+                    </pre>
+                  )}
+                </div>
+
+                <div className="mt-4 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSyncClick(t.key)}
+                    disabled={running}
+                    className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-gray-700"
+                  >
+                    {running ? "동기화 중..." : "서버와 동기화"}
+                  </button>
+                  {running && (
+                    <button
+                      type="button"
+                      onClick={cancel}
+                      className="rounded border border-gray-600 px-4 py-2 text-sm text-gray-300 hover:bg-gray-800"
+                    >
+                      취소
+                    </button>
+                  )}
+                </div>
+              </section>
+            );
+          })}
         </div>
-        <div className="h-2 w-full overflow-hidden rounded bg-gray-700">
-          <div
-            className={`h-full transition-all ${
-              state.phase === "error"
-                ? "bg-red-500"
-                : state.phase === "done"
-                  ? "bg-green-500"
-                  : "bg-blue-500"
-            }`}
-            style={{ width: `${state.percent}%` }}
-          />
-        </div>
-        <div className="text-xs">
-          상태:{" "}
-          <span
-            className={
-              state.phase === "error"
-                ? "text-red-400"
-                : state.phase === "done"
-                  ? "text-green-400"
-                  : "text-gray-300"
-            }
-          >
-            {phaseLabel(state.phase)}
-          </span>
-          {state.message && (
-            <span className="text-gray-500"> · {state.message}</span>
-          )}
-        </div>
-        {state.error && (
-          <pre className="whitespace-pre-wrap rounded bg-red-950/40 p-2 text-xs text-red-300">
-            {state.error}
-          </pre>
+
+        {/* 모달 */}
+        {showForm && (
+          <div className="admin-modal w-full max-w-2xl p-6">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="admin-label">아이디</label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                  autoComplete="username"
+                  className="admin-input"
+                />
+              </div>
+              <div>
+                <label className="admin-label">비밀번호</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                  className="admin-input"
+                />
+              </div>
+              {error && <p className="text-red-500 text-sm">{error}</p>}
+              <button
+                type="submit"
+                disabled={loading}
+                className="admin-btn admin-btn-primary w-full"
+              >
+                {loading ? "로그인 중..." : "로그인"}
+              </button>
+            </form>
+          </div>
         )}
       </div>
-
-      <div className="mt-4 flex gap-2">
-        <button
-          type="button"
-          onClick={start}
-          disabled={running}
-          className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-gray-700"
-        >
-          {running ? "동기화 중..." : "서버와 동기화"}
-        </button>
-        {running && (
-          <button
-            type="button"
-            onClick={cancel}
-            className="rounded border border-gray-600 px-4 py-2 text-sm text-gray-300 hover:bg-gray-800"
-          >
-            취소
-          </button>
-        )}
-      </div>
-    </section>
+    </div>
   );
 }
 

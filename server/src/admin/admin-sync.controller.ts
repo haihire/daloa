@@ -9,13 +9,16 @@ import {
   BadRequestException,
   Inject,
   MessageEvent,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import type { Pool } from 'mysql2/promise';
 import type { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { Observable } from 'rxjs';
 import { ConfigService } from '@nestjs/config';
 import { DB_POOL } from '../db/db.module';
-import { AdminGuard, AdminWriteGuard, RequireOwner } from './admin.guard';
+import { AdminWriteGuard, RequireOwner } from './admin.guard';
+import { AdminAuthService } from './admin-auth.service';
 
 type TableKey = 'users' | 'sites';
 
@@ -72,11 +75,12 @@ function specOrThrow(table: string): TableSpec {
 }
 
 @Controller('api/admin/sync')
-@UseGuards(AdminGuard)
+// @UseGuards(AdminGuard)
 export class AdminSyncController {
   constructor(
     @Inject(DB_POOL) private readonly pool: Pool,
     private readonly config: ConfigService,
+    private readonly authService: AdminAuthService,
   ) {}
 
   /** target 측: 동기화 시작 - TRUNCATE */
@@ -132,18 +136,26 @@ export class AdminSyncController {
     }
   }
 
+  @Post('check')
+  @HttpCode(HttpStatus.OK)
+  async sync_login_check(
+    @Body() body: { username?: string; password?: string },
+  ) {
+    if (!body.username || !body.password) {
+      throw new BadRequestException('username과 password는 필수입니다');
+    }
+    return this.authService.login(body.username, body.password);
+  }
+
   /** source/orchestrator 측: 로컬 DB → 원격 target API로 SSE 진행률 스트림 */
   @Sse(':table/run')
-  @RequireOwner()
   run(
     @Param('table') table: string,
     @Query('sessionId') sessionId?: string,
   ): Observable<MessageEvent> {
     const spec = specOrThrow(table);
     const targetUrl = this.config.get<string>('SYNC_TARGET_API_URL', '').trim();
-    const targetPassword = this.config
-      .get<string>('SYNC_TARGET_ADMIN_PASSWORD', '')
-      .trim();
+    const remoteToken = sessionId?.trim() ?? '';
 
     return new Observable<MessageEvent>((subscriber) => {
       let cancelled = false;
@@ -152,36 +164,25 @@ export class AdminSyncController {
         type: 'progress' | 'done' | 'error',
         data: Record<string, unknown>,
       ) => {
-        subscriber.next({ type, data: JSON.stringify(data) });
+        subscriber.next({ type, data });
       };
 
       void (async () => {
         try {
-          if (!targetUrl || !targetPassword) {
+          if (!targetUrl) {
             throw new Error(
-              'SYNC_TARGET_API_URL / SYNC_TARGET_ADMIN_PASSWORD 환경변수가 설정되지 않았습니다',
+              'SYNC_TARGET_API_URL 환경변수가 설정되지 않았습니다',
             );
           }
-          if (sessionId && sessionId !== '') {
-            // session id is already validated by guard; we keep param for future use
+          if (!remoteToken) {
+            throw new Error('원격 관리자 세션이 없습니다');
           }
 
-          // 0) target에 master 계정으로 로그인하여 sessionId 획득
           emit('progress', {
             phase: 'login',
-            message: '원격 서버 로그인 중',
+            message: '원격 관리자 세션 확인 중',
             percent: 0,
           });
-          const loginRes = (await callTargetRaw(
-            targetUrl,
-            '/api/admin/auth/login',
-            '',
-            { username: 'master', password: targetPassword },
-          )) as { sessionId?: string };
-          const remoteToken = loginRes?.sessionId ?? '';
-          if (!remoteToken) {
-            throw new Error('원격 로그인 실패: sessionId 없음');
-          }
 
           // 1) target 측 begin (TRUNCATE)
           emit('progress', {
@@ -264,6 +265,15 @@ export class AdminSyncController {
           const msg = err instanceof Error ? err.message : String(err);
           emit('error', { message: msg });
           subscriber.complete();
+        } finally {
+          if (targetUrl && remoteToken) {
+            await callTargetRaw(
+              targetUrl,
+              '/api/admin/auth/logout',
+              remoteToken,
+              {},
+            ).catch(() => undefined);
+          }
         }
       })();
 

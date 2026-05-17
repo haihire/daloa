@@ -29,7 +29,7 @@ interface AdminUserRow extends RowDataPacket {
   role: AdminRole;
 }
 
-const SESSION_TTL = 60 * 60 * 8; // 8시간
+const SESSION_TTL = 60 * 60 * 1; // 1시간
 const SESSION_PREFIX = 'admin:session:';
 
 @Injectable()
