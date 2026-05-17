@@ -77,6 +77,14 @@ function specOrThrow(table: string): TableSpec {
   return TABLE_SPECS[table as TableKey];
 }
 
+function seqIndexOrThrow(spec: TableSpec): number {
+  const seqIndex = spec.columns.indexOf('seq');
+  if (seqIndex === -1) {
+    throw new BadRequestException(`seq column not found for ${spec.table}`);
+  }
+  return seqIndex;
+}
+
 function directionOrThrow(direction: string): SyncDirection {
   if (direction === 'local-to-prod' || direction === 'prod-to-local') {
     return direction;
@@ -163,6 +171,7 @@ export class AdminSyncController {
     @Body() body: { afterSeq?: number; limit?: number },
   ) {
     const spec = specOrThrow(table);
+    const seqIndex = seqIndexOrThrow(spec);
     const afterSeq = Number(body?.afterSeq ?? 0);
     const limit = Number(body?.limit ?? SYNC_CHUNK_SIZE);
     const safeLimit = Math.max(1, Math.min(SYNC_CHUNK_SIZE, limit));
@@ -172,7 +181,10 @@ export class AdminSyncController {
       `SELECT ${colList} FROM \`${spec.table}\` WHERE seq > ${afterSeq} ORDER BY seq ASC LIMIT ${safeLimit}`,
     );
     const values = rows.map((r) => spec.columns.map((c) => normalize(r[c])));
-    const lastSeq = rows.length > 0 ? Number(rows[rows.length - 1].seq) : afterSeq;
+    const lastRow = rows[rows.length - 1];
+    const seqColumn = spec.columns[seqIndex];
+    const lastSeq =
+      rows.length > 0 ? Number(lastRow[seqColumn] ?? afterSeq) : afterSeq;
     return { rows: values, lastSeq };
   }
 
@@ -192,6 +204,7 @@ export class AdminSyncController {
     @Query('direction') direction?: string,
   ): Observable<MessageEvent> {
     const spec = specOrThrow(table);
+    const seqIndex = seqIndexOrThrow(spec);
     const syncDirection = directionOrThrow(direction?.trim() ?? '');
     const targetUrl = this.config.get<string>('SYNC_TARGET_API_URL', '').trim();
     const remoteToken = sessionId?.trim() ?? '';
@@ -289,7 +302,7 @@ export class AdminSyncController {
 
             if (values.length === 0) break;
             const last = values[values.length - 1];
-            lastSeq = Number(last[0] ?? lastSeq);
+            lastSeq = Number(last[seqIndex] ?? lastSeq);
 
             for (const rows of splitRowsByPayloadSize(values)) {
               if (cancelled) break;
