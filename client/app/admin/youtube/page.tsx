@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import type { YoutubeVideo } from "@/types";
+import { AdminLoadingState } from "@/app/admin/_components/AdminLoadingState";
 import { buildGuestNotice, useAdminRole } from "@/lib/admin-role";
 
 // ===== 유틸 =====
@@ -357,9 +358,16 @@ export default function AdminYoutubePage() {
         <div className="admin-card flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
           <div className="flex-1 overflow-y-auto">
             {loading ? (
-              <div className="text-sm text-[color:var(--admin-text-muted)] py-12 text-center">
+              <>
+                <AdminLoadingState
+                  title="유튜브 목록을 불러오는 중입니다"
+                  description="영상 목록과 조회 데이터를 가져오고 있어요."
+                  className="m-4"
+                />
+                <div className="hidden text-sm text-[color:var(--admin-text-muted)] py-12 text-center">
                 불러오는 중...
-              </div>
+                </div>
+              </>
             ) : filtered.length === 0 ? (
               <div className="text-sm text-[color:var(--admin-text-muted)] py-12 text-center">
                 해당하는 영상이 없습니다.
@@ -412,9 +420,16 @@ export default function AdminYoutubePage() {
         {/* 우측: 통계 */}
         <div className="w-80 shrink-0 flex flex-col gap-4 overflow-y-auto">
           {loading ? (
-            <div className="admin-card admin-card-padded text-xs text-[color:var(--admin-text-muted)] text-center">
+            <>
+              <AdminLoadingState
+                compact
+                title="통계를 불러오는 중입니다"
+                description="유튜브 조회 기록을 확인하고 있어요."
+              />
+              <div className="hidden admin-card admin-card-padded text-xs text-[color:var(--admin-text-muted)] text-center">
               로딩 중...
-            </div>
+              </div>
+            </>
           ) : (
             <>
               {/* 평균 조회수 차트 */}

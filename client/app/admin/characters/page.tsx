@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { AdminLoadingState } from "@/app/admin/_components/AdminLoadingState";
 import { buildGuestNotice, useAdminRole } from "@/lib/admin-role";
 
 interface Character {
@@ -191,11 +192,17 @@ export default function AdminCharactersPage() {
       {error && <p className="text-red-500 text-sm mb-3 shrink-0">{error}</p>}
 
       {loading ? (
-        <div className="admin-card admin-card-padded text-center">
+        <>
+          <AdminLoadingState
+            title="캐릭터 목록을 불러오는 중입니다"
+            description="검색 조건에 맞는 캐릭터 데이터를 가져오고 있어요."
+          />
+          <div className="hidden admin-card admin-card-padded text-center">
           <p className="text-sm text-[color:var(--admin-text-muted)]">
             불러오는 중...
           </p>
-        </div>
+          </div>
+        </>
       ) : (
         <div className="flex flex-col flex-1 min-h-0">
           <div className="admin-card overflow-hidden flex-1 flex flex-col min-h-0">
