@@ -34,7 +34,7 @@ describe("AdminLoginPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "로그인" }));
 
     await waitFor(() => {
-      expect(replaceSpy).toHaveBeenCalledWith("/admin/sites");
+      expect(replaceSpy).toHaveBeenCalledWith("/admin/monitoring");
     });
   });
 
