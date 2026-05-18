@@ -45,6 +45,10 @@ interface DimensionRow extends RowDataPacket {
   count: number;
 }
 
+interface ColumnExistsRow extends RowDataPacket {
+  count: number;
+}
+
 interface SystemRow extends RowDataPacket {
   created_at: string | Date;
   cpu_percent: number;
@@ -773,12 +777,21 @@ export class AdminMonitoringService implements OnModuleInit {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
     `);
 
-    await this.pool.execute(`
-      ALTER TABLE apm_page_visits
-      ADD COLUMN IF NOT EXISTS country_code VARCHAR(8) NOT NULL DEFAULT 'UNKNOWN',
-      ADD COLUMN IF NOT EXISTS os_name VARCHAR(64) NOT NULL DEFAULT 'Unknown',
-      ADD COLUMN IF NOT EXISTS browser_name VARCHAR(64) NOT NULL DEFAULT 'Unknown'
-    `);
+    await this.addColumnIfMissing(
+      'apm_page_visits',
+      'country_code',
+      "country_code VARCHAR(8) NOT NULL DEFAULT 'UNKNOWN'",
+    );
+    await this.addColumnIfMissing(
+      'apm_page_visits',
+      'os_name',
+      "os_name VARCHAR(64) NOT NULL DEFAULT 'Unknown'",
+    );
+    await this.addColumnIfMissing(
+      'apm_page_visits',
+      'browser_name',
+      "browser_name VARCHAR(64) NOT NULL DEFAULT 'Unknown'",
+    );
     try {
       await this.pool.execute(
         `ALTER TABLE apm_page_visits DROP INDEX uk_page_device`,
@@ -877,6 +890,29 @@ export class AdminMonitoringService implements OnModuleInit {
         INDEX idx_video_id (video_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
     `);
+  }
+
+  private async addColumnIfMissing(
+    tableName: string,
+    columnName: string,
+    columnDefinition: string,
+  ) {
+    const [rows] = await this.pool.execute<ColumnExistsRow[]>(
+      `
+        SELECT COUNT(*) AS count
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+          AND COLUMN_NAME = ?
+      `,
+      [tableName, columnName],
+    );
+
+    if ((rows[0]?.count ?? 0) > 0) return;
+
+    await this.pool.execute(
+      `ALTER TABLE ${tableName} ADD COLUMN ${columnDefinition}`,
+    );
   }
 }
 
