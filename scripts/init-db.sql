@@ -107,3 +107,46 @@ CREATE TABLE IF NOT EXISTS `youtube_view_snapshots` (
   INDEX `idx_recorded_date` (`recorded_date`),
   INDEX `idx_published_at`  (`published_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- APM 방문 통계
+CREATE TABLE IF NOT EXISTS apm_page_visits (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  path VARCHAR(255) NOT NULL,
+  device_type ENUM('mobile','desktop','tablet','bot','unknown') NOT NULL DEFAULT 'unknown',
+  user_agent VARCHAR(500) NOT NULL,
+  referrer VARCHAR(500) NULL,
+  visits INT NOT NULL DEFAULT 1,
+  last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_page_device (path, device_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- APM 요청/섹션 응답시간
+CREATE TABLE IF NOT EXISTS apm_request_timings (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  scope ENUM('route','section') NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  path VARCHAR(255) NULL,
+  method VARCHAR(10) NULL,
+  status_code INT NULL,
+  duration_ms INT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_created_at (created_at),
+  INDEX idx_scope_name (scope, name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- APM 시스템 메트릭
+CREATE TABLE IF NOT EXISTS apm_system_metrics (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  cpu_percent DECIMAL(5,1) NOT NULL,
+  memory_percent DECIMAL(5,1) NOT NULL,
+  rss_mb INT NOT NULL,
+  heap_used_mb INT NOT NULL,
+  total_mem_mb INT NOT NULL,
+  load_avg_1m DECIMAL(10,2) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-export function middleware(req: NextRequest) {
+const NEST_API = process.env.NEST_API_URL ?? "http://localhost:3001";
+
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // /admin/login 은 통과
@@ -14,6 +16,28 @@ export function middleware(req: NextRequest) {
       const loginUrl = req.nextUrl.clone();
       loginUrl.pathname = "/admin/login";
       return NextResponse.redirect(loginUrl);
+    }
+
+    try {
+      const res = await fetch(`${NEST_API}/api/admin/monitoring/dashboard`, {
+        headers: { "x-admin-session": token },
+        cache: "no-store",
+      });
+      if (res.status === 401 || res.status === 403) {
+        const loginUrl = req.nextUrl.clone();
+        loginUrl.pathname = "/admin/login";
+        const redirect = NextResponse.redirect(loginUrl);
+        redirect.cookies.set("admin_token", "", {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: 0,
+        });
+        return redirect;
+      }
+    } catch {
+      // Keep existing behavior if upstream is temporarily unavailable.
     }
   }
 

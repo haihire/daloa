@@ -420,6 +420,16 @@ export default function YoutubeList({
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={() => {
+                        const ua = navigator.userAgent.toLowerCase();
+                        const deviceType =
+                          /bot|crawler|spider|crawling/.test(ua)
+                            ? "bot"
+                            : /ipad|tablet/.test(ua)
+                              ? "tablet"
+                              : /mobi|android|iphone/.test(ua)
+                                ? "mobile"
+                                : "desktop";
+
                         gaEvent("youtube_click", {
                           video_id: v.videoId,
                           video_title: v.title,
@@ -430,6 +440,34 @@ export default function YoutubeList({
                           item_name: v.title,
                           item_id: v.videoId,
                         });
+                        const payload = JSON.stringify({
+                          type: "youtube-click",
+                          videoId: v.videoId,
+                          videoTitle: v.title,
+                          channelTitle: v.channelTitle,
+                          deviceType,
+                        });
+                        try {
+                          const sent = navigator.sendBeacon(
+                            "/api/telemetry",
+                            new Blob([payload], { type: "application/json" }),
+                          );
+                          if (!sent) {
+                            void fetch("/api/telemetry", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: payload,
+                              keepalive: true,
+                            }).catch(() => {});
+                          }
+                        } catch {
+                          void fetch("/api/telemetry", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: payload,
+                            keepalive: true,
+                          }).catch(() => {});
+                        }
                       }}
                       className="flex flex-col h-full gap-2 rounded-xl border border-slate-200 bg-white p-2 transition-transform duration-150 hover:-translate-y-0.5 hover:border-red-300 hover:shadow-md"
                     >

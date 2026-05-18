@@ -110,6 +110,15 @@ export default function SiteList({ sites }: Props) {
     ...sites.filter((s) => !favSet.has(s.href)),
   ];
 
+  const detectDeviceType = (): "mobile" | "desktop" | "tablet" | "bot" | "unknown" => {
+    const ua = navigator.userAgent.toLowerCase();
+    if (/bot|crawler|spider|crawling/.test(ua)) return "bot";
+    if (/ipad|tablet/.test(ua)) return "tablet";
+    if (/mobi|android|iphone/.test(ua)) return "mobile";
+    if (ua.length > 0) return "desktop";
+    return "unknown";
+  };
+
   return (
     <section className="flex max-h-[56vh] flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-white/80 shadow-md backdrop-blur sm:h-[590px] sm:max-h-none">
       <div className="stagger flex-1 overflow-y-auto p-4 pr-5 sm:pr-4">
@@ -117,6 +126,13 @@ export default function SiteList({ sites }: Props) {
           {sorted.map((site) => {
             const isFav = favSet.has(site.href);
             const trackSiteClick = () => {
+              const payload = {
+                type: "site-click",
+                siteName: site.name,
+                siteHref: site.href,
+                siteCategory: site.category,
+                deviceType: detectDeviceType(),
+              };
               gaEvent("site_click", {
                 site_name: site.name,
                 site_category: site.category,
@@ -127,6 +143,32 @@ export default function SiteList({ sites }: Props) {
                 item_name: site.name,
                 item_id: site.href,
               });
+              try {
+                const body = JSON.stringify(payload);
+                const beacon = navigator.sendBeacon(
+                  "/api/telemetry",
+                  new Blob([body], { type: "application/json" }),
+                );
+                if (!beacon) {
+                  void fetch("/api/telemetry", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body,
+                    keepalive: true,
+                  }).catch(() => {
+                    // best-effort telemetry
+                  });
+                }
+              } catch {
+                void fetch("/api/telemetry", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(payload),
+                  keepalive: true,
+                }).catch(() => {
+                  // best-effort telemetry
+                });
+              }
             };
 
             return (

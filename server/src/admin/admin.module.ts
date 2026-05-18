@@ -8,6 +8,8 @@ import { AdminSyncController } from './admin-sync.controller';
 import { AdminGuard, AdminWriteGuard } from './admin.guard';
 import { StreamersModule } from '../streamers/streamers.module';
 import { SitesModule } from '../sites/sites.module';
+import { AdminMonitoringController } from './admin-monitoring.controller';
+import { AdminMonitoringService } from './admin-monitoring.service';
 
 @Module({
   imports: [StreamersModule, SitesModule],
@@ -17,8 +19,9 @@ import { SitesModule } from '../sites/sites.module';
     AdminCacheController,
     AdminCharactersController,
     AdminSyncController,
+    AdminMonitoringController,
   ],
-  providers: [AdminAuthService, AdminGuard, AdminWriteGuard],
+  providers: [AdminAuthService, AdminGuard, AdminWriteGuard, AdminMonitoringService],
   exports: [AdminAuthService],
 })
 export class AdminModule {}
