@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { buildGuestNotice, useAdminRole } from "@/lib/admin-role";
 
 interface Character {
   name: string;
@@ -43,6 +44,9 @@ export default function AdminCharactersPage() {
   const [result, setResult] = useState<ListResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [accessNotice, setAccessNotice] = useState("");
+  const role = useAdminRole();
+  const isGuest = role === "guest";
 
   const [search, setSearch] = useState("");
   const [statBuild, setStatBuild] = useState("");
@@ -84,7 +88,14 @@ export default function AdminCharactersPage() {
 
   const [purging, setPurging] = useState(false);
 
+  function requireMaster(action: string) {
+    if (!isGuest) return true;
+    setAccessNotice(buildGuestNotice(action));
+    return false;
+  }
+
   async function handlePurge() {
+    if (!requireMaster("캐릭터 캐시 새로고침")) return;
     setPurging(true);
     try {
       await fetch("/api/admin/cache", {
@@ -113,6 +124,11 @@ export default function AdminCharactersPage() {
             총 {result?.total.toLocaleString() ?? "-"}명의 캐릭터가 등록되어
             있습니다.
           </p>
+          {accessNotice && (
+            <pre className="mt-3 whitespace-pre-wrap rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              {accessNotice}
+            </pre>
+          )}
         </div>
         <button
           onClick={handlePurge}

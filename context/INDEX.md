@@ -63,7 +63,7 @@ cd server && npm run test:e2e  # E2E (docker-compose up -d 선행)
 ### EC2 SSH 접속
 
 ```powershell
-ssh -i "C:\Users\tjdtn\Desktop\내가생각하는미래\개발\로아사이트 모음\daloa-key.pem" ubuntu@3.39.239.9
+ssh -i "C:\Users\tjdtn\Desktop\ingit\daloa\daloa-key.pem" ubuntu@3.39.239.9
 ```
 
 - PEM 키 위치: 프로젝트 루트 `daloa-key.pem`

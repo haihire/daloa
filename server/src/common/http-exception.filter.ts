@@ -21,8 +21,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
   // 상태코드별 마지막 알림 시각 (스팸 방지)
   private readonly lastNotifiedAt = new Map<number, number>();
-  private readonly COOLDOWN_5XX_MS = 60_000;   // 5xx: 1분
-  private readonly COOLDOWN_4XX_MS = 300_000;  // 4xx: 5분
+  private readonly COOLDOWN_5XX_MS = 60_000; // 5xx: 1분
+  private readonly COOLDOWN_4XX_MS = 300_000; // 4xx: 5분
 
   // 알림 제외 상태코드 (빈번하거나 의미 없는 에러)
   private readonly SKIP_STATUSES = new Set([401, 404]);
@@ -40,9 +40,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
     const errorName =
-      exception instanceof Error
-        ? exception.constructor.name
-        : 'UnknownError';
+      exception instanceof Error ? exception.constructor.name : 'UnknownError';
 
     const message =
       exception instanceof HttpException
@@ -56,7 +54,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
     // 알림 전송 (401, 404 제외)
     if (!this.SKIP_STATUSES.has(status)) {
       const now = Date.now();
-      const cooldown = status >= 500 ? this.COOLDOWN_5XX_MS : this.COOLDOWN_4XX_MS;
+      const cooldown =
+        status >= 500 ? this.COOLDOWN_5XX_MS : this.COOLDOWN_4XX_MS;
       const lastAt = this.lastNotifiedAt.get(status) ?? 0;
 
       if (now - lastAt > cooldown) {

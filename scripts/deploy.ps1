@@ -1,13 +1,23 @@
-# deploy.ps1 — EC2 서버 배포 (캐시 삭제 + 빌드 + 재시작)
+# deploy.ps1 — EC2 서버 배포 (캐시 삭제 + 빌드 + Nest/Nginx 재시작)
 # 사용: powershell -File scripts/deploy.ps1
-# 효과: git pull → dist 삭제 → npm run build → Docker 재빌드 → Redis 캐시 플러시
+# 효과: git pull → dist 삭제 → npm run build → Nest/Nginx 재생성 → Redis 캐시 플러시
 
 param(
-    [string]$KeyPath = "C:\Users\tjdtn\Desktop\내가생각하는미래\개발\로아사이트 모음\daloa-key.pem",
-    [string]$Host    = "ubuntu@3.39.239.9",
-    [switch]$FlushRedis,    # -FlushRedis 시 Redis 캐시 전체 삭제
-    [switch]$Full           # -Full 시 MySQL/Nginx 포함 전체 재시작
+    [string]$KeyPath = "",
+    [string]$SshHost = "ubuntu@3.39.239.9",
+    [switch]$FlushRedis,
+    [switch]$Full
 )
+
+$Root = Split-Path -Parent $PSScriptRoot
+if (-not $KeyPath) {
+    $KeyPath = Join-Path $Root "daloa-key.pem"
+}
+
+if (-not (Test-Path -LiteralPath $KeyPath)) {
+    Write-Host "[deploy] SSH key not found: $KeyPath"
+    exit 1
+}
 
 Write-Host ""
 Write-Host "========================================"
@@ -26,7 +36,7 @@ $commands = @(
 if ($Full) {
     $commands += "echo '[4/4] 전체 재시작 (production)...' && docker compose --profile production down && docker compose --profile production up -d --build 2>&1 | tail -5"
 } else {
-    $commands += "echo '[4/4] NestJS 컨테이너 재시작...' && docker compose up -d --build nest 2>&1 | tail -5"
+    $commands += "echo '[4/4] NestJS + Nginx 재생성...' && docker compose --profile production up -d --build --force-recreate nest nginx 2>&1 | tail -8"
 }
 
 if ($FlushRedis) {
@@ -40,7 +50,7 @@ $remoteCmd = $commands -join " && "
 Write-Host "[deploy] SSH 접속 + 배포 시작..."
 Write-Host ""
 
-ssh -i $KeyPath -o StrictHostKeyChecking=no $Host $remoteCmd
+ssh -i "$KeyPath" -o StrictHostKeyChecking=no $SshHost $remoteCmd
 
 $exitCode = $LASTEXITCODE
 

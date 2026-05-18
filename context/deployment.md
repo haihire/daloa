@@ -8,14 +8,14 @@
 
 - AWS EC2 ?몄뒪?댁뒪 (Ubuntu)
 - Docker + Docker Compose ?ㅼ튂??
-- SSH ???뚯씪: `daloa-key.pem` (寃쎈줈: `C:\Users\tjdtn\Desktop\?닿??앷컖?섎뒗誘몃옒\媛쒕컻\濡쒖븘?ъ씠??紐⑥쓬\daloa-key.pem`)
+- SSH ???뚯씪: `daloa-key.pem` (寃쎈줈: `C:\Users\tjdtn\Desktop\ingit\daloa\daloa-key.pem`)
 - EC2 IP: `3.39.239.9`
 - Let's Encrypt SSL ?몄쬆??諛쒓툒 ?꾨즺 (`api.daloa.kr`)
 
 ### 1-1. SSH ?묒냽
 
 ```powershell
-ssh -i "C:\\Users\\tjdtn\\Desktop\\내가생각하는미래\\개발\\로아사이트 모음\\daloa-key.pem" ubuntu@3.39.239.9
+ssh -i "C:\\Users\\tjdtn\\Desktop\\ingit\\daloa\\daloa-key.pem" ubuntu@3.39.239.9
 ```
 
 ### 1-2. 肄붾뱶 ?낅뜲?댄듃 + 鍮뚮뱶 + ?ъ떆??
@@ -39,7 +39,7 @@ docker compose up -d --build nest
 ### 1-3. ?먯빱留⑤뱶 諛고룷 (濡쒖뺄?먯꽌)
 
 ```powershell
-ssh -i "C:\\Users\\tjdtn\\Desktop\\내가생각하는미래\\개발\\로아사이트 모음\\daloa-key.pem" -o StrictHostKeyChecking=no ubuntu@3.39.239.9 "cd daloa && git pull && cd server && npm run build 2>&1 | tail -3 && cd .. && docker compose up -d --build nest 2>&1 | tail -3"
+ssh -i "C:\\Users\\tjdtn\\Desktop\\ingit\\daloa\\daloa-key.pem" -o StrictHostKeyChecking=no ubuntu@3.39.239.9 "cd daloa && git pull && cd server && npm run build 2>&1 | tail -3 && cd .. && docker compose up -d --build nest 2>&1 | tail -3"
 ```
 
 ### 1-4. ?꾩껜 ?쒕퉬???ъ떆??(MySQL, Redis, Nginx ?ы븿)
@@ -67,7 +67,7 @@ cd daloa && docker compose up -d --build nest
 
 ```powershell
 # ?? EC2 ?꾩슜 ??鍮꾨?踰덊샇媛 ?ы븿??EC2 .env瑜?濡쒖뺄?먯꽌 ??뼱?곗? ?딅룄濡?二쇱쓽
-scp -i "C:\\Users\\tjdtn\\Desktop\\내가생각하는미래\\개발\\로아사이트 모음\\daloa-key.pem" .env ubuntu@3.39.239.9:/home/ubuntu/daloa/.env
+scp -i "C:\\Users\\tjdtn\\Desktop\\ingit\\daloa\\daloa-key.pem" .env ubuntu@3.39.239.9:/home/ubuntu/daloa/.env
 ```
 
 ### 1-5. 濡쒓렇 ?뺤씤
@@ -310,14 +310,14 @@ scp -i "daloa-key.pem" scripts/dump.sql ubuntu@3.39.239.9:~/daloa/scripts/
 
 ```powershell
 # 1. 濡쒖뺄?먯꽌 SQL ?뚯씪 ?묒꽦 ??EC2濡??꾩넚
-scp -i "C:\\Users\\tjdtn\\Desktop\\내가생각하는미래\\개발\\로아사이트 모음\\daloa-key.pem" fix.sql ubuntu@3.39.239.9:/tmp/fix.sql
+scp -i "C:\\Users\\tjdtn\\Desktop\\ingit\\daloa\\daloa-key.pem" fix.sql ubuntu@3.39.239.9:/tmp/fix.sql
 
 # 2. EC2 MySQL 而⑦뀒?대꼫?먯꽌 ?ㅽ뻾
-ssh -i "C:\\Users\\tjdtn\\Desktop\\내가생각하는미래\\개발\\로아사이트 모음\\daloa-key.pem" -o StrictHostKeyChecking=no ubuntu@3.39.239.9 \
+ssh -i "C:\\Users\\tjdtn\\Desktop\\ingit\\daloa\\daloa-key.pem" -o StrictHostKeyChecking=no ubuntu@3.39.239.9 \
   "docker exec -i daloa-mysql mysql -udaloa -p1234 --default-character-set=utf8mb4 lost_ark < /tmp/fix.sql"
 
 # 3. 愿??Redis 罹먯떆 ??젣 (?? sites)
-ssh -i "C:\\Users\\tjdtn\\Desktop\\내가생각하는미래\\개발\\로아사이트 모음\\daloa-key.pem" -o StrictHostKeyChecking=no ubuntu@3.39.239.9 \
+ssh -i "C:\\Users\\tjdtn\\Desktop\\ingit\\daloa\\daloa-key.pem" -o StrictHostKeyChecking=no ubuntu@3.39.239.9 \
   "docker exec daloa-redis redis-cli -a Redis9999! DEL sites:all"
 ```
 
