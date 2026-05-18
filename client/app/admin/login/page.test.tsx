@@ -60,7 +60,7 @@ describe("AdminLoginPage", () => {
     });
   });
 
-  it("게스트 아이디 채우기 버튼 클릭 시 아이디만 guest로 채워짐", async () => {
+  it("게스트 아이디 채우기 버튼 클릭 시 아이디와 비밀번호가 채워짐", async () => {
     render(<AdminLoginPage />);
 
     await userEvent.click(
@@ -71,6 +71,6 @@ describe("AdminLoginPage", () => {
     const passwordInput = document.querySelector<HTMLInputElement>(
       'input[type="password"]',
     )!;
-    expect(passwordInput).toHaveValue("");
+    expect(passwordInput).toHaveValue("1237");
   });
 });

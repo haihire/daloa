@@ -37,7 +37,7 @@ export default function AdminLoginPage() {
 
   function handleGuestFill() {
     setUsername("guest");
-    setPassword("");
+    setPassword("1237");
     setError("");
   }
 
