@@ -468,14 +468,19 @@ export class AdminMonitoringService implements OnModuleInit {
 
     const [requestSeries] = await this.pool.execute<TimedGroupRow[]>(
       `
-      SELECT DATE_FORMAT(created_at, '%H:%i') AS bucket,
-             DATE_FORMAT(created_at, '%H:%i') AS label,
+      SELECT DATE_FORMAT(minute_key, '%H:%i') AS bucket,
+             DATE_FORMAT(minute_key, '%H:%i') AS label,
              ROUND(AVG(duration_ms)) AS avg_duration_ms,
              COUNT(*) AS count
-      FROM apm_request_timings
-      WHERE created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
-      GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d %H:%i')
-      ORDER BY DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') ASC
+      FROM (
+        SELECT
+          STR_TO_DATE(DATE_FORMAT(created_at, '%Y-%m-%d %H:%i'), '%Y-%m-%d %H:%i') AS minute_key,
+          duration_ms
+        FROM apm_request_timings
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
+      ) AS request_minutes
+      GROUP BY minute_key
+      ORDER BY minute_key ASC
       `,
     );
 
@@ -483,12 +488,15 @@ export class AdminMonitoringService implements OnModuleInit {
       Array<RowDataPacket & { bucket: string; count: number }>
     >(
       `
-      SELECT DATE_FORMAT(created_at, '%m-%d') AS bucket,
+      SELECT DATE_FORMAT(day_key, '%m-%d') AS bucket,
              COUNT(*) AS count
-      FROM apm_site_clicks
-      WHERE created_at >= DATE_SUB(NOW(), INTERVAL 14 DAY)
-      GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')
-      ORDER BY DATE_FORMAT(created_at, '%Y-%m-%d') ASC
+      FROM (
+        SELECT DATE(created_at) AS day_key
+        FROM apm_site_clicks
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 14 DAY)
+      ) AS site_click_days
+      GROUP BY day_key
+      ORDER BY day_key ASC
       `,
     );
 
@@ -496,33 +504,39 @@ export class AdminMonitoringService implements OnModuleInit {
       Array<RowDataPacket & { bucket: string; count: number }>
     >(
       `
-      SELECT DATE_FORMAT(created_at, '%m-%d') AS bucket,
+      SELECT DATE_FORMAT(day_key, '%m-%d') AS bucket,
              COUNT(*) AS count
-      FROM apm_youtube_clicks
-      WHERE created_at >= DATE_SUB(NOW(), INTERVAL 14 DAY)
-      GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')
-      ORDER BY DATE_FORMAT(created_at, '%Y-%m-%d') ASC
+      FROM (
+        SELECT DATE(created_at) AS day_key
+        FROM apm_youtube_clicks
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 14 DAY)
+      ) AS youtube_click_days
+      GROUP BY day_key
+      ORDER BY day_key ASC
       `,
     );
 
     const [sectionSeries] = await this.pool.execute<TimedGroupRow[]>(
       `
       SELECT
-        DATE_FORMAT(
-          FROM_UNIXTIME(
-            FLOOR(UNIX_TIMESTAMP(created_at) / (? * 3600)) * (? * 3600)
-          ),
-          '%m-%d %H:%i'
-        ) AS bucket,
+        DATE_FORMAT(bucket_start, '%m-%d %H:%i') AS bucket,
         api_key AS label,
         ROUND(AVG(duration_ms)) AS avg_duration_ms,
         COUNT(*) AS count
-      FROM monitoring_api_probes
-      WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
-      GROUP BY api_key, FLOOR(UNIX_TIMESTAMP(created_at) / (? * 3600))
-      ORDER BY FLOOR(UNIX_TIMESTAMP(created_at) / (? * 3600))
+      FROM (
+        SELECT
+          FROM_UNIXTIME(
+            FLOOR(UNIX_TIMESTAMP(created_at) / (? * 3600)) * (? * 3600)
+          ) AS bucket_start,
+          api_key,
+          duration_ms
+        FROM monitoring_api_probes
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+      ) AS probe_buckets
+      GROUP BY bucket_start, api_key
+      ORDER BY bucket_start ASC
       `,
-      [bucketHours, bucketHours, safeRangeDays, bucketHours, bucketHours],
+      [bucketHours, bucketHours, safeRangeDays],
     );
 
     const [visitRows] = await this.pool.execute<VisitRow[]>(
