@@ -958,13 +958,22 @@ export class AdminMonitoringService implements OnModuleInit {
       | 'apm_request_timings'
       | 'monitoring_api_probes',
   ) {
-    const [result] = await this.pool.execute<ResultSetHeader>(
-      `DELETE FROM ${tableName}
-       WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)`,
-      [this.METRIC_RETENTION_DAYS],
-    );
+    const chunkSize = 5000;
+    let totalDeleted = 0;
 
-    return result.affectedRows;
+    while (true) {
+      const [result] = await this.pool.execute<ResultSetHeader>(
+        `DELETE FROM ${tableName}
+         WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)
+         LIMIT ${chunkSize}`,
+        [this.METRIC_RETENTION_DAYS],
+      );
+
+      totalDeleted += result.affectedRows;
+      if (result.affectedRows < chunkSize) break;
+    }
+
+    return totalDeleted;
   }
 }
 
