@@ -1,7 +1,7 @@
 import { Injectable, Inject, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import type { Pool } from 'mysql2/promise';
-import type { RowDataPacket } from 'mysql2';
+import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import * as os from 'os';
 import { DB_POOL } from '../db/db.module';
 
@@ -187,6 +187,7 @@ export interface AdminMonitoringDashboard {
 export class AdminMonitoringService implements OnModuleInit {
   private readonly logger = new Logger(AdminMonitoringService.name);
   private readonly SLOW_THRESHOLD_MS = 1200;
+  private readonly METRIC_RETENTION_DAYS = 7;
   private readonly probeTargets: Array<{
     apiKey: string;
     path: string;
@@ -419,6 +420,28 @@ export class AdminMonitoringService implements OnModuleInit {
           durationMs,
           success ? 1 : 0,
         ],
+      );
+    }
+  }
+
+  @Cron('0 0 3 * * *')
+  async cleanupMetricRetention() {
+    try {
+      const deletedSystem =
+        await this.deleteMetricRowsOlderThan('apm_system_metrics');
+      const deletedRequests = await this.deleteMetricRowsOlderThan(
+        'apm_request_timings',
+      );
+      const deletedProbes = await this.deleteMetricRowsOlderThan(
+        'monitoring_api_probes',
+      );
+
+      this.logger.log(
+        `monitoring retention cleanup completed: system=${deletedSystem}, requests=${deletedRequests}, probes=${deletedProbes}`,
+      );
+    } catch (err: unknown) {
+      this.logger.warn(
+        `monitoring retention cleanup failed: ${toErrorMessage(err)}`,
       );
     }
   }
@@ -927,6 +950,21 @@ export class AdminMonitoringService implements OnModuleInit {
     await this.pool.execute(
       `ALTER TABLE ${tableName} ADD COLUMN ${columnDefinition}`,
     );
+  }
+
+  private async deleteMetricRowsOlderThan(
+    tableName:
+      | 'apm_system_metrics'
+      | 'apm_request_timings'
+      | 'monitoring_api_probes',
+  ) {
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `DELETE FROM ${tableName}
+       WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)`,
+      [this.METRIC_RETENTION_DAYS],
+    );
+
+    return result.affectedRows;
   }
 }
 
