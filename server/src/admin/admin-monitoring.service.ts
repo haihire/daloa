@@ -187,7 +187,8 @@ export interface AdminMonitoringDashboard {
 export class AdminMonitoringService implements OnModuleInit {
   private readonly logger = new Logger(AdminMonitoringService.name);
   private readonly SLOW_THRESHOLD_MS = 1200;
-  private readonly METRIC_RETENTION_DAYS = 7;
+  private readonly SYSTEM_METRIC_RETENTION_DAYS = 7;
+  private readonly MONITORING_METRIC_RETENTION_DAYS = 30;
   private readonly probeTargets: Array<{
     apiKey: string;
     path: string;
@@ -427,13 +428,17 @@ export class AdminMonitoringService implements OnModuleInit {
   @Cron('0 0 3 * * *')
   async cleanupMetricRetention() {
     try {
-      const deletedSystem =
-        await this.deleteMetricRowsOlderThan('apm_system_metrics');
+      const deletedSystem = await this.deleteMetricRowsOlderThan(
+        'apm_system_metrics',
+        this.SYSTEM_METRIC_RETENTION_DAYS,
+      );
       const deletedRequests = await this.deleteMetricRowsOlderThan(
         'apm_request_timings',
+        this.MONITORING_METRIC_RETENTION_DAYS,
       );
       const deletedProbes = await this.deleteMetricRowsOlderThan(
         'monitoring_api_probes',
+        this.MONITORING_METRIC_RETENTION_DAYS,
       );
 
       this.logger.log(
@@ -957,17 +962,32 @@ export class AdminMonitoringService implements OnModuleInit {
       | 'apm_system_metrics'
       | 'apm_request_timings'
       | 'monitoring_api_probes',
+    retentionDays: number,
   ) {
+    const chunkSize = 5000;
+    const maxBatches = 200;
     let totalDeleted = 0;
+    let batchCount = 0;
+
     while (true) {
+      batchCount += 1;
       const [result] = await this.pool.execute<ResultSetHeader>(
         `DELETE FROM ${tableName}
-       WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)
-       LIMIT 50000`,
-        [this.METRIC_RETENTION_DAYS],
+         WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)
+         LIMIT ${chunkSize}`,
+        [retentionDays],
       );
       totalDeleted += result.affectedRows;
-      if (result.affectedRows < 50000) break;
+
+      if (result.affectedRows < chunkSize) break;
+      if (batchCount >= maxBatches) {
+        this.logger.warn(
+          `retention cleanup batch cap reached for ${tableName}: deleted=${totalDeleted}, chunkSize=${chunkSize}, maxBatches=${maxBatches}`,
+        );
+        break;
+      }
+
+      await sleep(25);
     }
     return totalDeleted;
   }
@@ -981,4 +1001,8 @@ function toErrorMessage(error: unknown): string {
 function toIsoString(value: string | Date): string {
   if (value instanceof Date) return value.toISOString();
   return new Date(value).toISOString();
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

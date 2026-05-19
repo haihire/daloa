@@ -279,7 +279,7 @@ export default function MonitoringPage() {
           <p className="admin-stat-value mt-1">{data.summary.avgDurationMs}ms</p>
         </div>
         <div className="admin-stat-card">
-          <p className="admin-stat-label">페이지 방문(24h)</p>
+          <p className="admin-stat-label">페이지 방문(누적)</p>
           <p className="admin-stat-value mt-1">{data.summary.pageVisits.toLocaleString()}</p>
         </div>
         <div className="admin-stat-card">
