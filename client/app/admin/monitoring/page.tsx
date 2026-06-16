@@ -417,7 +417,7 @@ export default function MonitoringPage() {
                       dataKey={m.key}
                       name={m.label}
                       stroke={m.color}
-                      dot={false}
+                      dot={{ r: 2 }}
                       strokeWidth={2}
                       connectNulls
                     />
