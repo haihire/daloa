@@ -26,6 +26,8 @@ date_str 형식:
 사용법:
   python crawl.py                    # 어제 게시물 → stdout JSON
   python crawl.py --date 2026-05-20  # 특정 날짜
+  python crawl.py --since-free N --since-tip M  # 게시판별 post_id 증분
+  python crawl.py --max-detail 500   # 본문 fetch 최대 500개(최신순), 0/미지정=무제한
   python crawl.py --debug            # 상세 로그 출력 (stderr)
 """
 
@@ -70,6 +72,19 @@ SINCE: dict[str, int | None] = (
     if _arg("--date")
     else {"free": _since("--since-free"), "tip": _since("--since-tip")}
 )
+
+# 본문 크롤 캡: 한 번에 상세페이지를 fetch할 최대 글 수(최신순). 0 이하면 무제한.
+# 목록 크롤(메타데이터)은 캡과 무관하게 새 글 전체를 수집/저장하므로 since_id는
+# gap 없이 전진하고, 캡을 넘는 글은 content=null로 저장된다(다음부터 재방문 안 함).
+def _max_detail() -> int | None:
+    v = _arg("--max-detail")
+    if v is None:
+        return None
+    n = int(v) if v.lstrip("-").isdigit() else 0
+    return n if n > 0 else None
+
+
+MAX_DETAIL: int | None = _max_detail()
 
 # ── 설정 ─────────────────────────────────────────────────────────────────────
 
@@ -301,10 +316,20 @@ async def crawl_board(
     return list(collected.values())
 
 
-async def crawl_contents(session: AsyncSession, posts: list[dict]) -> None:
-    """수집된 게시글 전체의 상세 페이지를 순회해 본문을 채운다(댓글 미수집)."""
-    targets = [p for p in posts if p["content"] is None]
-    log.info(f"본문 크롤링: {len(targets)}개 (전체)")
+async def crawl_contents(
+    session: AsyncSession, posts: list[dict], max_detail: int | None = None
+) -> None:
+    """
+    수집된 게시글의 상세 페이지를 순회해 본문을 채운다(댓글 미수집).
+    max_detail이 주어지면 최신순으로 그만큼만 fetch한다(CPU/시간 폭주 방지).
+    나머지는 content=None 유지 → DB엔 null로 저장된다.
+    """
+    pending = [p for p in posts if p["content"] is None]
+    targets = pending[:max_detail] if max_detail is not None else pending
+    skipped = len(pending) - len(targets)
+    log.info(
+        f"본문 크롤링: {len(targets)}개 (대상 {len(pending)}, 캡 {max_detail}, 스킵 {skipped})"
+    )
 
     for i, post in enumerate(targets):
         try:
@@ -333,7 +358,7 @@ async def main():
     async with AsyncSession() as session:
         for board_key in BOARDS:
             all_posts.extend(await crawl_board(session, board_key, SINCE.get(board_key)))
-        await crawl_contents(session, all_posts)
+        await crawl_contents(session, all_posts, MAX_DETAIL)
 
     by_board: dict[str, int] = {}
     for p in all_posts:
