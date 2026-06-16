@@ -13,9 +13,12 @@ export const metadata: Metadata = {
 };
 
 // 홈을 정적 ISR로 서빙 → 서울 엣지 CDN에서 캐시된 HTML 제공(TTFB 대폭 단축).
-// 5분마다 백그라운드 재검증. 이 시점에만 아래 섹션 fetch/텔레메트리가 실행됨.
-// (내부 stat-builds fetch가 revalidate:300 → 라우트 재검증 주기는 그 최솟값인 300초로 수렴)
-export const revalidate = 300;
+// 10분마다 백그라운드 재검증. 이 시점에만 아래 섹션 fetch/텔레메트리가 실행됨.
+// 트래픽이 적으면 캐시가 만료·축출돼 첫 방문자가 콜드 생성(TTFB 7~10s)을 뒤집어쓴다.
+// → 외부 업타임 핑거가 홈을 주기적으로 호출해 캐시를 데움(.github/SETUP_GUIDE.md "홈 캐시 워밍").
+//   재검증 주기를 늘려(300→600) 재생성 빈도·콜드 노출 확률을 함께 낮춘다.
+//   (홈 데이터(사이트/스탯/요약)는 자주 안 바뀌어 10분 신선도면 충분)
+export const revalidate = 600;
 
 const API = process.env.NEST_API_URL ?? "http://localhost:3001";
 
