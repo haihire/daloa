@@ -1,0 +1,45 @@
+name: Prewarm home cache
+
+# 홈(/)은 정적 ISR이라 새 배포 직후엔 엣지 캐시가 비어(cold) 첫 진입이 느리다.
+# Vercel 프로덕션 배포가 성공한 "직후 1번"만 홈을 호출해 엣지 CDN 캐시를 데운다.
+# → 첫 사용자가 cold/stale 응답을 만나지 않게 한다. 상시 크론이 아니라 EC2 추가 부하 0.
+# 주의: deployment_status 트리거는 기본 브랜치(main)의 워크플로우 파일로만 발화된다.
+on:
+  deployment_status: {}
+  workflow_dispatch: {} # 수동 실행/테스트용
+
+concurrency:
+  group: prewarm-home
+  cancel-in-progress: true
+
+jobs:
+  warm:
+    # 수동 실행이거나, Vercel 프로덕션 배포가 'success'일 때만 (preview/진행중/실패 제외).
+    # Vercel의 환경명이 다르면(로그의 deployment_status.environment 확인) 아래 'Production'을 맞출 것.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' &&
+       github.event.deployment_status.environment == 'Production')
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Warm home page
+        env:
+          # 배포 URL(immutable)이 아니라 사용자가 실제로 치는 커스텀 도메인을 데운다.
+          # 도메인이 바뀌면 레포 변수 PREWARM_URL로 덮어쓸 수 있음.
+          URL: ${{ vars.PREWARM_URL || 'https://www.lomoa.kr/' }}
+        run: |
+          echo "Warming $URL"
+          for i in 1 2 3; do
+            out=$(curl -sS -A "lomoa-prewarm-bot" -o /dev/null \
+              -w "%{http_code} %{time_total}" --max-time 30 "$URL" || echo "000 0")
+            code=$(echo "$out" | cut -d' ' -f1)
+            echo "[$i] HTTP $out (status time_total)"
+            if [ "$code" = "200" ]; then
+              exit 0
+            fi
+            echo "[$i] not ready, retrying in 10s..."
+            sleep 10
+          done
+          echo "Prewarm failed after 3 attempts"
+          exit 1

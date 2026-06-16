@@ -36,13 +36,17 @@ export interface SiteCandidate {
 export class AdminInvenRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** 추천 사이트 후보 목록 (status별 필터). 기본은 검토 대기(pending). */
+  /**
+   * 추천 사이트 후보 목록 (status별 필터). 기본은 검토 대기(pending).
+   * 노출 임계값: 누적 언급 2회 이상만 (1회성 URL 노이즈 숨김 — 증분 누적과 짝).
+   */
   async getSiteCandidates(status = 'pending'): Promise<SiteCandidate[]> {
     return this.prisma.$queryRaw<SiteCandidate[]>`
       SELECT id, url, domain, name, description, category,
              mention_count, sample_post_id, status, created_at
       FROM inven_site_candidates
       WHERE status = ${status}
+        AND mention_count >= 2
       ORDER BY mention_count DESC, created_at DESC
     `;
   }
@@ -94,7 +98,8 @@ export class AdminInvenRepository {
 
   /**
    * 크롤된 게시글을 inven_posts에 일괄 upsert한다.
-   * post_id 충돌 시 조회/추천/본문/댓글/제목을 최신값으로 갱신.
+   * post_id 충돌 시 조회/추천/본문/제목을 최신값으로 갱신.
+   * 댓글은 더 이상 수집하지 않음(본문만 사용) — comments는 빈 배열로 저장.
    */
   async upsertPosts(posts: CrawledPost[]): Promise<number> {
     let saved = 0;
@@ -105,22 +110,36 @@ export class AdminInvenRepository {
         VALUES (
           ${p.board}, ${p.post_id}, ${p.url}, ${p.title}, ${p.author},
           ${p.date_str}, ${p.views}, ${p.likes}, ${p.content},
-          ${JSON.stringify(p.comments ?? [])}::jsonb
+          '[]'::jsonb
         )
         ON CONFLICT (post_id) DO UPDATE SET
           views    = EXCLUDED.views,
           likes    = EXCLUDED.likes,
           content  = COALESCE(EXCLUDED.content, inven_posts.content),
-          comments = CASE
-                       WHEN jsonb_array_length(EXCLUDED.comments) > 0
-                       THEN EXCLUDED.comments
-                       ELSE inven_posts.comments
-                     END,
           title    = EXCLUDED.title
       `;
       saved += 1;
     }
     return saved;
+  }
+
+  /**
+   * 게시판별 최신 post_id(증분 크롤 기준). 데이터 없는 게시판은 0.
+   * post_id는 숫자 문자열이라 bigint로 캐스팅해 최대값을 구한다.
+   */
+  async getMaxPostIdByBoard(): Promise<Record<string, number>> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{ board: string; max_id: bigint | number | null }>
+    >`
+      SELECT board, MAX(post_id::bigint) AS max_id
+      FROM inven_posts
+      GROUP BY board
+    `;
+    const result: Record<string, number> = {};
+    for (const r of rows) {
+      result[r.board] = r.max_id != null ? Number(r.max_id) : 0;
+    }
+    return result;
   }
 
   /**

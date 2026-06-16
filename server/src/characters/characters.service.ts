@@ -92,7 +92,6 @@ export class CharactersService {
         classEngraving: string | null;
         statBuild: string;
         count: number;
-        topLevel: number;
       }
     >();
 
@@ -102,14 +101,12 @@ export class CharactersService {
       const existing = rawMap.get(key);
       if (existing) {
         existing.count++;
-        if (r.level > existing.topLevel) existing.topLevel = r.level;
       } else {
         rawMap.set(key, {
           classDetail: r.classDetail,
           classEngraving: r.classEngraving ?? null,
           statBuild: build,
           count: 1,
-          topLevel: r.level,
         });
       }
     }
@@ -121,7 +118,7 @@ export class CharactersService {
       {
         classDetail: string;
         classEngraving: string | null;
-        buildCounts: Map<string, { count: number; topLevel: number }>;
+        buildCounts: Map<string, { count: number }>;
       }
     >();
 
@@ -138,11 +135,9 @@ export class CharactersService {
       const prev = ce.buildCounts.get(entry.statBuild);
       if (prev) {
         prev.count += entry.count;
-        if (entry.topLevel > prev.topLevel) prev.topLevel = entry.topLevel;
       } else {
         ce.buildCounts.set(entry.statBuild, {
           count: entry.count,
-          topLevel: entry.topLevel,
         });
       }
     }
@@ -154,17 +149,14 @@ export class CharactersService {
       classEngraving: string | null;
       statBuild: string;
       count: number;
-      topLevel: number;
     }[] = [];
 
     for (const ce of ceMap.values()) {
       let dominantBuild = '';
       let maxCount = 0;
       let totalCount = 0;
-      let maxTopLevel = 0;
 
-      for (const [build, { count, topLevel }] of ce.buildCounts.entries()) {
-        if (topLevel > maxTopLevel) maxTopLevel = topLevel;
+      for (const [build, { count }] of ce.buildCounts.entries()) {
         // 미설정은 총합에도 포함하지 않음
         if (build === '미설정') continue;
         totalCount += count;
@@ -180,7 +172,6 @@ export class CharactersService {
           classEngraving: ce.classEngraving,
           statBuild: dominantBuild,
           count: totalCount,
-          topLevel: maxTopLevel,
         });
       }
     }
@@ -205,7 +196,6 @@ export class CharactersService {
           classDetail: string;
           classEngraving: string | null;
           count: number;
-          topLevel: number;
         }[];
       }
     >();
@@ -217,7 +207,6 @@ export class CharactersService {
           classDetail: entry.classDetail,
           classEngraving: entry.classEngraving,
           count: entry.count,
-          topLevel: entry.topLevel,
         });
         existing.totalCount += entry.count;
       } else {
@@ -229,7 +218,6 @@ export class CharactersService {
               classDetail: entry.classDetail,
               classEngraving: entry.classEngraving,
               count: entry.count,
-              topLevel: entry.topLevel,
             },
           ],
         });
@@ -239,7 +227,7 @@ export class CharactersService {
     return TAB_ORDER.map((t) => {
       const tab = tabMap.get(t);
       if (!tab) return { statBuild: t, totalCount: 0, items: [] };
-      tab.items.sort((a, b) => b.count - a.count || b.topLevel - a.topLevel);
+      tab.items.sort((a, b) => b.count - a.count);
       return tab;
     });
   }

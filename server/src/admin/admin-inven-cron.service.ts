@@ -8,10 +8,13 @@ export class AdminInvenCronService {
 
   constructor(private readonly pipeline: AdminInvenPipelineService) {}
 
-  /** 매일 새벽 3시(KST) 자동 실행 — 어제 날짜를 파이프라인 서비스에 위임 */
-  @Cron('0 3 * * *', { timeZone: 'Asia/Seoul' })
-  runNightlyPipeline() {
-    this.logger.log('야간 인벤 파이프라인 시작');
+  /**
+   * 2시간마다 증분 실행 — 마지막 크롤 이후의 새 글만 수집(부하 분산).
+   * targetDate 없이 run() → 파이프라인이 게시판별 최신 post_id 기준 증분 모드로 동작.
+   */
+  @Cron('0 */2 * * *', { timeZone: 'Asia/Seoul' })
+  runScheduledPipeline() {
+    this.logger.log('인벤 증분 파이프라인 시작');
     const result = this.pipeline.run();
     if (!result.started) {
       this.logger.warn(`파이프라인 건너뜀: ${result.reason}`);

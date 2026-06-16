@@ -66,6 +66,7 @@ jobs:
           EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
           NEXT_REVALIDATE_SECRET: ${{ secrets.NEXT_REVALIDATE_SECRET }}
+          DEPLOY_EVENT_TOKEN: ${{ secrets.DEPLOY_EVENT_TOKEN }}
           ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
           IMAGE_TAG: ${{ github.sha }}
@@ -79,6 +80,8 @@ jobs:
           grep -q '^NEXT_REVALIDATE_URL=' .env || echo 'NEXT_REVALIDATE_URL=https://www.lomoa.kr/api/revalidate' >> .env
           sed -i '/^NEXT_REVALIDATE_SECRET=/d' .env
           echo 'NEXT_REVALIDATE_SECRET=${NEXT_REVALIDATE_SECRET}' >> .env
+          sed -i '/^DEPLOY_EVENT_TOKEN=/d' .env
+          echo 'DEPLOY_EVENT_TOKEN=${DEPLOY_EVENT_TOKEN}' >> .env
           sed -i '/^NEST_IMAGE=/d' .env
           echo 'NEST_IMAGE=${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}' >> .env
           echo '${ECR_PASSWORD}' | docker login --username AWS --password-stdin ${ECR_REGISTRY}
@@ -137,3 +140,19 @@ jobs:
             exit 0
           fi
           curl -f "$HEALTHCHECK_URL"
+
+      # nest 배포 시점을 모니터링(container_events)에 기록. 실패해도 배포는 성공 처리.
+      - name: Log deploy event (nest)
+        if: success()
+        env:
+          DEPLOY_EVENT_TOKEN: ${{ secrets.DEPLOY_EVENT_TOKEN }}
+        run: |
+          if [ -z "$DEPLOY_EVENT_TOKEN" ]; then
+            echo "DEPLOY_EVENT_TOKEN secret not set. Skip deploy log."
+            exit 0
+          fi
+          curl -fsS -X POST https://api.lomoa.kr/api/webhooks/deploy \
+            -H "Content-Type: application/json" \
+            -H "x-deploy-token: $DEPLOY_EVENT_TOKEN" \
+            -d "{\"service\":\"nest\",\"sha\":\"${{ github.sha }}\"}" \
+            || echo "deploy log POST failed (non-fatal)"

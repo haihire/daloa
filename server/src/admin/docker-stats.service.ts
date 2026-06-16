@@ -18,8 +18,6 @@ export interface ContainerStat {
   memUsedMb: number;
   memTotalMb: number;
   memPercent: number;
-  netInMb: number;
-  netOutMb: number;
 }
 
 export interface HostStats {
@@ -138,11 +136,6 @@ export class DockerStatsService {
         const memUsedMb = toMb(parseBytes(memUsedStr ?? '0'));
         const memTotalMb = toMb(parseBytes(memTotalStr ?? '0'));
 
-        const netIO = raw['NetIO'] ?? raw['net_io'] ?? '0B / 0B';
-        const [netInStr, netOutStr] = netIO.split('/').map((s) => s.trim());
-        const netInMb = toMb(parseBytes(netInStr ?? '0'));
-        const netOutMb = toMb(parseBytes(netOutStr ?? '0'));
-
         stats.push({
           name,
           label,
@@ -150,8 +143,6 @@ export class DockerStatsService {
           memUsedMb,
           memTotalMb,
           memPercent: Number.isFinite(memPercent) ? memPercent : 0,
-          netInMb,
-          netOutMb,
         });
       }
 

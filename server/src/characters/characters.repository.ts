@@ -7,7 +7,6 @@ export interface StatBuildRow {
   statCrit: number;
   statSpec: number;
   statSwift: number;
-  level: number;
 }
 
 @Injectable()
@@ -21,8 +20,7 @@ export class CharactersRepository {
         c.class_engraving AS "classEngraving",
         u.stat_crit       AS "statCrit",
         u.stat_spec       AS "statSpec",
-        u.stat_swift      AS "statSwift",
-        u.level           AS "level"
+        u.stat_swift      AS "statSwift"
       FROM loa_users u
       LEFT JOIN loa_class c ON u.class = c.idx
       WHERE (u.core_sun IS NOT NULL OR u.core_moon IS NOT NULL OR u.core_star IS NOT NULL)

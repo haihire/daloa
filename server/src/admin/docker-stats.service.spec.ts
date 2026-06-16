@@ -67,8 +67,6 @@ describe('DockerStatsService', () => {
         memPercent: 10,
         memUsedMb: 100,
         memTotalMb: 1024,
-        netInMb: 1,
-        netOutMb: 2,
       });
     });
 

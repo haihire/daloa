@@ -33,6 +33,12 @@ export interface DimensionRow {
   count: bigint | number;
 }
 
+export type VisitDimension = 'country' | 'os' | 'browser';
+
+export interface DimensionVisitRow extends DimensionRow {
+  dim: VisitDimension;
+}
+
 export interface SiteClickRow {
   site_name: string;
   site_href: string;
@@ -40,12 +46,7 @@ export interface SiteClickRow {
   click_count: bigint | number;
 }
 
-type RetentionTable =
-  | 'apm_request_timings'
-  | 'monitoring_api_probes'
-  | 'apm_page_load_timings';
-
-export type PageLoadSource = 'rum' | 'synthetic';
+type RetentionTable = 'apm_request_timings' | 'apm_page_load_timings';
 
 export interface PageLoadSeriesRow {
   bucket: string;
@@ -72,6 +73,23 @@ export interface ContainerHistoryRow {
   avg_mem_used_mb: number;
 }
 
+export interface ContainerAggregateRow {
+  avg_cpu: number;
+  max_cpu: number;
+  min_cpu: number;
+  p95_cpu: number;
+  avg_mem_pct: number;
+  peak_mem_pct: number;
+  peak_mem_used_mb: number;
+  sample_count: number;
+}
+
+export interface ContainerHourlyCpuRow {
+  hour: number;
+  avg_cpu: number;
+  max_cpu: number;
+}
+
 @Injectable()
 export class MonitoringRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -91,9 +109,6 @@ export class MonitoringRepository {
         END IF;
         IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'apm_youtube_clicks_device_type') THEN
           CREATE TYPE apm_youtube_clicks_device_type AS ENUM ('mobile', 'desktop', 'tablet', 'bot', 'unknown');
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'monitoring_api_probes_cache_type') THEN
-          CREATE TYPE monitoring_api_probes_cache_type AS ENUM ('redis', 'no-cache');
         END IF;
       END $$;
     `;
@@ -115,6 +130,24 @@ export class MonitoringRepository {
         CONSTRAINT uk_page_device_country_os_browser_day UNIQUE (path, device_type, country_code, os_name, browser_name, visit_day)
       )
     `;
+    // 일별 방문 추이 뷰: apm_page_visits를 visit_day로 합산해 날짜별 집계를 바로 조회(pgAdmin 등).
+    // 별도 저장/동기화 없이 항상 최신. SELECT * FROM apm_page_visit_daily;
+    // 컬럼 구성이 바뀌어도 startup이 깨지지 않도록 DROP 후 재생성
+    // (CREATE OR REPLACE VIEW는 컬럼 추가/삭제/순서변경 시 에러로 기동 실패할 수 있음).
+    await this.prisma.$executeRaw`DROP VIEW IF EXISTS apm_page_visit_daily`;
+    await this.prisma.$executeRaw`
+      CREATE VIEW apm_page_visit_daily AS
+      SELECT visit_day,
+             SUM(visits)                                        AS total,
+             SUM(visits) FILTER (WHERE device_type = 'desktop') AS desktop,
+             SUM(visits) FILTER (WHERE device_type = 'mobile')  AS mobile,
+             SUM(visits) FILTER (WHERE device_type = 'tablet')  AS tablet,
+             SUM(visits) FILTER (WHERE device_type = 'bot')     AS bot,
+             COUNT(*)                                           AS rows
+      FROM apm_page_visits
+      GROUP BY visit_day
+      ORDER BY visit_day DESC
+    `;
     await this.prisma.$executeRaw`
       CREATE TABLE IF NOT EXISTS apm_request_timings (
         id BIGSERIAL PRIMARY KEY,
@@ -124,19 +157,6 @@ export class MonitoringRepository {
         method VARCHAR(10),
         status_code INT,
         duration_ms INT NOT NULL,
-        created_at TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )
-    `;
-    await this.prisma.$executeRaw`
-      CREATE TABLE IF NOT EXISTS monitoring_api_probes (
-        id BIGSERIAL PRIMARY KEY,
-        api_key VARCHAR(100) NOT NULL,
-        path VARCHAR(255) NOT NULL,
-        method VARCHAR(10) NOT NULL,
-        cache_type monitoring_api_probes_cache_type NOT NULL DEFAULT 'no-cache',
-        status_code INT NOT NULL,
-        duration_ms INT NOT NULL,
-        is_success BOOLEAN NOT NULL DEFAULT FALSE,
         created_at TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `;
@@ -160,7 +180,7 @@ export class MonitoringRepository {
         created_at TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `;
-    // 페이지 로딩 속도(RUM: 실사용자 / synthetic: 서버 합성 프로브). 지표는 NULL 허용.
+    // 페이지 로딩 속도(실사용자 RUM). source 컬럼은 과거 데이터 호환을 위해 유지. 지표는 NULL 허용.
     await this.prisma.$executeRaw`
       CREATE TABLE IF NOT EXISTS apm_page_load_timings (
         id BIGSERIAL PRIMARY KEY,
@@ -180,10 +200,6 @@ export class MonitoringRepository {
     await this.prisma
       .$executeRaw`CREATE INDEX IF NOT EXISTS idx_apm_request_timings_scope_name ON apm_request_timings(scope, name)`;
     await this.prisma
-      .$executeRaw`CREATE INDEX IF NOT EXISTS idx_monitoring_api_probes_created_at ON monitoring_api_probes(created_at)`;
-    await this.prisma
-      .$executeRaw`CREATE INDEX IF NOT EXISTS idx_monitoring_api_probes_api_key ON monitoring_api_probes(api_key)`;
-    await this.prisma
       .$executeRaw`CREATE INDEX IF NOT EXISTS idx_apm_site_clicks_created_at ON apm_site_clicks(created_at)`;
     await this.prisma
       .$executeRaw`CREATE INDEX IF NOT EXISTS idx_apm_site_clicks_site_href ON apm_site_clicks(site_href)`;
@@ -195,6 +211,20 @@ export class MonitoringRepository {
       .$executeRaw`CREATE INDEX IF NOT EXISTS idx_apm_page_load_timings_created_at ON apm_page_load_timings(created_at)`;
     await this.prisma
       .$executeRaw`CREATE INDEX IF NOT EXISTS idx_apm_page_load_timings_source_created_at ON apm_page_load_timings(source, created_at)`;
+
+    // 서비스 변경(재시작/배포) 이벤트 로그. occurred_at=실제 발생시각, detected_at=감지시각.
+    await this.prisma.$executeRaw`
+      CREATE TABLE IF NOT EXISTS container_events (
+        id BIGSERIAL PRIMARY KEY,
+        service VARCHAR(16) NOT NULL,
+        event_type VARCHAR(24) NOT NULL,
+        detail VARCHAR(500),
+        occurred_at TIMESTAMPTZ(6) NOT NULL,
+        detected_at TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    await this.prisma
+      .$executeRaw`CREATE INDEX IF NOT EXISTS idx_container_events_service_occurred_at ON container_events(service, occurred_at)`;
 
     for (const container of Object.keys(DOCKER_TABLE) as ContainerName[]) {
       await this.prisma.$executeRawUnsafe(`
@@ -309,34 +339,8 @@ export class MonitoringRepository {
     `;
   }
 
-  async recordApiProbe(input: {
-    apiKey: string;
-    path: string;
-    method: 'GET';
-    cacheType: 'redis' | 'no-cache';
-    statusCode: number;
-    durationMs: number;
-    isSuccess: boolean;
-  }) {
-    await this.prisma.$executeRaw`
-      INSERT INTO monitoring_api_probes
-        (api_key, path, method, cache_type, status_code, duration_ms, is_success, created_at)
-      VALUES (
-        ${input.apiKey},
-        ${input.path},
-        ${input.method},
-        ${input.cacheType}::monitoring_api_probes_cache_type,
-        ${input.statusCode},
-        ${input.durationMs},
-        ${input.isSuccess},
-        NOW()
-      )
-    `;
-  }
-
-  /** 페이지 로딩 측정값 1건 저장. 지표는 NULL 허용(소스별로 채워지는 지표가 다름). */
+  /** 페이지 로딩 측정값 1건 저장(실사용자 RUM). 지표는 NULL 허용. */
   async recordPageLoad(input: {
-    source: PageLoadSource;
     path: string;
     deviceType: string;
     ttfbMs: number | null;
@@ -348,7 +352,7 @@ export class MonitoringRepository {
       INSERT INTO apm_page_load_timings
         (source, path, device_type, ttfb_ms, dcl_ms, lcp_ms, load_ms, created_at)
       VALUES (
-        ${input.source},
+        'rum',
         ${input.path},
         ${input.deviceType},
         ${input.ttfbMs},
@@ -360,32 +364,61 @@ export class MonitoringRepository {
     `;
   }
 
-  /** source별 시간버킷 평균(ttfb/dcl/lcp/load). 빈 버킷도 채워 반환. */
-  async findPageLoadSeries(
-    source: PageLoadSource,
-    rangeDays: number,
-    bucketHours: number,
-  ) {
+  /** 시간버킷 평균(ttfb/dcl/lcp/load). 빈 버킷도 채워 반환. */
+  async findPageLoadSeries(rangeDays: number, bucketHours: number) {
+    // 버킷/라벨은 한국시간(KST) 달력 기준. 빈 버킷도 generate_series로 채워 축이 끊기지 않게 함.
+    if (bucketHours < 24) {
+      // 1일 보기: 오늘(KST) 00:00~23:00 시간별 (밤12시~다음날밤12시 24칸 고정)
+      return this.prisma.$queryRaw<PageLoadSeriesRow[]>`
+        WITH samples AS (
+          SELECT date_trunc('hour', created_at AT TIME ZONE 'Asia/Seoul') AS bucket_start,
+                 ttfb_ms, dcl_ms, lcp_ms, load_ms
+          FROM apm_page_load_timings
+          WHERE source = 'rum'
+            AND created_at >= (date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul')) AT TIME ZONE 'Asia/Seoul'
+        ),
+        buckets AS (
+          SELECT generate_series(
+                   date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul'),
+                   date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') + INTERVAL '23 hours',
+                   INTERVAL '1 hour'
+                 ) AS bucket_start
+        )
+        SELECT TO_CHAR(b.bucket_start, 'HH24:MI') AS bucket,
+               ROUND(AVG(s.ttfb_ms))::int AS avg_ttfb,
+               ROUND(AVG(s.dcl_ms))::int  AS avg_dcl,
+               ROUND(AVG(s.lcp_ms))::int  AS avg_lcp,
+               ROUND(AVG(s.load_ms))::int AS avg_load,
+               COUNT(s.bucket_start) AS count
+        FROM buckets b
+        LEFT JOIN samples s ON s.bucket_start = b.bucket_start
+        GROUP BY b.bucket_start
+        ORDER BY b.bucket_start ASC
+      `;
+    }
+
+    // 7/30일 보기: 최근 rangeDays 일(KST 달력, 오늘 포함) 일별
     return this.prisma.$queryRaw<PageLoadSeriesRow[]>`
       WITH samples AS (
-        SELECT
-          TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM created_at) / (${bucketHours} * 3600)) * (${bucketHours} * 3600)) AS bucket_start,
-          ttfb_ms, dcl_ms, lcp_ms, load_ms
+        SELECT (created_at AT TIME ZONE 'Asia/Seoul')::date AS bucket_start,
+               ttfb_ms, dcl_ms, lcp_ms, load_ms
         FROM apm_page_load_timings
-        WHERE source = ${source}
-          AND created_at >= NOW() - (${rangeDays}::int * INTERVAL '1 day')
+        WHERE source = 'rum'
+          AND created_at >= (
+            (NOW() AT TIME ZONE 'Asia/Seoul')::date
+            - ((${rangeDays}::int - 1) * INTERVAL '1 day')
+          ) AT TIME ZONE 'Asia/Seoul'
       ),
       buckets AS (
-        SELECT TO_TIMESTAMP(
-                 FLOOR(EXTRACT(EPOCH FROM g) / (${bucketHours} * 3600)) * (${bucketHours} * 3600)
-               ) AS bucket_start
+        SELECT g::date AS bucket_start
         FROM generate_series(
-               NOW() - (${rangeDays}::int * INTERVAL '1 day'),
-               NOW(),
-               (${bucketHours} * INTERVAL '1 hour')
+               ((NOW() AT TIME ZONE 'Asia/Seoul')::date
+                - ((${rangeDays}::int - 1) * INTERVAL '1 day'))::date,
+               (NOW() AT TIME ZONE 'Asia/Seoul')::date,
+               INTERVAL '1 day'
              ) AS g
       )
-      SELECT TO_CHAR(b.bucket_start, 'MM-DD HH24:MI') AS bucket,
+      SELECT TO_CHAR(b.bucket_start, 'MM-DD') AS bucket,
              ROUND(AVG(s.ttfb_ms))::int AS avg_ttfb,
              ROUND(AVG(s.dcl_ms))::int  AS avg_dcl,
              ROUND(AVG(s.lcp_ms))::int  AS avg_lcp,
@@ -417,8 +450,11 @@ export class MonitoringRepository {
   }
 
   async findPageVisitSeriesDays(days: number) {
-    // visit_day(방문 날짜)별 visits 합 = 그날 실제 방문 횟수. generate_series로 빈 날도 0.
-    // 일자 경계는 한국시간(Asia/Seoul) 기준 — DB 서버 타임존(프로덕션=UTC)과 무관하게 '오늘'까지 표시.
+    // 일별 방문 추이: 날짜축(generate_series)에 apm_page_visits를 직접 LEFT JOIN + GROUP BY.
+    //   - 최근 days 기간의 행만 조인/집계 → 뷰 전체 집계(풀스캔) 회피, 테이블이 커져도 효율적.
+    //   - 값은 SUM(visits)로 pgAdmin 뷰(apm_page_visit_daily)와 동일.
+    //   - 방문 0인 날(오늘 포함)도 COALESCE로 0을 채워 그래프가 끊기지 않음.
+    //   - 일자 경계는 한국시간(Asia/Seoul) 기준 — 최근 days일까지.
     return this.prisma.$queryRaw<
       Array<{ bucket: string; count: bigint | number }>
     >`
@@ -476,21 +512,31 @@ export class MonitoringRepository {
   }
 
   async findSectionSeries(bucketHours: number, rangeDays: number) {
+    // 1일 보기(시간 버킷)만 시각 표시, 그 외(일 버킷)는 날짜만 표시
+    const labelFormat = bucketHours < 24 ? 'MM-DD HH24:MI' : 'MM-DD';
     // 빈 시간 버킷도 채우기:
     //   buckets(시간축) × labels(api_key) 조합을 만들고 실제 데이터를 LEFT JOIN.
     //   데이터 없는 버킷은 count=0, avg_duration_ms=NULL(서비스에서 0 처리).
     //   버킷 경계는 epoch floor 방식으로 통일해 데이터 버킷과 정확히 매칭.
     return this.prisma.$queryRaw<TimedGroupRow[]>`
-      WITH probe_buckets AS (
+      WITH targets(path, api_key) AS (
+        VALUES
+          ('/api/sites', 'sites'),
+          ('/api/characters/stat-builds', 'stat-builds'),
+          ('/api/streamers/popular', 'youtube')
+      ),
+      probe_buckets AS (
         SELECT
-          TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM created_at) / (${bucketHours} * 3600)) * (${bucketHours} * 3600)) AS bucket_start,
-          api_key,
-          duration_ms
-        FROM monitoring_api_probes
-        WHERE created_at >= NOW() - (${rangeDays}::int * INTERVAL '1 day')
+          TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM r.created_at) / (${bucketHours} * 3600)) * (${bucketHours} * 3600)) AS bucket_start,
+          t.api_key,
+          r.duration_ms
+        FROM apm_request_timings r
+        JOIN targets t ON t.path = r.name
+        WHERE r.scope = 'route'
+          AND r.created_at >= NOW() - (${rangeDays}::int * INTERVAL '1 day')
       ),
       labels AS (
-        SELECT DISTINCT api_key FROM probe_buckets
+        SELECT api_key FROM targets
       ),
       buckets AS (
         SELECT TO_TIMESTAMP(
@@ -506,7 +552,7 @@ export class MonitoringRepository {
         SELECT DISTINCT b.bucket_start, l.api_key
         FROM buckets b CROSS JOIN labels l
       )
-      SELECT TO_CHAR(grid.bucket_start, 'MM-DD HH24:MI') AS bucket,
+      SELECT TO_CHAR(grid.bucket_start, ${labelFormat}) AS bucket,
              grid.api_key AS label,
              ROUND(AVG(pb.duration_ms))::int AS avg_duration_ms,
              COUNT(pb.duration_ms) AS count
@@ -529,16 +575,39 @@ export class MonitoringRepository {
     `;
   }
 
-  async findCountryVisits() {
-    return this.findDimensionRows('country_code');
-  }
-
-  async findOsVisits() {
-    return this.findDimensionRows('os_name');
-  }
-
-  async findBrowserVisits() {
-    return this.findDimensionRows('browser_name');
+  /**
+   * 국가/OS/브라우저별 방문 합계(각 차원 상위 20)를 한 번의 왕복으로 조회.
+   * GROUPING SETS로 테이블을 단 한 번만 스캔해 세 차원을 동시 집계하고,
+   * 차원별 ROW_NUMBER로 상위 20만 남김 — 집계는 DB가 수행. (해당 컬럼들은 NOT NULL이라 GROUPING() 판별이 안전)
+   */
+  async findDimensionVisits(): Promise<DimensionVisitRow[]> {
+    return this.prisma.$queryRaw<DimensionVisitRow[]>`
+      WITH agg AS (
+        SELECT
+          CASE
+            WHEN GROUPING(country_code) = 0 THEN 'country'
+            WHEN GROUPING(os_name) = 0 THEN 'os'
+            ELSE 'browser'
+          END AS dim,
+          CASE
+            WHEN GROUPING(country_code) = 0 THEN country_code
+            WHEN GROUPING(os_name) = 0 THEN os_name
+            ELSE browser_name
+          END AS name,
+          SUM(visits) AS count
+        FROM apm_page_visits
+        GROUP BY GROUPING SETS ((country_code), (os_name), (browser_name))
+      ),
+      ranked AS (
+        SELECT dim, name, count,
+               ROW_NUMBER() OVER (PARTITION BY dim ORDER BY count DESC) AS rn
+        FROM agg
+      )
+      SELECT dim, name, count
+      FROM ranked
+      WHERE rn <= 20
+      ORDER BY dim, count DESC
+    `;
   }
 
   async findYoutubeClickTotal(): Promise<number> {
@@ -584,16 +653,107 @@ export class MonitoringRepository {
   ): Promise<ContainerHistoryRow[]> {
     const table = DOCKER_TABLE[container];
     return this.prisma.$queryRawUnsafe<ContainerHistoryRow[]>(
-      `SELECT TO_CHAR(DATE_TRUNC('hour', created_at), 'MM-DD HH24:MI') AS bucket,
+      // 버킷/라벨은 한국시간(KST) 기준 — 그래프 시각이 운영자 기준과 일치하도록.
+      `SELECT TO_CHAR(DATE_TRUNC('hour', created_at AT TIME ZONE 'Asia/Seoul'), 'MM-DD HH24:MI') AS bucket,
               ROUND(AVG(cpu_percent)::numeric, 2)::float AS avg_cpu,
               ROUND(AVG(mem_percent)::numeric, 2)::float AS avg_mem,
               ROUND(AVG(mem_used_mb))::int AS avg_mem_used_mb
        FROM ${table}
        WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
-       GROUP BY DATE_TRUNC('hour', created_at)
-       ORDER BY DATE_TRUNC('hour', created_at) ASC`,
+       GROUP BY DATE_TRUNC('hour', created_at AT TIME ZONE 'Asia/Seoul')
+       ORDER BY DATE_TRUNC('hour', created_at AT TIME ZONE 'Asia/Seoul') ASC`,
       days,
     );
+  }
+
+  /** 기간 내 컨테이너 CPU/MEM 집계(평균/최대/최소/p95, 메모리 피크). */
+  async findContainerAggregate(
+    container: ContainerName,
+    days: number,
+  ): Promise<ContainerAggregateRow | undefined> {
+    const table = DOCKER_TABLE[container];
+    const rows = await this.prisma.$queryRawUnsafe<ContainerAggregateRow[]>(
+      `SELECT
+         ROUND(AVG(cpu_percent)::numeric, 2)::float AS avg_cpu,
+         ROUND(MAX(cpu_percent)::numeric, 2)::float AS max_cpu,
+         ROUND(MIN(cpu_percent)::numeric, 2)::float AS min_cpu,
+         ROUND(
+           PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY cpu_percent)::numeric, 2
+         )::float AS p95_cpu,
+         ROUND(AVG(mem_percent)::numeric, 2)::float AS avg_mem_pct,
+         ROUND(MAX(mem_percent)::numeric, 2)::float AS peak_mem_pct,
+         MAX(mem_used_mb)::int AS peak_mem_used_mb,
+         COUNT(*)::int AS sample_count
+       FROM ${table}
+       WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')`,
+      days,
+    );
+    return rows[0];
+  }
+
+  /** 시간대(0~23시, 한국시간)별 평균/최대 CPU — 특정 시간대 스파이크 탐지용. */
+  async findContainerHourlyCpu(
+    container: ContainerName,
+    days: number,
+  ): Promise<ContainerHourlyCpuRow[]> {
+    const table = DOCKER_TABLE[container];
+    return this.prisma.$queryRawUnsafe<ContainerHourlyCpuRow[]>(
+      `SELECT EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Seoul')::int AS hour,
+              ROUND(AVG(cpu_percent)::numeric, 2)::float AS avg_cpu,
+              ROUND(MAX(cpu_percent)::numeric, 2)::float AS max_cpu
+       FROM ${table}
+       WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+       GROUP BY 1
+       ORDER BY 1`,
+      days,
+    );
+  }
+
+  /** 서비스 변경 이벤트 1건 기록. */
+  async recordContainerEvent(input: {
+    service: string;
+    eventType: string;
+    detail: string | null;
+    occurredAt: Date;
+  }): Promise<void> {
+    await this.prisma.$executeRaw`
+      INSERT INTO container_events (service, event_type, detail, occurred_at, detected_at)
+      VALUES (
+        ${input.service},
+        ${input.eventType},
+        ${input.detail},
+        ${input.occurredAt},
+        NOW()
+      )
+    `;
+  }
+
+  /** 최근 N일 변경 이벤트 (최신순). */
+  async findRecentContainerEvents(
+    days: number,
+    limit: number,
+  ): Promise<
+    Array<{
+      service: string;
+      event_type: string;
+      detail: string | null;
+      occurred_at: Date;
+    }>
+  > {
+    return this.prisma.$queryRaw<
+      Array<{
+        service: string;
+        event_type: string;
+        detail: string | null;
+        occurred_at: Date;
+      }>
+    >`
+      SELECT service, event_type, detail, occurred_at
+      FROM container_events
+      WHERE occurred_at >= NOW() - (${days}::int * INTERVAL '1 day')
+      ORDER BY occurred_at DESC
+      LIMIT ${limit}
+    `;
   }
 
   async deleteDockerMetricsOlderThan(
@@ -638,8 +798,6 @@ export class MonitoringRepository {
     switch (tableName) {
       case 'apm_request_timings':
         return this.deleteRequestTimingRowsOlderThan(retentionDays, chunkSize);
-      case 'monitoring_api_probes':
-        return this.deleteApiProbeRowsOlderThan(retentionDays, chunkSize);
       case 'apm_page_load_timings':
         return this.deleteRowsOlderThan(
           'apm_page_load_timings',
@@ -672,20 +830,6 @@ export class MonitoringRepository {
     return deleted.length;
   }
 
-  private async findDimensionRows(
-    columnName: 'country_code' | 'os_name' | 'browser_name',
-  ) {
-    return this.prisma.$queryRawUnsafe<DimensionRow[]>(
-      `
-      SELECT ${columnName} AS name, SUM(visits) AS count
-      FROM apm_page_visits
-      GROUP BY ${columnName}
-      ORDER BY count DESC
-      LIMIT 20
-      `,
-    );
-  }
-
   private async deleteRequestTimingRowsOlderThan(
     retentionDays: number,
     chunkSize: number,
@@ -696,28 +840,6 @@ export class MonitoringRepository {
       WHERE id IN (
         SELECT id
         FROM apm_request_timings
-        WHERE created_at < NOW() - ($1::int * INTERVAL '1 day')
-        ORDER BY id ASC
-        LIMIT $2
-      )
-      RETURNING id
-      `,
-      retentionDays,
-      chunkSize,
-    );
-    return deleted.length;
-  }
-
-  private async deleteApiProbeRowsOlderThan(
-    retentionDays: number,
-    chunkSize: number,
-  ) {
-    const deleted = await this.prisma.$queryRawUnsafe<Array<{ id: bigint }>>(
-      `
-      DELETE FROM monitoring_api_probes
-      WHERE id IN (
-        SELECT id
-        FROM monitoring_api_probes
         WHERE created_at < NOW() - ($1::int * INTERVAL '1 day')
         ORDER BY id ASC
         LIMIT $2

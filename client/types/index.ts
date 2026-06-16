@@ -3,7 +3,6 @@ export interface Site {
   href: string;
   category: string;
   description: string;
-  icon?: string;
 }
 
 export interface YoutubeVideo {
@@ -20,7 +19,6 @@ export interface StatBuildItem {
   classDetail: string;
   classEngraving: string | null;
   count: number;
-  topLevel: number;
 }
 
 export interface StatBuildTab {

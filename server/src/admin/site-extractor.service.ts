@@ -67,7 +67,9 @@ const EXCLUDE_DOMAINS = new Set([
   'lostark.game.onstove.com',
 ]);
 
-const MIN_MENTIONS = 2; // 최소 언급 횟수 (1회만 언급된 건 노이즈로 제외)
+// 증분 크롤은 실행 배치가 작아(2시간치) 배치별 임계값을 두면 저빈도 사이트를 놓친다.
+// → extract는 1회 이상이면 후보로 만들어 누적시키고, 노출 임계값(누적 ≥2)은 조회 시점에 적용.
+const MIN_MENTIONS = 1;
 const URL_RE = /https?:\/\/[^\s"<>)\]}]+/g;
 
 // URL 끝의 구두점·괄호·zero-width space(U+200B) 제거.
@@ -131,11 +133,8 @@ export class SiteExtractorService {
     >();
 
     for (const post of posts) {
-      const texts = [post.content ?? ''];
-      for (const c of post.comments ?? []) {
-        if (c && typeof c.text === 'string') texts.push(c.text);
-      }
-      const blob = texts.join(' ');
+      // 본문만 스캔 (댓글은 더 이상 수집하지 않음)
+      const blob = post.content ?? '';
       const matches = blob.match(URL_RE) ?? [];
 
       for (const match of matches) {

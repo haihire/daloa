@@ -10,14 +10,12 @@ const MOCK_SITES: Site[] = [
     href: "https://lostark.game.onstove.com",
     category: "공식",
     description: "공식 홈페이지",
-    icon: undefined,
   },
   {
     name: "로아인벤",
     href: "https://lostark.inven.co.kr",
     category: "커뮤니티",
     description: "인벤 커뮤니티",
-    icon: "https://example.com/icon.png",
   },
 ];
 

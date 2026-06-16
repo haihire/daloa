@@ -99,7 +99,6 @@ function BarChart({
 
 export default function AdminYoutubePage() {
   const [items, setItems] = useState<YoutubeVideo[]>([]);
-  const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [purging, setPurging] = useState(false);
   const [purgeResult, setPurgeResult] = useState<"idle" | "done" | "error">(
@@ -113,6 +112,9 @@ export default function AdminYoutubePage() {
   >([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [accessNotice, setAccessNotice] = useState("");
+  const [blockedIds, setBlockedIds] = useState<string[]>([]);
+  const [showBlocked, setShowBlocked] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const role = useAdminRole();
   const isGuest = role === "guest";
 
@@ -138,16 +140,17 @@ export default function AdminYoutubePage() {
   async function load() {
     setLoading(true);
     try {
-      const res = await fetch("/api/streamers/popular?offset=0&limit=0", {
-        cache: "no-store",
-      });
+      // 캐시버스터(_=ts) — 엔드포인트가 public s-maxage라 no-store만으론
+      // 공유 CDN 캐시를 못 건너뜀. 유니크 URL로 항상 오리진 최신을 받는다.
+      const res = await fetch(
+        `/api/streamers/popular?offset=0&limit=0&_=${Date.now()}`,
+        { cache: "no-store" },
+      );
       if (!res.ok) throw new Error();
       const data = (await res.json()) as {
         items: YoutubeVideo[];
-        total: number;
       };
       setItems(data.items ?? []);
-      setTotal(data.total ?? data.items?.length ?? 0);
     } catch {
       setItems([]);
     } finally {
@@ -158,6 +161,70 @@ export default function AdminYoutubePage() {
   useEffect(() => {
     void load();
   }, []);
+
+  async function loadBlocked() {
+    try {
+      const res = await fetch("/api/admin/youtube/blocked", {
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { items?: string[] };
+      setBlockedIds(data.items ?? []);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  useEffect(() => {
+    void loadBlocked();
+  }, []);
+
+  async function handleBlock(videoId: string, title: string) {
+    if (!requireMaster("영상 삭제")) return;
+    if (!window.confirm(`이 영상을 인기 목록에서 삭제할까요?\n\n${title}`)) return;
+    setBusyId(videoId);
+    try {
+      const res = await fetch("/api/admin/youtube/block", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoId }),
+      });
+      if (res.ok) {
+        setItems((prev) => prev.filter((v) => v.videoId !== videoId));
+        setBlockedIds((prev) =>
+          prev.includes(videoId) ? prev : [...prev, videoId],
+        );
+      } else {
+        alert("영상 삭제에 실패했습니다.");
+      }
+    } catch {
+      alert("네트워크 오류가 발생했습니다.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleUnblock(videoId: string) {
+    if (!requireMaster("삭제 되돌리기")) return;
+    setBusyId(videoId);
+    try {
+      const res = await fetch("/api/admin/youtube/unblock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoId }),
+      });
+      if (res.ok) {
+        setBlockedIds((prev) => prev.filter((id) => id !== videoId));
+        await load(); // 되돌린 영상이 목록에 다시 나타나도록 갱신
+      } else {
+        alert("되돌리기에 실패했습니다.");
+      }
+    } catch {
+      alert("네트워크 오류가 발생했습니다.");
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   useEffect(() => {
     void (async () => {
@@ -194,6 +261,9 @@ export default function AdminYoutubePage() {
     });
     setPurgeResult(res.ok ? "done" : "error");
     setPurging(false);
+    if (res.ok) {
+      void load(); // 캐시 비운 뒤 최신 목록 다시 불러오기
+    }
     setTimeout(() => setPurgeResult("idle"), 3000);
   }
 
@@ -255,11 +325,6 @@ export default function AdminYoutubePage() {
       <div className="flex items-end justify-between mb-5 shrink-0">
         <div>
           <h1 className="admin-page-title">유튜브 인기 영상</h1>
-          <p className="admin-page-subtitle mt-1">
-            {total !== null
-              ? `총 ${total}개의 인기 영상이 캐시되어 있습니다.`
-              : "캐시된 영상 목록을 확인합니다."}
-          </p>
           {accessNotice && (
             <pre className="mt-3 whitespace-pre-wrap rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
               {accessNotice}
@@ -273,6 +338,12 @@ export default function AdminYoutubePage() {
           {purgeResult === "error" && (
             <span className="text-xs text-red-500">✗ 오류</span>
           )}
+          <button
+            onClick={() => setShowBlocked((v) => !v)}
+            className="admin-btn admin-btn-secondary"
+          >
+            삭제됨 {blockedIds.length}
+          </button>
           <button
             onClick={handlePurge}
             disabled={purging}
@@ -307,6 +378,42 @@ export default function AdminYoutubePage() {
         </div>
       </div>
 
+      {/* 삭제 관리 패널 */}
+      {showBlocked && (
+        <div className="admin-card admin-card-padded mb-4 shrink-0">
+          <p className="text-xs font-semibold text-[color:var(--admin-text-muted)] mb-2 uppercase tracking-wide">
+            삭제한 영상 ({blockedIds.length})
+          </p>
+          {blockedIds.length === 0 ? (
+            <p className="text-xs text-[color:var(--admin-text-subtle)]">
+              삭제한 영상이 없습니다.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-1 max-h-40 overflow-y-auto">
+              {blockedIds.map((id) => (
+                <li key={id} className="flex items-center gap-2 text-xs">
+                  <a
+                    href={`https://www.youtube.com/watch?v=${id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 truncate flex-1 tabular-nums"
+                  >
+                    {id}
+                  </a>
+                  <button
+                    onClick={() => void handleUnblock(id)}
+                    disabled={busyId === id}
+                    className="admin-btn admin-btn-sm admin-btn-secondary shrink-0"
+                  >
+                    되돌리기
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {/* 본문: 목록 + 통계 */}
       <div className="flex flex-1 gap-5 min-h-0">
         {/* 좌측: 영상 목록 */}
@@ -325,12 +432,12 @@ export default function AdminYoutubePage() {
             ) : (
               <ul className="divide-y divide-[color:var(--admin-border)]">
                 {filtered.map((v) => (
-                  <li key={v.videoId}>
+                  <li key={v.videoId} className="flex items-center">
                     <a
                       href={`https://www.youtube.com/watch?v=${v.videoId}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-3 px-4 py-3 hover:bg-[color:var(--admin-surface-muted)] transition-colors"
+                      className="flex flex-1 min-w-0 items-center gap-3 px-4 py-3 hover:bg-[color:var(--admin-surface-muted)] transition-colors"
                     >
                       <div className="w-28 shrink-0 aspect-video bg-gray-100 rounded-md overflow-hidden">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -360,6 +467,14 @@ export default function AdminYoutubePage() {
                         </div>
                       </div>
                     </a>
+                    <button
+                      onClick={() => void handleBlock(v.videoId, v.title)}
+                      disabled={busyId === v.videoId}
+                      title="목록에서 삭제"
+                      className="admin-btn admin-btn-sm admin-btn-secondary mr-3 shrink-0 text-red-600 disabled:opacity-50"
+                    >
+                      {busyId === v.videoId ? "..." : "삭제"}
+                    </button>
                   </li>
                 ))}
               </ul>

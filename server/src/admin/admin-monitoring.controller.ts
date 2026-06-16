@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Get,
   Headers,
+  HttpCode,
   HttpException,
   HttpStatus,
   Post,
@@ -15,6 +16,7 @@ import type { Request } from 'express';
 import { AdminGuard } from './admin.guard';
 import { AdminMonitoringService } from './admin-monitoring.service';
 import { DockerStatsService } from './docker-stats.service';
+import { AiDiagnosisService, type ChatMessage } from './ai-diagnosis.service';
 
 @Controller('api')
 export class AdminMonitoringController {
@@ -27,6 +29,7 @@ export class AdminMonitoringController {
   constructor(
     private readonly monitoring: AdminMonitoringService,
     private readonly dockerStats: DockerStatsService,
+    private readonly aiDiagnosis: AiDiagnosisService,
   ) {}
 
   @UseGuards(AdminGuard)
@@ -60,16 +63,50 @@ export class AdminMonitoringController {
     return this.dockerStats.getContainerHistory(container ?? 'nest');
   }
 
+  // 배포 이벤트 기록(GitHub Actions가 호출). 관리자 세션 대신 공유 토큰으로 인증.
+  // nest: 배포 워크플로에서, next: Vercel 배포 성공 시 deployment_status 워크플로에서 POST.
+  @Post('webhooks/deploy')
+  @HttpCode(HttpStatus.OK)
+  async deployEvent(
+    @Headers('x-deploy-token') token: string | undefined,
+    @Body() body: { service?: string; sha?: string; detail?: string },
+  ) {
+    const expected = process.env.DEPLOY_EVENT_TOKEN ?? '';
+    if (!expected || token !== expected) {
+      throw new ForbiddenException('invalid deploy token');
+    }
+    if (body?.service !== 'nest' && body?.service !== 'next') {
+      return { ok: false };
+    }
+    await this.monitoring.recordDeployEvent({
+      service: body.service,
+      sha: body.sha,
+      detail: body.detail,
+    });
+    return { ok: true };
+  }
+
+  // 버튼 클릭 시 1회만 호출(비용 통제). 컨테이너 메트릭+EC2 정보를 LLM에 보내 진단.
+  @UseGuards(AdminGuard)
+  @Get('admin/monitoring/ai-diagnosis')
+  getAiDiagnosis() {
+    return this.aiDiagnosis.diagnose();
+  }
+
+  // 운영 챗봇. 운영 데이터는 모든 관리자(guest 포함)가 동일하게 조회 가능.
+  // 민감정보(계정/시크릿/토큰/env)는 애초에 컨텍스트에 없어 누구도 못 봄.
+  @UseGuards(AdminGuard)
+  @Post('admin/monitoring/ai-chat')
+  aiChat(@Body() body: { messages?: ChatMessage[] }) {
+    return this.aiDiagnosis.chat(body?.messages ?? []);
+  }
+
   @UseGuards(AdminGuard)
   @Get('admin/monitoring/page-load-series')
-  pageLoadSeries(
-    @Query('source') source?: string,
-    @Query('days') days?: string,
-  ) {
-    const safeSource = source === 'synthetic' ? 'synthetic' : 'rum';
+  pageLoadSeries(@Query('days') days?: string) {
     const parsed = Number(days);
     const rangeDays = Number.isFinite(parsed) ? parsed : 7;
-    return this.monitoring.getPageLoadSeries(safeSource, rangeDays);
+    return this.monitoring.getPageLoadSeries(rangeDays);
   }
 
   @Post('telemetry/page-load')

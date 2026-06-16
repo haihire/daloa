@@ -13,7 +13,6 @@ const DB_ROW = {
   href: 'https://lostark.game.onstove.com',
   category: 'official',
   description: 'official site',
-  icon: null,
 };
 
 const BROKEN_CANONICAL_ROW = {
@@ -22,7 +21,6 @@ const BROKEN_CANONICAL_ROW = {
   href: 'https://lostark.inven.co.kr/',
   category: 'community',
   description: '?? ???',
-  icon: null,
 };
 
 const BROKEN_UNKNOWN_ROW = {
@@ -31,7 +29,6 @@ const BROKEN_UNKNOWN_ROW = {
   href: 'https://unknown-site.com/',
   category: null,
   description: '?? ??? ??',
-  icon: null,
 };
 
 describe('SitesService', () => {

@@ -55,9 +55,6 @@ export default function AdminInvenPage() {
   return (
     <div className="space-y-4">
       <h1 className="admin-page-title">사이트 추천</h1>
-      <p className="admin-page-subtitle">
-        인벤 커뮤니티에서 언급된, 아직 등록되지 않은 사이트를 모아줍니다. 검토 후 직접 추가하세요.
-      </p>
 
       {accessNotice && (
         <pre className="whitespace-pre-wrap rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">

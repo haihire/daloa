@@ -18,6 +18,7 @@ const POPULAR_MAX_RESULTS = 50;
 const POPULAR_MAX_LIMIT = 50;
 const POPULAR_MAX_PAGES = 8;
 const POPULAR_WINDOW_DAYS = 7; // 인기 영상 노출 창(게시일 기준 최근 7일)
+const BLOCKED_KEY = 'youtube:blocked'; // 관리자가 숨긴 videoId Set
 
 export interface PopularResponse {
   items: YoutubeVideoItem[];
@@ -272,11 +273,10 @@ export class StreamersService implements OnModuleInit {
       );
       // 1) 새로 가져온 영상을 DB에 누적 저장(메타데이터 + 조회수 스냅샷)
       await this.snapshotViewCounts(uniqueItems);
-      // 2) 서빙 캐시는 DB의 최근 7일 누적분으로 재구성한다.
+      // 2) 서빙 캐시는 DB의 최근 7일 누적분(관리자 숨김 제외)으로 재구성한다.
       //    YouTube 검색이 도달하지 못해 이번에 안 잡힌 영상도 게시일이
       //    7일 이내면 DB에 남아 있어 계속 노출된다(= 누적 서빙).
-      const recent =
-        await this.streamersRepo.findRecentVideos(POPULAR_WINDOW_DAYS);
+      const recent = await this.loadServingList();
       await this.cachePopular(recent);
       this.logger.log(
         `YouTube 인기 영상 ${recent.length}건 캐시 저장 (DB 누적 ${POPULAR_WINDOW_DAYS}일)`,
@@ -427,10 +427,10 @@ export class StreamersService implements OnModuleInit {
       );
     }
 
-    // 2. 캐시 미스 → DB에서 최근 7일 누적분 조회 후 캐싱
+    // 2. 캐시 미스 → DB에서 최근 7일 누적분(관리자 숨김 제외) 조회 후 캐싱
     let items: YoutubeVideoItem[];
     try {
-      items = await this.streamersRepo.findRecentVideos(POPULAR_WINDOW_DAYS);
+      items = await this.loadServingList();
     } catch (err: unknown) {
       this.logger.error(`popular DB 조회 실패: ${toErrorMessage(err)}`);
       return { items: [], nextOffset: null, hasMore: false, total: 0 };
@@ -438,6 +438,55 @@ export class StreamersService implements OnModuleInit {
 
     await this.cachePopular(items);
     return this.slicePopular(items, safeOffset, safeLimit);
+  }
+
+  /**
+   * DB의 최근 7일 누적분에서 관리자가 숨긴(blocked) 영상을 제외한 서빙 목록.
+   * refresh()와 searchPopularVideos() 양쪽이 캐시를 만들 때 공통으로 쓰므로
+   * 캐시를 purge해도 숨김은 항상 다시 적용된다.
+   */
+  private async loadServingList(): Promise<YoutubeVideoItem[]> {
+    const items =
+      await this.streamersRepo.findRecentVideos(POPULAR_WINDOW_DAYS);
+    const blocked = await this.getBlockedIds();
+    if (blocked.size === 0) return items;
+    return items.filter((v) => !blocked.has(v.videoId));
+  }
+
+  /** 관리자가 숨긴 videoId 집합 */
+  private async getBlockedIds(): Promise<Set<string>> {
+    try {
+      const ids = await this.youtubeRedis.smembers(BLOCKED_KEY);
+      return new Set(ids);
+    } catch (error: unknown) {
+      this.logger.debug(`숨김 목록 조회 실패(무시): ${toErrorMessage(error)}`);
+      return new Set();
+    }
+  }
+
+  /** 영상을 숨김 목록에 추가하고 서빙 캐시를 비워 즉시 반영 */
+  async blockVideo(videoId: string): Promise<void> {
+    if (this.youtubeRedisReadOnly) {
+      throw new Error('YOUTUBE_REDIS_READONLY 활성화 — 숨김 쓰기 불가');
+    }
+    await this.youtubeRedis.sadd(BLOCKED_KEY, videoId);
+    await this.youtubeRedis.del(POPULAR_CACHE_KEY).catch(() => {});
+    this.logger.log(`YouTube 영상 숨김: ${videoId}`);
+  }
+
+  /** 영상을 숨김 목록에서 제거(복원)하고 서빙 캐시를 비움 */
+  async unblockVideo(videoId: string): Promise<void> {
+    if (this.youtubeRedisReadOnly) {
+      throw new Error('YOUTUBE_REDIS_READONLY 활성화 — 숨김 쓰기 불가');
+    }
+    await this.youtubeRedis.srem(BLOCKED_KEY, videoId);
+    await this.youtubeRedis.del(POPULAR_CACHE_KEY).catch(() => {});
+    this.logger.log(`YouTube 영상 숨김 해제: ${videoId}`);
+  }
+
+  /** 숨김 목록(videoId 배열) */
+  async listBlocked(): Promise<string[]> {
+    return this.getBlockedIds().then((s) => [...s]);
   }
 
   /** DB의 최근 7일 영상 목록을 popular 읽기 캐시에 저장 */

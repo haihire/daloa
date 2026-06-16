@@ -1,0 +1,33 @@
+name: Log Vercel Deploy (next)
+
+# Vercel(Git 연동)이 production 배포를 끝내면 GitHub deployment_status 이벤트가 발생한다.
+# 그때 next 배포 시점을 모니터링(container_events)에 기록한다. (Vercel 유료 웹훅 불필요)
+on:
+  deployment_status:
+
+permissions:
+  contents: read
+
+jobs:
+  log:
+    # production 배포 성공만 기록(프리뷰 제외)
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      (github.event.deployment_status.environment == 'Production' ||
+       github.event.deployment_status.environment == 'production')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log deploy event (next)
+        env:
+          DEPLOY_EVENT_TOKEN: ${{ secrets.DEPLOY_EVENT_TOKEN }}
+          SHA: ${{ github.event.deployment.sha }}
+        run: |
+          if [ -z "$DEPLOY_EVENT_TOKEN" ]; then
+            echo "DEPLOY_EVENT_TOKEN secret not set. Skip deploy log."
+            exit 0
+          fi
+          curl -fsS -X POST https://api.lomoa.kr/api/webhooks/deploy \
+            -H "Content-Type: application/json" \
+            -H "x-deploy-token: $DEPLOY_EVENT_TOKEN" \
+            -d "{\"service\":\"next\",\"sha\":\"${SHA}\"}" \
+            || echo "deploy log POST failed (non-fatal)"

@@ -74,8 +74,8 @@ export class AdminInvenPipelineService {
       return { started: false, reason: '이미 실행 중입니다' };
     }
 
-    const date =
-      targetDate ?? new Date(Date.now() - 86400000).toISOString().slice(0, 10); // 어제
+    // targetDate 지정 → 날짜 백필(수동), 없으면 → 증분(post_id 기준) 모드(스케줄)
+    const date = targetDate ?? null;
 
     this.state = {
       running: true,
@@ -83,7 +83,9 @@ export class AdminInvenPipelineService {
       stepIndex: 0,
       totalSteps: STEPS.length,
       percent: 0,
-      message: '파이프라인 시작...',
+      message: date
+        ? `파이프라인 시작 (날짜 ${date})`
+        : '파이프라인 시작 (증분)',
       error: null,
       startedAt: new Date().toISOString(),
       finishedAt: null,
@@ -106,11 +108,12 @@ export class AdminInvenPipelineService {
     this.state.percent = Math.round((done / TOTAL_WEIGHT) * 100);
   }
 
-  private async runPipeline(date: string): Promise<void> {
+  private async runPipeline(date: string | null): Promise<void> {
+    const label = date ?? '증분';
     try {
       // 1) 크롤링 (Python — stdout JSON 수신, DB 미접근)
       this.setStep(0, '크롤링 진행 중...');
-      this.logger.log(`[크롤링] 시작 (${date})`);
+      this.logger.log(`[크롤링] 시작 (${label})`);
       const posts = await this.crawl(date);
       this.logger.log(`[크롤링] 완료 — 게시글 ${posts.length}개`);
 
@@ -133,9 +136,9 @@ export class AdminInvenPipelineService {
       this.state.running = false;
       this.state.step = 'done';
       this.state.percent = 100;
-      this.state.message = `완료 (${date}) — 게시글 ${savedCount}개, 추천 후보 ${candCount}개`;
+      this.state.message = `완료 (${label}) — 게시글 ${savedCount}개, 추천 후보 ${candCount}개`;
       this.state.finishedAt = new Date().toISOString();
-      this.logger.log(`파이프라인 완료 (${date})`);
+      this.logger.log(`파이프라인 완료 (${label})`);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : '알 수 없는 오류';
       this.state.running = false;
@@ -147,18 +150,28 @@ export class AdminInvenPipelineService {
     }
   }
 
-  /** crawl.py 실행 → stdout JSON 파싱 → 게시글 배열 반환 */
-  private async crawl(date: string): Promise<CrawledPost[]> {
+  /**
+   * crawl.py 실행 → stdout JSON 파싱 → 게시글 배열 반환.
+   * date 지정 시 날짜 백필, 없으면 게시판별 최신 post_id 이후만 증분 크롤.
+   */
+  private async crawl(date: string | null): Promise<CrawledPost[]> {
     const scriptPath = join(SITE_FINDER_DIR, 'crawl.py');
-    const { stdout } = await execFileAsync(
-      PYTHON_BIN,
-      [scriptPath, '--date', date],
-      {
-        timeout: 60 * 60 * 1000, // 최대 1시간
-        maxBuffer: 256 * 1024 * 1024, // 256MB (수천 게시글 JSON 대비)
-        env: { ...process.env },
-      },
-    );
+    const args = [scriptPath];
+    if (date) {
+      args.push('--date', date);
+    } else {
+      const maxIds = await this.invenRepo.getMaxPostIdByBoard();
+      args.push('--since-free', String(maxIds.free ?? 0));
+      args.push('--since-tip', String(maxIds.tip ?? 0));
+      this.logger.log(
+        `[크롤링] 증분 기준 since free=${maxIds.free ?? 0} tip=${maxIds.tip ?? 0}`,
+      );
+    }
+    const { stdout } = await execFileAsync(PYTHON_BIN, args, {
+      timeout: 60 * 60 * 1000, // 최대 1시간
+      maxBuffer: 256 * 1024 * 1024, // 256MB (수천 게시글 JSON 대비)
+      env: { ...process.env },
+    });
     const parsed = JSON.parse(stdout) as {
       target_date: string;
       posts: CrawledPost[];

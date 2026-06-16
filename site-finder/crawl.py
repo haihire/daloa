@@ -53,9 +53,23 @@ TARGET_DATE: date = (
     if _arg("--date")
     else date.today() - timedelta(days=1)
 )
-MAX_PAGES: int = 500  # 비상 안전장치 (실제로는 날짜 조건으로 먼저 중단)
+MAX_PAGES: int = 500  # 비상 안전장치 (실제로는 날짜/id 조건으로 먼저 중단)
 DEBUG: bool = "--debug" in sys.argv
 RUN_DATE: date = date.today()  # 스크립트 실행일 (date_str 파싱 기준)
+
+
+# 증분 모드: 게시판별 마지막 크롤 post_id(--since-free/--since-tip) 이후의 새 글만 수집.
+# --date가 주어지면 날짜 모드가 우선(수동 백필). 둘 다 없으면 날짜 모드(어제).
+def _since(flag: str) -> int | None:
+    v = _arg(flag)
+    return int(v) if v is not None and v.isdigit() else None
+
+
+SINCE: dict[str, int | None] = (
+    {"free": None, "tip": None}
+    if _arg("--date")
+    else {"free": _since("--since-free"), "tip": _since("--since-tip")}
+)
 
 # ── 설정 ─────────────────────────────────────────────────────────────────────
 
@@ -146,11 +160,14 @@ def _td(tr, *classes: str) -> str:
     return ""
 
 
-def parse_list_page(html: str, board_key: str) -> tuple[list[dict], bool]:
+def parse_list_page(
+    html: str, board_key: str, since_id: int | None = None
+) -> tuple[list[dict], bool]:
     """
     Returns:
         (posts, should_stop)
-        should_stop=True  → 이 페이지에 target_date보다 오래된 글만 남음, 페이지네이션 중단.
+        - 날짜 모드(since_id=None): target_date보다 오래된 글이 나오면 중단.
+        - 증분 모드(since_id 지정): post_id <= since_id(이미 크롤됨) 만나면 중단.
     """
     soup = BeautifulSoup(html, "lxml")
     board_id = BOARDS[board_key]["id"]
@@ -187,14 +204,20 @@ def parse_list_page(html: str, board_key: str) -> tuple[list[dict], bool]:
         date_str = _td(tr, "date")
         post_date = parse_post_date(date_str)
 
-        # 대상 날짜보다 오래된 글 → 페이지네이션 중단 신호
-        if post_date is not None and post_date < TARGET_DATE:
-            found_older = True
-            continue
-
-        # 오늘 글 (대상 날짜보다 최신) → 수집 안 함
-        if post_date is not None and post_date > TARGET_DATE:
-            continue
+        if since_id is not None:
+            # 증분 모드: 이미 크롤한 글(post_id <= since_id) → 중단 신호
+            if int(post_id) <= since_id:
+                found_older = True
+                continue
+            # post_id > since_id → 새 글, 수집
+        else:
+            # 날짜 모드: 대상 날짜보다 오래된 글 → 중단 신호
+            if post_date is not None and post_date < TARGET_DATE:
+                found_older = True
+                continue
+            # 오늘 글 (대상 날짜보다 최신) → 수집 안 함
+            if post_date is not None and post_date > TARGET_DATE:
+                continue
 
         url = href if href.startswith("http") else f"https:{href}"
         seen.add(post_id)
@@ -232,45 +255,6 @@ def parse_post_content(html: str) -> str:
     return content_el.get_text(separator="\n", strip=True)
 
 
-COMMENT_HEADERS = {
-    **HEADERS,
-    "Origin": "https://www.inven.co.kr",
-    "X-Requested-With": "XMLHttpRequest",
-}
-COMMENT_API = "https://www.inven.co.kr/common/board/comment.json.php"
-
-
-async def fetch_comments(session: AsyncSession, board_id: int, post_id: str) -> list[dict]:
-    """댓글 JSON API (POST) → [{name, text, date, recommend}] 반환."""
-    try:
-        resp = await session.post(
-            COMMENT_API,
-            data={"comeidx": str(board_id), "articlecode": post_id,
-                  "act": "list", "out": "json", "sortorder": "date", "page": "1"},
-            headers=COMMENT_HEADERS,
-            timeout=10,
-        )
-        d = resp.json()
-        if d.get("message") != 1:
-            return []
-        raw = d.get("commentlist", [{}])[0].get("list", [])
-        comments = []
-        for c in raw:
-            raw_html = c.get("o_comment", "").replace("&nbsp;", " ")
-            text = BeautifulSoup(raw_html, "lxml").get_text(" ", strip=True)
-            if text:
-                comments.append({
-                    "name": c.get("o_name", ""),
-                    "text": text,
-                    "date": c.get("o_date", ""),
-                    "recommend": int(c.get("o_recommend", 0) or 0),
-                })
-        return comments
-    except Exception as e:
-        log.debug(f"댓글 fetch 실패 ({post_id}): {e}")
-        return []
-
-
 # ── 크롤러 ───────────────────────────────────────────────────────────────────
 
 
@@ -281,13 +265,16 @@ async def fetch(session: AsyncSession, url: str) -> str:
     return resp.text
 
 
-async def crawl_board(session: AsyncSession, board_key: str) -> list[dict]:
+async def crawl_board(
+    session: AsyncSession, board_key: str, since_id: int | None = None
+) -> list[dict]:
     """
-    target_date보다 오래된 글이 처음 나오는 순간 중단.
-    오늘 글(너무 최신) → 스킵하고 계속, 어제 글 → 수집, 더 오래된 글 → 중단.
+    날짜 모드: target_date보다 오래된 글이 처음 나오는 순간 중단.
+    증분 모드(since_id): post_id <= since_id(이미 크롤됨)를 만나는 순간 중단.
     """
     board = BOARDS[board_key]
     collected: dict[str, dict] = {}
+    mode = f"since={since_id}" if since_id is not None else f"date={TARGET_DATE}"
 
     for page in range(1, MAX_PAGES + 1):
         url = f"{BASE}/{board['id']}" + (f"?p={page}" if page > 1 else "")
@@ -299,14 +286,14 @@ async def crawl_board(session: AsyncSession, board_key: str) -> list[dict]:
             log.error(f"페이지 fetch 실패: {e}")
             break
 
-        posts, should_stop = parse_list_page(html, board_key)
+        posts, should_stop = parse_list_page(html, board_key, since_id)
         for p in posts:
             collected[p["post_id"]] = p
 
-        log.info(f"  -> {TARGET_DATE} 게시글 {len(posts)}개 (누적 {len(collected)}, 중단={should_stop})")
+        log.info(f"  -> [{mode}] 게시글 {len(posts)}개 (누적 {len(collected)}, 중단={should_stop})")
 
         if should_stop:
-            log.info("  target_date 이전 글 도달 -> 페이지네이션 중단")
+            log.info("  중단 조건 도달(오래된/이미 크롤된 글) -> 페이지네이션 중단")
             break
 
         await asyncio.sleep(0.5)
@@ -315,22 +302,19 @@ async def crawl_board(session: AsyncSession, board_key: str) -> list[dict]:
 
 
 async def crawl_contents(session: AsyncSession, posts: list[dict]) -> None:
-    """수집된 게시글 전체의 상세 페이지를 순회해 본문과 댓글을 채운다."""
+    """수집된 게시글 전체의 상세 페이지를 순회해 본문을 채운다(댓글 미수집)."""
     targets = [p for p in posts if p["content"] is None]
-    log.info(f"본문+댓글 크롤링: {len(targets)}개 (전체)")
+    log.info(f"본문 크롤링: {len(targets)}개 (전체)")
 
     for i, post in enumerate(targets):
-        board_id = BOARDS[post["board"]]["id"]
         try:
             log.info(f"  [{i+1}/{len(targets)}] {post['title'][:40]}")
             html = await fetch(session, post["url"])
             post["content"] = parse_post_content(html)
-            post["comments"] = await fetch_comments(session, board_id, post["post_id"])
             await asyncio.sleep(0.4)
         except Exception as e:
             log.warning(f"  본문 실패: {e}")
             post["content"] = ""
-            post["comments"] = []
 
 
 # ── 메인 ─────────────────────────────────────────────────────────────────────
@@ -341,12 +325,14 @@ async def main():
     두 게시판을 크롤링하고 결과를 stdout에 JSON으로 출력한다 (DB 미접근).
     Nest가 stdout JSON을 받아 Prisma로 저장한다.
     """
-    log.info(f"=== 인벤 크롤러 | target={TARGET_DATE} pages<={MAX_PAGES} debug={DEBUG} ===")
+    incremental = any(v is not None for v in SINCE.values())
+    mode_desc = f"증분 since={SINCE}" if incremental else f"날짜 target={TARGET_DATE}"
+    log.info(f"=== 인벤 크롤러 | {mode_desc} pages<={MAX_PAGES} debug={DEBUG} ===")
 
     all_posts: list[dict] = []
     async with AsyncSession() as session:
         for board_key in BOARDS:
-            all_posts.extend(await crawl_board(session, board_key))
+            all_posts.extend(await crawl_board(session, board_key, SINCE.get(board_key)))
         await crawl_contents(session, all_posts)
 
     by_board: dict[str, int] = {}

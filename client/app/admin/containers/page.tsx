@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -18,8 +18,6 @@ interface ContainerStat {
   memUsedMb: number;
   memTotalMb: number;
   memPercent: number;
-  netInMb: number;
-  netOutMb: number;
 }
 
 interface ContainerStatus {
@@ -51,6 +49,65 @@ interface ContainersResponse {
   containers: ContainerStat[];
   host: HostStats | null;
   statuses: ContainerStatus[];
+}
+
+interface AiDiagnosis {
+  summary: string;
+  anomalies: string[];
+  costSuggestions: string[];
+  generatedAt: string;
+  model: string;
+  ec2: { instanceType: string | null; region: string };
+}
+
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+// 채팅 시작용 예시 버튼. diagnosis=true 는 구조화 진단 엔드포인트 호출.
+const QUICK_PROMPTS: { label: string; prompt?: string; diagnosis?: boolean }[] =
+  [
+    { label: "종합 AI 진단", diagnosis: true },
+    {
+      label: "CPU 사용량",
+      prompt:
+        "각 컨테이너의 최근 7일 CPU 사용량(평균/최대/최소/p95)을 표로 요약해줘.",
+    },
+    {
+      label: "메모리 상태",
+      prompt: "컨테이너별 메모리 사용 상태와 여유가 충분한지 알려줘.",
+    },
+    {
+      label: "현재 월 예상 요금",
+      prompt: "현재 인스턴스 기준 월 예상 요금과 그 내역을 알려줘.",
+    },
+    {
+      label: "비용 절감 방법",
+      prompt: "지금 사용량 기준으로 AWS 비용을 줄일 방법을 제안해줘.",
+    },
+    {
+      label: "CPU 스파이크 원인",
+      prompt:
+        "특정 시간대에 CPU가 튀는 구간이 있는지, 있다면 최근 배포/재시작 이력과 연결해 원인과 대응을 알려줘.",
+    },
+  ];
+
+function formatDiagnosis(d: AiDiagnosis): string {
+  const blocks = [`📋 현황 요약\n${d.summary || "—"}`];
+  if (d.anomalies.length > 0) {
+    blocks.push(`⚠️ 이상 징후\n${d.anomalies.map((a) => `• ${a}`).join("\n")}`);
+  }
+  if (d.costSuggestions.length > 0) {
+    blocks.push(
+      `💰 비용 절감 제안\n${d.costSuggestions.map((s) => `• ${s}`).join("\n")}`,
+    );
+  }
+  const where = d.ec2.instanceType
+    ? `${d.ec2.instanceType} · ${d.ec2.region}`
+    : "EC2 정보 없음";
+  blocks.push(`— ${where}`);
+  return blocks.join("\n\n");
 }
 
 // 카드 정렬 순서 (서비스 의존도 순)
@@ -131,6 +188,81 @@ export default function ContainersPage() {
   >(containerHistoryCache["nest"] ?? []);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [activeChart, setActiveChart] = useState<string | null>(null);
+
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    // 메시지가 있을 때만 스크롤 (마운트 시 페이지가 챗봇으로 끌려가는 것 방지)
+    if (messages.length === 0) return;
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, chatLoading]);
+
+  async function sendMessage(text: string) {
+    const content = text.trim();
+    if (!content || chatLoading) return;
+    const next: ChatMessage[] = [...messages, { role: "user", content }];
+    setMessages(next);
+    setChatInput("");
+    setChatLoading(true);
+    setChatError("");
+    try {
+      const res = await fetch("/api/admin/monitoring/ai-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: next }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        reply?: string;
+        message?: string;
+      };
+      if (!res.ok) {
+        setChatError(data.message ?? "응답을 받지 못했습니다.");
+        return;
+      }
+      setMessages((m) => [
+        ...m,
+        { role: "assistant", content: data.reply ?? "(빈 응답)" },
+      ]);
+    } catch {
+      setChatError("요청 중 오류가 발생했습니다.");
+    } finally {
+      setChatLoading(false);
+    }
+  }
+
+  // "종합 AI 진단" — 구조화 진단 엔드포인트를 호출해 메시지로 표시
+  async function runDiagnosis() {
+    if (chatLoading) return;
+    setMessages((m) => [...m, { role: "user", content: "종합 AI 진단" }]);
+    setChatLoading(true);
+    setChatError("");
+    try {
+      const res = await fetch("/api/admin/monitoring/ai-diagnosis", {
+        cache: "no-store",
+      });
+      const data = (await res.json().catch(() => ({}))) as
+        | AiDiagnosis
+        | { message?: string };
+      if (!res.ok) {
+        setChatError(
+          ("message" in data && data.message) || "AI 진단에 실패했습니다.",
+        );
+        return;
+      }
+      setMessages((m) => [
+        ...m,
+        { role: "assistant", content: formatDiagnosis(data as AiDiagnosis) },
+      ]);
+    } catch {
+      setChatError("AI 진단 요청 중 오류가 발생했습니다.");
+    } finally {
+      setChatLoading(false);
+    }
+  }
 
   useEffect(() => {
     let alive = true;
@@ -232,9 +364,6 @@ export default function ContainersPage() {
       <div className="mb-5 flex shrink-0 items-start justify-between gap-4">
         <div>
           <h1 className="admin-page-title">컨테이너 현황</h1>
-          <p className="admin-page-subtitle mt-1">
-            EC2 호스트와 Docker 컨테이너의 상태·자원 사용량을 확인합니다.
-          </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1 pt-1 text-xs text-[color:var(--admin-text-muted)]">
           {cards.length > 0 && (
@@ -367,9 +496,6 @@ export default function ContainersPage() {
                           {stat.memUsedMb}MB / {stat.memTotalMb}MB
                         </p>
                       </div>
-                      <p className="text-[11px] text-[color:var(--admin-text-muted)] tabular-nums">
-                        NET ↓{stat.netInMb}MB · ↑{stat.netOutMb}MB
-                      </p>
                     </div>
                   ) : (
                     <p className="text-[11px] text-[color:var(--admin-text-subtle)]">
@@ -492,6 +618,92 @@ export default function ContainersPage() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* AI 운영 챗봇 */}
+          <div className="admin-card p-4">
+            <div className="mb-3">
+              <p className="text-sm font-semibold">AI 운영 챗봇</p>
+              <p className="mt-0.5 text-[11px] text-[color:var(--admin-text-muted)]">
+                컨테이너 자원·EC2 비용·최근 배포 이력을 바탕으로 질문에
+                답합니다. (민감정보는 관리자만)
+              </p>
+            </div>
+
+            <div className="mb-3 max-h-80 space-y-2 overflow-y-auto">
+              {messages.length === 0 ? (
+                <p className="text-sm text-[color:var(--admin-text-muted)]">
+                  아래 버튼을 누르거나 직접 질문을 입력해보세요.
+                </p>
+              ) : (
+                messages.map((m, i) => (
+                  <div
+                    key={i}
+                    className={m.role === "user" ? "text-right" : "text-left"}
+                  >
+                    <span
+                      className={`inline-block max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-left text-sm ${
+                        m.role === "user"
+                          ? "bg-blue-600 text-white"
+                          : "bg-slate-100 text-[color:var(--admin-text)]"
+                      }`}
+                    >
+                      {m.content}
+                    </span>
+                  </div>
+                ))
+              )}
+              {chatLoading && (
+                <p className="text-xs text-[color:var(--admin-text-muted)]">
+                  답변 생성 중...
+                </p>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {chatError && (
+              <p className="mb-2 text-sm text-red-500">{chatError}</p>
+            )}
+
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {QUICK_PROMPTS.map((q) => (
+                <button
+                  key={q.label}
+                  type="button"
+                  disabled={chatLoading}
+                  onClick={() =>
+                    q.diagnosis ? runDiagnosis() : sendMessage(q.prompt ?? "")
+                  }
+                  className="admin-btn admin-btn-sm admin-btn-secondary"
+                >
+                  {q.label}
+                </button>
+              ))}
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                sendMessage(chatInput);
+              }}
+              className="flex gap-2"
+            >
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                disabled={chatLoading}
+                placeholder="질문을 입력하세요"
+                className="admin-input flex-1"
+              />
+              <button
+                type="submit"
+                disabled={chatLoading || !chatInput.trim()}
+                className="admin-btn admin-btn-primary shrink-0"
+              >
+                전송
+              </button>
+            </form>
           </div>
         </div>
       )}

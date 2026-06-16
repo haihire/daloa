@@ -7,10 +7,10 @@ export interface SiteRecord {
   href: string;
   category: string | null;
   description: string | null;
-  icon: string | null;
 }
 
 export interface AdminSiteRecord extends SiteRecord {
+  icon: string | null;
   is_active: number;
   click_count: number;
 }
@@ -54,7 +54,6 @@ export class SitesRepository {
         href: true,
         category: true,
         description: true,
-        icon: true,
       },
     });
     return rows.map((row) => ({

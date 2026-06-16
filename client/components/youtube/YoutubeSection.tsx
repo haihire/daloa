@@ -5,7 +5,8 @@ const API = process.env.NEST_API_URL ?? "http://localhost:3001";
 
 export default async function YoutubeSection() {
   const data = await fetch(`${API}/api/streamers/popular?offset=0&limit=8`, {
-    next: { revalidate: 3600 },
+    // 5분(홈 라우트 ISR과 동일) — 관리자 삭제가 홈에 빨리 반영되도록.
+    next: { revalidate: 300 },
   })
     .then<{
       items: YoutubeVideo[];

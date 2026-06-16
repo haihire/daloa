@@ -14,4 +14,4 @@ Scope: `client/**`
 - Prefer role/name/aria-label queries over index selectors like `[1]`.
 - Mock/spy the real runtime path (especially for swapped `localStorage`).
 - Do not verify React `key` via DOM attributes; verify remount/result state.
-- Keep mock data type-complete (no missing required fields such as `topLevel`, `updatedAt`).
+- Keep mock data type-complete (no missing required fields such as `updatedAt`).
