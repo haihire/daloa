@@ -21,6 +21,11 @@ const PYTHON_BIN =
   process.env.PYTHON_BIN ??
   (process.platform === 'win32' ? 'python' : 'python3');
 
+// 증분 1회 실행에서 본문(상세페이지)을 fetch할 최대 글 수. 목록 메타데이터는
+// 캡과 무관하게 새 글 전체를 저장하므로 since_id는 매 런 gap 없이 전진한다.
+// 2시간치 신규 글(보통 수백)보다 넉넉하게 잡아 정상 운영 시엔 캡에 걸리지 않게 한다.
+const INVEN_MAX_DETAIL = Number(process.env.INVEN_MAX_DETAIL ?? 500);
+
 export interface PipelineStatus {
   running: boolean;
   step: string; // 현재 단계 이름
@@ -158,13 +163,17 @@ export class AdminInvenPipelineService {
     const scriptPath = join(SITE_FINDER_DIR, 'crawl.py');
     const args = [scriptPath];
     if (date) {
+      // 수동 날짜 백필: 본문 전체 수집(캡 해제)
       args.push('--date', date);
+      args.push('--max-detail', '0');
     } else {
       const maxIds = await this.invenRepo.getMaxPostIdByBoard();
       args.push('--since-free', String(maxIds.free ?? 0));
       args.push('--since-tip', String(maxIds.tip ?? 0));
+      // 증분: 본문 fetch는 캡으로 제한(목록 메타는 전체 저장 → since_id 정상 전진)
+      args.push('--max-detail', String(INVEN_MAX_DETAIL));
       this.logger.log(
-        `[크롤링] 증분 기준 since free=${maxIds.free ?? 0} tip=${maxIds.tip ?? 0}`,
+        `[크롤링] 증분 기준 since free=${maxIds.free ?? 0} tip=${maxIds.tip ?? 0} maxDetail=${INVEN_MAX_DETAIL}`,
       );
     }
     const { stdout } = await execFileAsync(PYTHON_BIN, args, {
