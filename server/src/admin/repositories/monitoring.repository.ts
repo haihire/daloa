@@ -366,28 +366,59 @@ export class MonitoringRepository {
 
   /** 시간버킷 평균(ttfb/dcl/lcp/load). 빈 버킷도 채워 반환. */
   async findPageLoadSeries(rangeDays: number, bucketHours: number) {
-    // 시간 단위 버킷(1일 보기)은 시각만, 일 단위 버킷(7/30일 보기)은 날짜만 표기
-    const bucketFormat = bucketHours < 24 ? 'HH24:MI' : 'MM-DD';
+    // 버킷/라벨은 한국시간(KST) 달력 기준. 빈 버킷도 generate_series로 채워 축이 끊기지 않게 함.
+    if (bucketHours < 24) {
+      // 1일 보기: 오늘(KST) 00:00~23:00 시간별 (밤12시~다음날밤12시 24칸 고정)
+      return this.prisma.$queryRaw<PageLoadSeriesRow[]>`
+        WITH samples AS (
+          SELECT date_trunc('hour', created_at AT TIME ZONE 'Asia/Seoul') AS bucket_start,
+                 ttfb_ms, dcl_ms, lcp_ms, load_ms
+          FROM apm_page_load_timings
+          WHERE source = 'rum'
+            AND created_at >= (date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul')) AT TIME ZONE 'Asia/Seoul'
+        ),
+        buckets AS (
+          SELECT generate_series(
+                   date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul'),
+                   date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') + INTERVAL '23 hours',
+                   INTERVAL '1 hour'
+                 ) AS bucket_start
+        )
+        SELECT TO_CHAR(b.bucket_start, 'HH24:MI') AS bucket,
+               ROUND(AVG(s.ttfb_ms))::int AS avg_ttfb,
+               ROUND(AVG(s.dcl_ms))::int  AS avg_dcl,
+               ROUND(AVG(s.lcp_ms))::int  AS avg_lcp,
+               ROUND(AVG(s.load_ms))::int AS avg_load,
+               COUNT(s.bucket_start) AS count
+        FROM buckets b
+        LEFT JOIN samples s ON s.bucket_start = b.bucket_start
+        GROUP BY b.bucket_start
+        ORDER BY b.bucket_start ASC
+      `;
+    }
+
+    // 7/30일 보기: 최근 rangeDays 일(KST 달력, 오늘 포함) 일별
     return this.prisma.$queryRaw<PageLoadSeriesRow[]>`
       WITH samples AS (
-        SELECT
-          TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM created_at) / (${bucketHours} * 3600)) * (${bucketHours} * 3600)) AS bucket_start,
-          ttfb_ms, dcl_ms, lcp_ms, load_ms
+        SELECT (created_at AT TIME ZONE 'Asia/Seoul')::date AS bucket_start,
+               ttfb_ms, dcl_ms, lcp_ms, load_ms
         FROM apm_page_load_timings
         WHERE source = 'rum'
-          AND created_at >= NOW() - (${rangeDays}::int * INTERVAL '1 day')
+          AND created_at >= (
+            (NOW() AT TIME ZONE 'Asia/Seoul')::date
+            - ((${rangeDays}::int - 1) * INTERVAL '1 day')
+          ) AT TIME ZONE 'Asia/Seoul'
       ),
       buckets AS (
-        SELECT TO_TIMESTAMP(
-                 FLOOR(EXTRACT(EPOCH FROM g) / (${bucketHours} * 3600)) * (${bucketHours} * 3600)
-               ) AS bucket_start
+        SELECT g::date AS bucket_start
         FROM generate_series(
-               NOW() - (${rangeDays}::int * INTERVAL '1 day'),
-               NOW(),
-               (${bucketHours} * INTERVAL '1 hour')
+               ((NOW() AT TIME ZONE 'Asia/Seoul')::date
+                - ((${rangeDays}::int - 1) * INTERVAL '1 day'))::date,
+               (NOW() AT TIME ZONE 'Asia/Seoul')::date,
+               INTERVAL '1 day'
              ) AS g
       )
-      SELECT TO_CHAR(b.bucket_start, ${bucketFormat}) AS bucket,
+      SELECT TO_CHAR(b.bucket_start, 'MM-DD') AS bucket,
              ROUND(AVG(s.ttfb_ms))::int AS avg_ttfb,
              ROUND(AVG(s.dcl_ms))::int  AS avg_dcl,
              ROUND(AVG(s.lcp_ms))::int  AS avg_lcp,
