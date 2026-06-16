@@ -155,6 +155,45 @@ GitHub 웹에서:
 
 ---
 
+## 6단계: 홈 캐시 워밍 (외부 업타임 핑거)
+
+### 왜 필요한가
+
+홈(`/`)은 정적 ISR(`revalidate=600`)이라 평소엔 서울 엣지 캐시 HTML을 즉시 줘서 TTFB가 수십 ms입니다.
+하지만 **트래픽이 적은 시간대**엔 캐시가 만료·축출(evict)되고, 그 직후 첫 방문자가 페이지를
+**동기로 새로 생성**(Vercel 서버리스 콜드스타트 + 렌더)하게 돼 TTFB가 **7~10초**까지 튑니다.
+
+`prewarm-home.yml`은 **프로덕션 배포 직후 딱 1번**만 데우므로, 배포가 없는 날엔 평상시 캐시를
+지켜주지 못합니다. → **외부 핑거로 홈을 주기적으로 호출**해 캐시 항목을 항상 살아있게 유지하면,
+재생성 비용을 실제 사용자가 아닌 봇이 대신 치릅니다.
+
+### 설정 (UptimeRobot 기준, 무료)
+
+1. <https://uptimerobot.com> 가입 (무료 플랜이면 충분)
+2. **Add New Monitor** 클릭
+3. 다음 값 입력:
+
+   | 항목              | 값                                    |
+   | ----------------- | ------------------------------------- |
+   | Monitor Type      | `HTTP(s)`                             |
+   | Friendly Name     | `lomoa home warm`                     |
+   | URL               | `https://www.lomoa.kr/`               |
+   | Monitoring Interval | `5 minutes` (무료 최소값)            |
+
+4. **Create Monitor** 저장. 이후 5분마다 홈을 호출해 ISR 캐시를 데웁니다.
+5. (선택) **My Settings > Alert Contacts**에 이메일을 등록하면 다운 시 알림도 받습니다.
+
+> **대안:** <https://cron-job.org> (무료, **1분 간격** 가능). URL `https://www.lomoa.kr/`,
+> 스케줄을 매 1~3분으로 설정하면 워밍이 더 촘촘해집니다. UptimeRobot은 모니터링 알림이 덤,
+> cron-job.org는 더 짧은 간격이 장점.
+
+### 확인
+
+설정 후 관리자 > 모니터링 > "메인페이지 로딩 속도 추이"에서 TTFB 스파이크(7~10s)가
+사라지는지 며칠 관찰하세요. 봇 호출이라 EC2/Actions 부하는 사실상 0입니다.
+
+---
+
 ## troubleshooting
 
 ### "PR CI / quality-gate" 체크가 보이지 않음
@@ -179,3 +218,4 @@ DB/Redis 환경 점검하세요.
 - [ ] 첫 feature 브랜치에서 PR 생성해 워크플로 동작 확인
 - [ ] main 보호 규칙 적용 확인 (직접 푸시 시 오류)
 - [ ] 배포 로직 필요 시 main-post-merge.yml 수정
+- [ ] 외부 업타임 핑거(UptimeRobot 등)로 홈 캐시 워밍 모니터 등록 (6단계)
