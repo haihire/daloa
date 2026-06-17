@@ -425,14 +425,18 @@ export default function MonitoringPage() {
                   onMouseEnter={() => setActiveChart("page-load")}
                   onMouseLeave={() => setActiveChart(null)}
                   onClick={(state) => {
-                    // 일별(여러 날) 보기에서 점 클릭 → 그날 하루(시간별)로 드릴다운
+                    // 일별(여러 날) 보기에서 점 클릭 → 그날 하루(시간별)로 드릴다운.
+                    // recharts v3는 activePayload가 없어 activeIndex/activeLabel로 행을 찾는다.
                     if (pageLoadFrom === pageLoadTo) return;
-                    const date = (
-                      state as { activePayload?: { payload?: PageLoadPoint }[] }
-                    )?.activePayload?.[0]?.payload?.date;
-                    if (date) {
-                      setPageLoadFrom(date);
-                      setPageLoadTo(date);
+                    const idx = state.activeIndex ?? state.activeTooltipIndex;
+                    const row =
+                      (idx != null ? pageLoadSeries[Number(idx)] : undefined) ??
+                      pageLoadSeries.find(
+                        (p) => p.bucket === String(state.activeLabel),
+                      );
+                    if (row?.date) {
+                      setPageLoadFrom(row.date);
+                      setPageLoadTo(row.date);
                     }
                   }}
                   className={pageLoadFrom !== pageLoadTo ? "cursor-pointer" : ""}
