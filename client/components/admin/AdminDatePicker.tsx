@@ -65,13 +65,16 @@ export default function AdminDatePicker({ value, onChange, min, max }: Props) {
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
 
-  const dayDisabled = (ds: string) =>
-    (min != null && min !== "" && ds < min) ||
-    (max != null && max !== "" && ds > max);
+  // [start, end] 구간이 [min, max]와 전혀 안 겹치면 비활성.
+  // (하루라도 범위에 걸치면 활성 — 끝점만 보면 안 됨)
+  const intervalDisabled = (start: string, end: string) =>
+    (min != null && min !== "" && end < min) ||
+    (max != null && max !== "" && start > max);
+  const dayDisabled = (ds: string) => intervalDisabled(ds, ds);
   const monthDisabled = (y: number, m: number) =>
-    dayDisabled(fmt(y, m, daysInMonth(y, m))) && dayDisabled(fmt(y, m, 1));
+    intervalDisabled(fmt(y, m, 1), fmt(y, m, daysInMonth(y, m)));
   const yearDisabled = (y: number) =>
-    dayDisabled(`${y}-12-31`) && dayDisabled(`${y}-01-01`);
+    intervalDisabled(`${y}-01-01`, `${y}-12-31`);
 
   const minY = min && min !== "" ? +min.slice(0, 4) : viewYear - 6;
   const maxY = max && max !== "" ? +max.slice(0, 4) : viewYear + 5;
