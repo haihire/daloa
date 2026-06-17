@@ -371,6 +371,11 @@ export class MonitoringRepository {
    * 버킷/라벨은 한국시간(KST) 달력 기준. 빈 버킷도 generate_series로 채운다.
    * 이미 지난 버킷(현재시각 이하)은 데이터가 없어도 0으로 채워 점을 찍고,
    * 아직 안 온 미래 버킷은 NULL로 둬서 점을 안 찍는다.
+   *
+   * 경계는 반드시 `${x}::timestamp AT TIME ZONE 'Asia/Seoul'`로 쓴다.
+   * `::date AT TIME ZONE`는 date→timestamptz 암묵 캐스팅이 끼어 경계가 어긋나
+   * (세션 TZ에 따라 timestamp-without-tz가 반환됨) 프로덕션에서 오늘 데이터가
+   * 통째로 필터에서 빠지는 버그가 있었다.
    */
   async findPageLoadSeries(from: string, to: string) {
     if (from === to) {
@@ -381,8 +386,8 @@ export class MonitoringRepository {
                  ttfb_ms, dcl_ms, lcp_ms, load_ms
           FROM apm_page_load_timings
           WHERE source = 'rum'
-            AND created_at >= (${from}::date) AT TIME ZONE 'Asia/Seoul'
-            AND created_at <  (${from}::date + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
+            AND created_at >= (${from}::timestamp) AT TIME ZONE 'Asia/Seoul'
+            AND created_at <  (${from}::timestamp + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
         ),
         buckets AS (
           SELECT generate_series(
@@ -416,8 +421,8 @@ export class MonitoringRepository {
                ttfb_ms, dcl_ms, lcp_ms, load_ms
         FROM apm_page_load_timings
         WHERE source = 'rum'
-          AND created_at >= (${from}::date) AT TIME ZONE 'Asia/Seoul'
-          AND created_at <  (${to}::date + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
+          AND created_at >= (${from}::timestamp) AT TIME ZONE 'Asia/Seoul'
+          AND created_at <  (${to}::timestamp + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
       ),
       buckets AS (
         SELECT g::date AS bucket_start
@@ -509,7 +514,7 @@ export class MonitoringRepository {
              INTERVAL '1 day'
            ) AS d(day)
       LEFT JOIN apm_site_clicks c
-        ON c.created_at >= d.day AT TIME ZONE 'Asia/Seoul'
+        ON c.created_at >= d.day::timestamp AT TIME ZONE 'Asia/Seoul'
        AND c.created_at < (d.day + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
       GROUP BY d.day
       ORDER BY d.day ASC
@@ -529,7 +534,7 @@ export class MonitoringRepository {
              INTERVAL '1 day'
            ) AS d(day)
       LEFT JOIN apm_youtube_clicks c
-        ON c.created_at >= d.day AT TIME ZONE 'Asia/Seoul'
+        ON c.created_at >= d.day::timestamp AT TIME ZONE 'Asia/Seoul'
        AND c.created_at < (d.day + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
       GROUP BY d.day
       ORDER BY d.day ASC
