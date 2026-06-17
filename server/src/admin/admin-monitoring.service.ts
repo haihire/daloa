@@ -187,6 +187,11 @@ export class AdminMonitoringService implements OnModuleInit {
     }));
   }
 
+  /** 로딩 추이 달력의 하한(첫 데이터 날짜). 이 이전은 선택/표시 안 함. */
+  async getPageLoadEarliest(): Promise<{ earliest: string | null }> {
+    return { earliest: await this.monitoringRepo.findEarliestPageLoadDate() };
+  }
+
   @Cron('0 0 * * * *')
   async probeApis() {
     const base =

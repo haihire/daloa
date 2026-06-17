@@ -107,6 +107,12 @@ export class AdminMonitoringController {
     return this.monitoring.getPageLoadSeries(from, to);
   }
 
+  @UseGuards(AdminGuard)
+  @Get('admin/monitoring/page-load-earliest')
+  pageLoadEarliest() {
+    return this.monitoring.getPageLoadEarliest();
+  }
+
   @Post('telemetry/page-load')
   pageLoad(
     @Req() req: Request,

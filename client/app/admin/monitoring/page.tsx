@@ -13,6 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import AdminDatePicker from "@/components/admin/AdminDatePicker";
 
 interface PageLoadPoint {
   bucket: string;
@@ -132,6 +133,7 @@ export default function MonitoringPage() {
   >("sites");
   const [pageLoadFrom, setPageLoadFrom] = useState<string>(kstToday);
   const [pageLoadTo, setPageLoadTo] = useState<string>(kstToday);
+  const [pageLoadMinDate, setPageLoadMinDate] = useState<string>("");
   const [pageLoadSeries, setPageLoadSeries] = useState<PageLoadPoint[]>([]);
   const [pageLoadLoading, setPageLoadLoading] = useState(true);
   const hasLoadedRef = useRef(false);
@@ -236,6 +238,26 @@ export default function MonitoringPage() {
       alive = false;
     };
   }, [pageLoadFrom, pageLoadTo]);
+
+  // 달력 하한(첫 데이터 날짜) 1회 조회 — 이 이전은 선택 불가
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/monitoring/page-load-earliest", {
+          cache: "no-store",
+        });
+        if (!alive || !res.ok) return;
+        const data = (await res.json()) as { earliest: string | null };
+        if (data.earliest) setPageLoadMinDate(data.earliest);
+      } catch {
+        // 하한 없으면 그냥 전체 선택 가능
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const pageLoadLatest = useMemo(() => {
     for (let i = pageLoadSeries.length - 1; i >= 0; i -= 1) {
@@ -375,20 +397,18 @@ export default function MonitoringPage() {
               )}
             </div>
             <div className="flex items-center gap-1 text-xs">
-              <input
-                type="date"
+              <AdminDatePicker
                 value={pageLoadFrom}
+                min={pageLoadMinDate}
                 max={kstToday()}
-                onChange={(e) => setPageLoadFrom(e.target.value)}
-                className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                onChange={setPageLoadFrom}
               />
               <span className="text-[color:var(--admin-text-muted)]">~</span>
-              <input
-                type="date"
+              <AdminDatePicker
                 value={pageLoadTo}
+                min={pageLoadMinDate}
                 max={kstToday()}
-                onChange={(e) => setPageLoadTo(e.target.value)}
-                className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                onChange={setPageLoadTo}
               />
               <button
                 type="button"

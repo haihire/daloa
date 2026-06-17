@@ -441,6 +441,21 @@ export class MonitoringRepository {
     `;
   }
 
+  /** RUM 페이지 로딩 데이터가 처음 생긴 날짜(KST, YYYY-MM-DD). 없으면 null. */
+  async findEarliestPageLoadDate(): Promise<string | null> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{ earliest: string | null }>
+    >`
+      SELECT TO_CHAR(
+               MIN((created_at AT TIME ZONE 'Asia/Seoul')::date),
+               'YYYY-MM-DD'
+             ) AS earliest
+      FROM apm_page_load_timings
+      WHERE source = 'rum'
+    `;
+    return rows[0]?.earliest ?? null;
+  }
+
   async findSummary(slowThresholdMs: number) {
     const rows = await this.prisma.$queryRaw<SummaryRow[]>`
       SELECT
