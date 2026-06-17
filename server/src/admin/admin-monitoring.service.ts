@@ -153,15 +153,29 @@ export class AdminMonitoringService implements OnModuleInit {
     }));
   }
 
-  /** 페이지 로딩 추이(실사용자 RUM). days에 따라 버킷 크기 자동 선택. */
-  async getPageLoadSeries(days: number) {
-    const safeDays = Math.max(1, Math.min(30, Math.trunc(days)));
-    // 1일: 1시간 단위, 7일/30일: 1일(24시간) 단위
-    const bucketHours = safeDays <= 1 ? 1 : 24;
-    const rows = await this.monitoringRepo.findPageLoadSeries(
-      safeDays,
-      bucketHours,
-    );
+  /**
+   * 페이지 로딩 추이(실사용자 RUM). 달력(from~to, KST) 기준.
+   * from===to면 그날 시간별, 아니면 일별. 잘못된/누락 입력은 오늘 하루로 폴백.
+   */
+  async getPageLoadSeries(from?: string, to?: string) {
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    // KST(UTC+9) 오늘 날짜 문자열
+    const todayKst = new Date(Date.now() + 9 * 3600 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    let start = from && dateRe.test(from) ? from : todayKst;
+    let end = to && dateRe.test(to) ? to : start;
+    if (start > end) [start, end] = [end, start];
+    // 범위 상한 90일 (일별 버킷 과다 방지)
+    const MAX_DAYS = 90;
+    const startMs = Date.parse(`${start}T00:00:00Z`);
+    const endMs = Date.parse(`${end}T00:00:00Z`);
+    if ((endMs - startMs) / 86_400_000 > MAX_DAYS - 1) {
+      start = new Date(endMs - (MAX_DAYS - 1) * 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+    }
+    const rows = await this.monitoringRepo.findPageLoadSeries(start, end);
     return rows.map((row) => ({
       bucket: row.bucket,
       ttfb: row.avg_ttfb ?? null,

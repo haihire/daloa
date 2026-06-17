@@ -30,6 +30,11 @@ const PAGE_LOAD_METRICS = [
   { key: "ttfb", label: "TTFB", color: "#f59e0b" },
 ] as const;
 
+// 사용자 로컬 타임존과 무관하게 한국시간(UTC+9) 기준 오늘 날짜(YYYY-MM-DD)
+function kstToday(): string {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
 type Dashboard = {
   summary: {
     windowMinutes: number;
@@ -124,7 +129,8 @@ export default function MonitoringPage() {
   const [sectionTab, setSectionTab] = useState<
     "sites" | "stat-builds" | "youtube"
   >("sites");
-  const [pageLoadDays, setPageLoadDays] = useState<1 | 7 | 30>(7);
+  const [pageLoadFrom, setPageLoadFrom] = useState<string>(kstToday);
+  const [pageLoadTo, setPageLoadTo] = useState<string>(kstToday);
   const [pageLoadSeries, setPageLoadSeries] = useState<PageLoadPoint[]>([]);
   const [pageLoadLoading, setPageLoadLoading] = useState(true);
   const hasLoadedRef = useRef(false);
@@ -212,7 +218,7 @@ export default function MonitoringPage() {
     async function loadPageLoad() {
       try {
         const res = await fetch(
-          `/api/admin/monitoring/page-load-series?days=${pageLoadDays}`,
+          `/api/admin/monitoring/page-load-series?from=${pageLoadFrom}&to=${pageLoadTo}`,
           { cache: "no-store" },
         );
         if (!alive || !res.ok) return;
@@ -228,7 +234,7 @@ export default function MonitoringPage() {
     return () => {
       alive = false;
     };
-  }, [pageLoadDays]);
+  }, [pageLoadFrom, pageLoadTo]);
 
   const pageLoadLatest = useMemo(() => {
     for (let i = pageLoadSeries.length - 1; i >= 0; i -= 1) {
@@ -367,19 +373,34 @@ export default function MonitoringPage() {
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex gap-1">
-                {([1, 7, 30] as const).map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setPageLoadDays(d)}
-                    className={`admin-btn admin-btn-sm ${pageLoadDays === d ? "admin-btn-primary" : "admin-btn-secondary"}`}
-                  >
-                    {d}일
-                  </button>
-                ))}
-              </div>
+            <div className="flex items-center gap-1 text-xs">
+              <input
+                type="date"
+                value={pageLoadFrom}
+                max={pageLoadTo}
+                onChange={(e) => setPageLoadFrom(e.target.value)}
+                className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+              />
+              <span className="text-[color:var(--admin-text-muted)]">~</span>
+              <input
+                type="date"
+                value={pageLoadTo}
+                min={pageLoadFrom}
+                max={kstToday()}
+                onChange={(e) => setPageLoadTo(e.target.value)}
+                className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const t = kstToday();
+                  setPageLoadFrom(t);
+                  setPageLoadTo(t);
+                }}
+                className="admin-btn admin-btn-sm admin-btn-secondary"
+              >
+                오늘
+              </button>
             </div>
           </div>
           <div className="h-48">
@@ -387,7 +408,7 @@ export default function MonitoringPage() {
               <div className="grid h-full place-items-center text-sm text-[color:var(--admin-text-muted)]">
                 불러오는 중...
               </div>
-            ) : pageLoadSeries.every((p) => (p.count ?? 0) === 0) ? (
+            ) : pageLoadSeries.length === 0 ? (
               <div className="grid h-full place-items-center text-sm text-[color:var(--admin-text-muted)]">
                 데이터 없음 (수집 시작 후 표시됩니다)
               </div>
