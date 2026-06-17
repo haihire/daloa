@@ -178,6 +178,7 @@ export class AdminMonitoringService implements OnModuleInit {
     const rows = await this.monitoringRepo.findPageLoadSeries(start, end);
     return rows.map((row) => ({
       bucket: row.bucket,
+      date: row.date,
       ttfb: row.avg_ttfb ?? null,
       dcl: row.avg_dcl ?? null,
       lcp: row.avg_lcp ?? null,

@@ -16,6 +16,7 @@ import {
 
 interface PageLoadPoint {
   bucket: string;
+  date: string;
   ttfb: number | null;
   dcl: number | null;
   lcp: number | null;
@@ -401,6 +402,11 @@ export default function MonitoringPage() {
               >
                 오늘
               </button>
+              {pageLoadFrom !== pageLoadTo && (
+                <span className="ml-1 text-[10px] text-[color:var(--admin-text-muted)]">
+                  점 클릭 → 해당일
+                </span>
+              )}
             </div>
           </div>
           <div className="h-48">
@@ -418,6 +424,18 @@ export default function MonitoringPage() {
                   data={pageLoadSeries}
                   onMouseEnter={() => setActiveChart("page-load")}
                   onMouseLeave={() => setActiveChart(null)}
+                  onClick={(state) => {
+                    // 일별(여러 날) 보기에서 점 클릭 → 그날 하루(시간별)로 드릴다운
+                    if (pageLoadFrom === pageLoadTo) return;
+                    const date = (
+                      state as { activePayload?: { payload?: PageLoadPoint }[] }
+                    )?.activePayload?.[0]?.payload?.date;
+                    if (date) {
+                      setPageLoadFrom(date);
+                      setPageLoadTo(date);
+                    }
+                  }}
+                  className={pageLoadFrom !== pageLoadTo ? "cursor-pointer" : ""}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis

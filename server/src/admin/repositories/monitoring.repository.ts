@@ -50,6 +50,7 @@ type RetentionTable = 'apm_request_timings' | 'apm_page_load_timings';
 
 export interface PageLoadSeriesRow {
   bucket: string;
+  date: string;
   avg_ttfb: number | null;
   avg_dcl: number | null;
   avg_lcp: number | null;
@@ -391,6 +392,7 @@ export class MonitoringRepository {
                  ) AS bucket_start
         )
         SELECT TO_CHAR(b.bucket_start, 'HH24:MI') AS bucket,
+               TO_CHAR(b.bucket_start::date, 'YYYY-MM-DD') AS date,
                CASE WHEN b.bucket_start <= date_trunc('hour', NOW() AT TIME ZONE 'Asia/Seoul')
                     THEN COALESCE(ROUND(AVG(s.ttfb_ms))::int, 0) END AS avg_ttfb,
                CASE WHEN b.bucket_start <= date_trunc('hour', NOW() AT TIME ZONE 'Asia/Seoul')
@@ -422,6 +424,7 @@ export class MonitoringRepository {
         FROM generate_series(${from}::date, ${to}::date, INTERVAL '1 day') AS g
       )
       SELECT TO_CHAR(b.bucket_start, 'MM-DD') AS bucket,
+             TO_CHAR(b.bucket_start, 'YYYY-MM-DD') AS date,
              CASE WHEN b.bucket_start <= (NOW() AT TIME ZONE 'Asia/Seoul')::date
                   THEN COALESCE(ROUND(AVG(s.ttfb_ms))::int, 0) END AS avg_ttfb,
              CASE WHEN b.bucket_start <= (NOW() AT TIME ZONE 'Asia/Seoul')::date
