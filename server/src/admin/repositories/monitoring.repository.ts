@@ -50,6 +50,7 @@ type RetentionTable = 'apm_request_timings' | 'apm_page_load_timings';
 
 export interface PageLoadSeriesRow {
   bucket: string;
+  date: string;
   avg_ttfb: number | null;
   avg_dcl: number | null;
   avg_lcp: number | null;
@@ -365,30 +366,41 @@ export class MonitoringRepository {
   }
 
   /** 시간버킷 평균(ttfb/dcl/lcp/load). 빈 버킷도 채워 반환. */
-  async findPageLoadSeries(rangeDays: number, bucketHours: number) {
-    // 버킷/라벨은 한국시간(KST) 달력 기준. 빈 버킷도 generate_series로 채워 축이 끊기지 않게 함.
-    if (bucketHours < 24) {
-      // 1일 보기: 오늘(KST) 00:00~23:00 시간별 (밤12시~다음날밤12시 24칸 고정)
+  /**
+   * 페이지 로딩 추이. from===to면 그날 시간별(00~23시 24칸), 아니면 from~to 일별.
+   * 버킷/라벨은 한국시간(KST) 달력 기준. 빈 버킷도 generate_series로 채운다.
+   * 이미 지난 버킷(현재시각 이하)은 데이터가 없어도 0으로 채워 점을 찍고,
+   * 아직 안 온 미래 버킷은 NULL로 둬서 점을 안 찍는다.
+   */
+  async findPageLoadSeries(from: string, to: string) {
+    if (from === to) {
+      // 선택한 하루 시간별 (KST 00:00~23:00 24칸 고정)
       return this.prisma.$queryRaw<PageLoadSeriesRow[]>`
         WITH samples AS (
           SELECT date_trunc('hour', created_at AT TIME ZONE 'Asia/Seoul') AS bucket_start,
                  ttfb_ms, dcl_ms, lcp_ms, load_ms
           FROM apm_page_load_timings
           WHERE source = 'rum'
-            AND created_at >= (date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul')) AT TIME ZONE 'Asia/Seoul'
+            AND created_at >= (${from}::date) AT TIME ZONE 'Asia/Seoul'
+            AND created_at <  (${from}::date + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
         ),
         buckets AS (
           SELECT generate_series(
-                   date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul'),
-                   date_trunc('day', NOW() AT TIME ZONE 'Asia/Seoul') + INTERVAL '23 hours',
+                   ${from}::timestamp,
+                   ${from}::timestamp + INTERVAL '23 hours',
                    INTERVAL '1 hour'
                  ) AS bucket_start
         )
         SELECT TO_CHAR(b.bucket_start, 'HH24:MI') AS bucket,
-               ROUND(AVG(s.ttfb_ms))::int AS avg_ttfb,
-               ROUND(AVG(s.dcl_ms))::int  AS avg_dcl,
-               ROUND(AVG(s.lcp_ms))::int  AS avg_lcp,
-               ROUND(AVG(s.load_ms))::int AS avg_load,
+               TO_CHAR(b.bucket_start::date, 'YYYY-MM-DD') AS date,
+               CASE WHEN b.bucket_start <= date_trunc('hour', NOW() AT TIME ZONE 'Asia/Seoul')
+                    THEN COALESCE(ROUND(AVG(s.ttfb_ms))::int, 0) END AS avg_ttfb,
+               CASE WHEN b.bucket_start <= date_trunc('hour', NOW() AT TIME ZONE 'Asia/Seoul')
+                    THEN COALESCE(ROUND(AVG(s.dcl_ms))::int, 0) END AS avg_dcl,
+               CASE WHEN b.bucket_start <= date_trunc('hour', NOW() AT TIME ZONE 'Asia/Seoul')
+                    THEN COALESCE(ROUND(AVG(s.lcp_ms))::int, 0) END AS avg_lcp,
+               CASE WHEN b.bucket_start <= date_trunc('hour', NOW() AT TIME ZONE 'Asia/Seoul')
+                    THEN COALESCE(ROUND(AVG(s.load_ms))::int, 0) END AS avg_load,
                COUNT(s.bucket_start) AS count
         FROM buckets b
         LEFT JOIN samples s ON s.bucket_start = b.bucket_start
@@ -397,38 +409,51 @@ export class MonitoringRepository {
       `;
     }
 
-    // 7/30일 보기: 최근 rangeDays 일(KST 달력, 오늘 포함) 일별
+    // from~to 일별 (KST 달력)
     return this.prisma.$queryRaw<PageLoadSeriesRow[]>`
       WITH samples AS (
         SELECT (created_at AT TIME ZONE 'Asia/Seoul')::date AS bucket_start,
                ttfb_ms, dcl_ms, lcp_ms, load_ms
         FROM apm_page_load_timings
         WHERE source = 'rum'
-          AND created_at >= (
-            (NOW() AT TIME ZONE 'Asia/Seoul')::date
-            - ((${rangeDays}::int - 1) * INTERVAL '1 day')
-          ) AT TIME ZONE 'Asia/Seoul'
+          AND created_at >= (${from}::date) AT TIME ZONE 'Asia/Seoul'
+          AND created_at <  (${to}::date + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
       ),
       buckets AS (
         SELECT g::date AS bucket_start
-        FROM generate_series(
-               ((NOW() AT TIME ZONE 'Asia/Seoul')::date
-                - ((${rangeDays}::int - 1) * INTERVAL '1 day'))::date,
-               (NOW() AT TIME ZONE 'Asia/Seoul')::date,
-               INTERVAL '1 day'
-             ) AS g
+        FROM generate_series(${from}::date, ${to}::date, INTERVAL '1 day') AS g
       )
       SELECT TO_CHAR(b.bucket_start, 'MM-DD') AS bucket,
-             ROUND(AVG(s.ttfb_ms))::int AS avg_ttfb,
-             ROUND(AVG(s.dcl_ms))::int  AS avg_dcl,
-             ROUND(AVG(s.lcp_ms))::int  AS avg_lcp,
-             ROUND(AVG(s.load_ms))::int AS avg_load,
+             TO_CHAR(b.bucket_start, 'YYYY-MM-DD') AS date,
+             CASE WHEN b.bucket_start <= (NOW() AT TIME ZONE 'Asia/Seoul')::date
+                  THEN COALESCE(ROUND(AVG(s.ttfb_ms))::int, 0) END AS avg_ttfb,
+             CASE WHEN b.bucket_start <= (NOW() AT TIME ZONE 'Asia/Seoul')::date
+                  THEN COALESCE(ROUND(AVG(s.dcl_ms))::int, 0) END AS avg_dcl,
+             CASE WHEN b.bucket_start <= (NOW() AT TIME ZONE 'Asia/Seoul')::date
+                  THEN COALESCE(ROUND(AVG(s.lcp_ms))::int, 0) END AS avg_lcp,
+             CASE WHEN b.bucket_start <= (NOW() AT TIME ZONE 'Asia/Seoul')::date
+                  THEN COALESCE(ROUND(AVG(s.load_ms))::int, 0) END AS avg_load,
              COUNT(s.bucket_start) AS count
       FROM buckets b
       LEFT JOIN samples s ON s.bucket_start = b.bucket_start
       GROUP BY b.bucket_start
       ORDER BY b.bucket_start ASC
     `;
+  }
+
+  /** RUM 페이지 로딩 데이터가 처음 생긴 날짜(KST, YYYY-MM-DD). 없으면 null. */
+  async findEarliestPageLoadDate(): Promise<string | null> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{ earliest: string | null }>
+    >`
+      SELECT TO_CHAR(
+               MIN((created_at AT TIME ZONE 'Asia/Seoul')::date),
+               'YYYY-MM-DD'
+             ) AS earliest
+      FROM apm_page_load_timings
+      WHERE source = 'rum'
+    `;
+    return rows[0]?.earliest ?? null;
   }
 
   async findSummary(slowThresholdMs: number) {

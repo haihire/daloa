@@ -37,6 +37,8 @@ export default function AdminLayout({
           </span>
           <Link
             href="/"
+            target="_blank"
+            rel="noopener noreferrer"
             className="mt-2 flex items-center gap-1 text-xs font-medium px-2 py-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors w-fit"
           >
             ↗ 메인 사이트 바로가기

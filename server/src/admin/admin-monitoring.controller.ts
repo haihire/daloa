@@ -103,10 +103,14 @@ export class AdminMonitoringController {
 
   @UseGuards(AdminGuard)
   @Get('admin/monitoring/page-load-series')
-  pageLoadSeries(@Query('days') days?: string) {
-    const parsed = Number(days);
-    const rangeDays = Number.isFinite(parsed) ? parsed : 7;
-    return this.monitoring.getPageLoadSeries(rangeDays);
+  pageLoadSeries(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.monitoring.getPageLoadSeries(from, to);
+  }
+
+  @UseGuards(AdminGuard)
+  @Get('admin/monitoring/page-load-earliest')
+  pageLoadEarliest() {
+    return this.monitoring.getPageLoadEarliest();
   }
 
   @Post('telemetry/page-load')

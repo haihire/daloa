@@ -13,9 +13,11 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import AdminDatePicker from "@/components/admin/AdminDatePicker";
 
 interface PageLoadPoint {
   bucket: string;
+  date: string;
   ttfb: number | null;
   dcl: number | null;
   lcp: number | null;
@@ -29,6 +31,11 @@ const PAGE_LOAD_METRICS = [
   { key: "dcl", label: "DCL", color: "#7c3aed" },
   { key: "ttfb", label: "TTFB", color: "#f59e0b" },
 ] as const;
+
+// 사용자 로컬 타임존과 무관하게 한국시간(UTC+9) 기준 오늘 날짜(YYYY-MM-DD)
+function kstToday(): string {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
 
 type Dashboard = {
   summary: {
@@ -124,7 +131,9 @@ export default function MonitoringPage() {
   const [sectionTab, setSectionTab] = useState<
     "sites" | "stat-builds" | "youtube"
   >("sites");
-  const [pageLoadDays, setPageLoadDays] = useState<1 | 7 | 30>(7);
+  const [pageLoadFrom, setPageLoadFrom] = useState<string>(kstToday);
+  const [pageLoadTo, setPageLoadTo] = useState<string>(kstToday);
+  const [pageLoadMinDate, setPageLoadMinDate] = useState<string>("");
   const [pageLoadSeries, setPageLoadSeries] = useState<PageLoadPoint[]>([]);
   const [pageLoadLoading, setPageLoadLoading] = useState(true);
   const hasLoadedRef = useRef(false);
@@ -212,7 +221,7 @@ export default function MonitoringPage() {
     async function loadPageLoad() {
       try {
         const res = await fetch(
-          `/api/admin/monitoring/page-load-series?days=${pageLoadDays}`,
+          `/api/admin/monitoring/page-load-series?from=${pageLoadFrom}&to=${pageLoadTo}`,
           { cache: "no-store" },
         );
         if (!alive || !res.ok) return;
@@ -228,7 +237,27 @@ export default function MonitoringPage() {
     return () => {
       alive = false;
     };
-  }, [pageLoadDays]);
+  }, [pageLoadFrom, pageLoadTo]);
+
+  // 달력 하한(첫 데이터 날짜) 1회 조회 — 이 이전은 선택 불가
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/monitoring/page-load-earliest", {
+          cache: "no-store",
+        });
+        if (!alive || !res.ok) return;
+        const data = (await res.json()) as { earliest: string | null };
+        if (data.earliest) setPageLoadMinDate(data.earliest);
+      } catch {
+        // 하한 없으면 그냥 전체 선택 가능
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const pageLoadLatest = useMemo(() => {
     for (let i = pageLoadSeries.length - 1; i >= 0; i -= 1) {
@@ -367,19 +396,44 @@ export default function MonitoringPage() {
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex gap-1">
-                {([1, 7, 30] as const).map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setPageLoadDays(d)}
-                    className={`admin-btn admin-btn-sm ${pageLoadDays === d ? "admin-btn-primary" : "admin-btn-secondary"}`}
-                  >
-                    {d}일
-                  </button>
-                ))}
-              </div>
+            <div className="flex items-center gap-1 text-xs">
+              <AdminDatePicker
+                value={pageLoadFrom}
+                min={pageLoadMinDate}
+                max={kstToday()}
+                onChange={(v) => {
+                  // 시작을 끝보다 뒤로 고르면 끝도 같이 맞춰 순서 유지
+                  setPageLoadFrom(v);
+                  if (pageLoadTo && v > pageLoadTo) setPageLoadTo(v);
+                }}
+              />
+              <span className="text-[color:var(--admin-text-muted)]">~</span>
+              <AdminDatePicker
+                value={pageLoadTo}
+                min={pageLoadMinDate}
+                max={kstToday()}
+                onChange={(v) => {
+                  // 끝을 시작보다 앞으로 고르면 시작도 같이 맞춰 순서 유지
+                  setPageLoadTo(v);
+                  if (pageLoadFrom && v < pageLoadFrom) setPageLoadFrom(v);
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const t = kstToday();
+                  setPageLoadFrom(t);
+                  setPageLoadTo(t);
+                }}
+                className="admin-btn admin-btn-sm admin-btn-secondary"
+              >
+                오늘
+              </button>
+              {pageLoadFrom !== pageLoadTo && (
+                <span className="ml-1 text-[10px] text-[color:var(--admin-text-muted)]">
+                  점 클릭 → 해당일
+                </span>
+              )}
             </div>
           </div>
           <div className="h-48">
@@ -387,7 +441,7 @@ export default function MonitoringPage() {
               <div className="grid h-full place-items-center text-sm text-[color:var(--admin-text-muted)]">
                 불러오는 중...
               </div>
-            ) : pageLoadSeries.every((p) => (p.count ?? 0) === 0) ? (
+            ) : pageLoadSeries.length === 0 ? (
               <div className="grid h-full place-items-center text-sm text-[color:var(--admin-text-muted)]">
                 데이터 없음 (수집 시작 후 표시됩니다)
               </div>
@@ -397,6 +451,22 @@ export default function MonitoringPage() {
                   data={pageLoadSeries}
                   onMouseEnter={() => setActiveChart("page-load")}
                   onMouseLeave={() => setActiveChart(null)}
+                  onClick={(state) => {
+                    // 일별(여러 날) 보기에서 점 클릭 → 그날 하루(시간별)로 드릴다운.
+                    // recharts v3는 activePayload가 없어 activeIndex/activeLabel로 행을 찾는다.
+                    if (pageLoadFrom === pageLoadTo) return;
+                    const idx = state.activeIndex ?? state.activeTooltipIndex;
+                    const row =
+                      (idx != null ? pageLoadSeries[Number(idx)] : undefined) ??
+                      pageLoadSeries.find(
+                        (p) => p.bucket === String(state.activeLabel),
+                      );
+                    if (row?.date) {
+                      setPageLoadFrom(row.date);
+                      setPageLoadTo(row.date);
+                    }
+                  }}
+                  className={pageLoadFrom !== pageLoadTo ? "cursor-pointer" : ""}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis
