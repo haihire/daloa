@@ -378,7 +378,7 @@ export default function MonitoringPage() {
               <input
                 type="date"
                 value={pageLoadFrom}
-                max={pageLoadTo}
+                max={kstToday()}
                 onChange={(e) => setPageLoadFrom(e.target.value)}
                 className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
               />
@@ -386,7 +386,6 @@ export default function MonitoringPage() {
               <input
                 type="date"
                 value={pageLoadTo}
-                min={pageLoadFrom}
                 max={kstToday()}
                 onChange={(e) => setPageLoadTo(e.target.value)}
                 className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
