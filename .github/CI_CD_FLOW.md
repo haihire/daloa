@@ -111,7 +111,6 @@ main 머지
 | DB 마이그레이션 | [db-migrate.yml](workflows/db-migrate.yml) | `gh workflow run db-migrate.yml -f sql_file=db/migrations/xxx.sql` |
 | NestJS 상태·로그 진단 | [diag-nest.yml](workflows/diag-nest.yml) | Actions 탭 > Run workflow |
 | E2E 단독 재현 | [server-e2e.yml](workflows/server-e2e.yml) | Actions 탭 > Run workflow |
-| 아키텍처 다이어그램 export | [drawio-export.yml](workflows/drawio-export.yml) | `docs/architecture.drawio` 수정 후 자동 / 수동 |
 
 ---
 

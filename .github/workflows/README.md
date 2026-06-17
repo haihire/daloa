@@ -12,7 +12,6 @@
 | [vercel-deploy-log.yml](vercel-deploy-log.yml) | `deployment_status` (Vercel) | 기록 | next(프론트) 배포 시점을 모니터링 DB에 기록 |
 | [prewarm-home.yml](prewarm-home.yml) | `deployment_status` / 수동 | 성능 | 배포 직후 홈(`/`) ISR 엣지 캐시 1회 워밍 |
 | [auto-delete-branch.yml](auto-delete-branch.yml) | PR closed(merged) | 정리 | 머지된 하위 브랜치 자동 삭제(상위 제외) |
-| [drawio-export.yml](drawio-export.yml) | push → main (`docs/architecture.drawio`) / 수동 | 문서 | drawio → SVG 변환 후 PR 생성 |
 | [db-migrate.yml](db-migrate.yml) | 수동(`workflow_dispatch`) | 운영 | EC2 postgres에 SQL 마이그레이션 실행 |
 | [diag-nest.yml](diag-nest.yml) | 수동(`workflow_dispatch`) | 운영 | EC2 NestJS 컨테이너 상태·로그 조회 |
 | [server-e2e.yml](server-e2e.yml) | 수동(`workflow_dispatch`) | CI(예비) | E2E 단독 재현용 수동 fallback |
@@ -63,10 +62,6 @@
 ### auto-delete-branch.yml — 머지 후 브랜치 삭제
 - **트리거**: PR이 **merged** 상태로 close될 때
 - **동작**: head 브랜치가 상위(`main`,`admin`,`mainPage`,`etc`)면 보존, 그 외(하위 작업 브랜치)는 자동 삭제. ref가 이미 없어도 실패하지 않게 멱등 처리.
-
-### drawio-export.yml — 아키텍처 다이어그램 export
-- **트리거**: `main`에 `docs/architecture.drawio` 변경 push (+ 수동)
-- **동작**: drawio → SVG 변환 + prettify 후 `docs/architecture.svg` 갱신 PR 자동 생성.
 
 ### db-migrate.yml — DB 마이그레이션 (수동)
 - **트리거**: 수동. 입력 `sql_file`(레포 루트 기준 경로), `restart_nest`(기본 true)
