@@ -401,14 +401,22 @@ export default function MonitoringPage() {
                 value={pageLoadFrom}
                 min={pageLoadMinDate}
                 max={kstToday()}
-                onChange={setPageLoadFrom}
+                onChange={(v) => {
+                  // 시작을 끝보다 뒤로 고르면 끝도 같이 맞춰 순서 유지
+                  setPageLoadFrom(v);
+                  if (pageLoadTo && v > pageLoadTo) setPageLoadTo(v);
+                }}
               />
               <span className="text-[color:var(--admin-text-muted)]">~</span>
               <AdminDatePicker
                 value={pageLoadTo}
                 min={pageLoadMinDate}
                 max={kstToday()}
-                onChange={setPageLoadTo}
+                onChange={(v) => {
+                  // 끝을 시작보다 앞으로 고르면 시작도 같이 맞춰 순서 유지
+                  setPageLoadTo(v);
+                  if (pageLoadFrom && v < pageLoadFrom) setPageLoadFrom(v);
+                }}
               />
               <button
                 type="button"
