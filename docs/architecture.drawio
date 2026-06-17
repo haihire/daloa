@@ -1,11 +1,11 @@
 <mxfile host="65bd71144e">
     <diagram name="Lomoa Architecture" id="0">
-        <mxGraphModel dx="719" dy="372" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+        <mxGraphModel dx="595" dy="308" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
                 <mxCell id="2" value="사용자" style="shape=mxgraph.cisco.computers_and_peripherals.pc;fillColor=#dae8fc;strokeColor=#6c8ebf;labelBackgroundColor=none;" parent="1" vertex="1">
-                    <mxGeometry x="50" y="420" width="60" height="60" as="geometry"/>
+                    <mxGeometry x="50" y="430" width="60" height="60" as="geometry"/>
                 </mxCell>
                 <mxCell id="40" value="DNS (가비아)&#xa;lomoa.kr → Vercel&#xa;api.lomoa.kr → EC2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontSize=10;" parent="1" vertex="1">
                     <mxGeometry x="20" y="560" width="200" height="70" as="geometry"/>
@@ -43,20 +43,25 @@
                 <mxCell id="23" value="프록시 :3001" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#e65100;fontColor=#e65100;labelBackgroundColor=#ffffff;" parent="13" source="4" target="5" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="24" value="① 캐시 조회" style="edgeStyle=orthogonalEdgeStyle;rounded=0;exitX=0.25;exitY=1;exitDx=0;exitDy=0;strokeColor=#c62828;fontColor=#c62828;labelBackgroundColor=#ffffff;" parent="13" source="5" target="6" edge="1">
+                <mxCell id="24" value="① 캐시 조회" style="edgeStyle=orthogonalEdgeStyle;rounded=0;exitX=0.539;exitY=1.001;exitDx=0;exitDy=0;strokeColor=#c62828;fontColor=#c62828;labelBackgroundColor=#ffffff;exitPerimeter=0;entryX=0.807;entryY=0.021;entryDx=0;entryDy=0;entryPerimeter=0;" parent="13" source="5" target="6" edge="1">
                     <mxGeometry relative="1" as="geometry">
                         <Array as="points">
-                            <mxPoint x="310" y="310"/>
-                            <mxPoint x="310" y="370"/>
-                            <mxPoint x="240" y="370"/>
+                            <mxPoint x="330" y="370"/>
+                            <mxPoint x="242" y="370"/>
                         </Array>
+                        <mxPoint x="240" y="420" as="targetPoint"/>
                     </mxGeometry>
                 </mxCell>
                 <mxCell id="26" value="② 캐시 히트" style="edgeStyle=orthogonalEdgeStyle;rounded=0;exitX=0.2;exitY=0;exitDx=0;exitDy=0;entryX=0.1;entryY=1;entryDx=0;entryDy=0;dashed=1;strokeColor=#c62828;fontColor=#c62828;labelBackgroundColor=#ffffff;" parent="13" source="6" target="5" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
                 <mxCell id="25" value="③ 캐시 미스: DB 조회" style="edgeStyle=orthogonalEdgeStyle;rounded=0;exitX=0.75;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#1565c0;fontColor=#1565c0;labelBackgroundColor=#ffffff;" parent="13" source="5" target="7" edge="1">
-                    <mxGeometry relative="1" as="geometry"/>
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="383" y="360"/>
+                            <mxPoint x="485" y="360"/>
+                        </Array>
+                    </mxGeometry>
                 </mxCell>
                 <mxCell id="27" value="④ 캐시 저장" style="edgeStyle=orthogonalEdgeStyle;rounded=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;dashed=1;strokeColor=#1565c0;fontColor=#1565c0;labelBackgroundColor=#ffffff;" parent="13" source="7" target="6" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
