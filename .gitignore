@@ -79,3 +79,11 @@ workRecord/
 study/
 
 .claude/
+
+portfolio/
+
+# 부하테스트 산출물만 제외 (스크립트·기록 마크다운은 추적)
+stress/
+
+tseting.md
+cluster.md
