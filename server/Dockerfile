@@ -9,10 +9,12 @@ RUN apk add --no-cache docker-cli python3 py3-pip && pip install --break-system-
 
 COPY package*.json ./
 RUN npm ci --omit=dev
+RUN npm i -g pm2
 
 COPY generated ./generated
 COPY dist ./dist
+COPY ecosystem.config.js ./
 
 EXPOSE 3001
 
-CMD ["node", "dist/main"]
+CMD ["pm2-runtime", "start", "ecosystem.config.js"]
