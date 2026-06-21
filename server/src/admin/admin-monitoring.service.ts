@@ -56,6 +56,9 @@ export class AdminMonitoringService implements OnModuleInit {
   constructor(private readonly monitoringRepo: MonitoringRepository) {}
 
   async onModuleInit() {
+    // PM2 cluster: 스키마 부트스트랩은 0번 워커만(또는 비클러스터=undefined). 동시 DDL 경쟁 방지.
+    const inst = process.env.NODE_APP_INSTANCE;
+    if (inst !== undefined && inst !== '0') return;
     await this.monitoringRepo.ensureMonitoringTables();
   }
 
