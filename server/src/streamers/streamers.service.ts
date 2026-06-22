@@ -165,6 +165,10 @@ export class StreamersService implements OnModuleInit {
   }
 
   async onModuleInit() {
+    // PM2 cluster: 워커0(또는 비클러스터=undefined)만 실행. 동시 YouTube API 호출/UPSERT 방지.
+    const inst = process.env.NODE_APP_INSTANCE;
+    if (inst !== undefined && inst !== '0') return;
+
     if (this.youtubeRedisReadOnly) {
       this.logger.log(
         'YOUTUBE_REDIS_READONLY 활성화 — 시작 시 YouTube 갱신 스킵',
