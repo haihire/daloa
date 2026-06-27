@@ -49,6 +49,13 @@ export class ChzzkClient {
       // Chzzk 공식 API: GET /open/v1/lives
       // 호스트: https://openapi.chzzk.naver.com
       // 인증: Client-Id, Client-Secret 헤더
+      this.logger.debug(
+        `API 호출: categoryId=${categoryId}, limit=${limit}, clientId=${this.clientId ? '***' : 'EMPTY'}, secret=${this.clientSecret ? '***' : 'EMPTY'}`,
+      );
+
+      // URL 수동 구성 (axios params 인코딩 이슈 회피) — size=20 (API 제한?)
+      const url = `/open/v1/lives?size=20&sortType=POPULAR&categoryId=Lost_Ark`;
+
       const response = await this.http.get<{
         code: number;
         message?: string;
@@ -58,10 +65,8 @@ export class ChzzkClient {
             liveTitle: string;
             liveCategory?: string;
             liveCategoryValue?: string;
-            channel: {
-              channelId: string;
-              channelName: string;
-            };
+            channelId: string;
+            channelName: string;
             liveImageUrl?: string;
             defaultThumbnailImageUrl?: string;
             concurrentUserCount: number;
@@ -71,12 +76,7 @@ export class ChzzkClient {
             next?: string;
           };
         };
-      }>('/open/v1/lives', {
-        params: {
-          size: limit,
-          sortType: 'POPULAR',
-          categoryId: 'Lost_Ark', // 로스트아크 카테고리 필터
-        },
+      }>(url, {
         headers: {
           'Client-Id': this.clientId,
           'Client-Secret': this.clientSecret,
@@ -95,13 +95,13 @@ export class ChzzkClient {
         .filter((item) => item.liveCategory === 'Lost_Ark' || item.liveCategoryValue === '로스트아크')
         .map((item) => ({
           platform: 'chzzk' as const,
-          channelId: item.channel.channelId,
-          channelName: item.channel.channelName,
+          channelId: item.channelId,
+          channelName: item.channelName,
           title: item.liveTitle,
           viewerCount: item.concurrentUserCount,
           thumbnailUrl:
             item.liveImageUrl || item.defaultThumbnailImageUrl || '',
-          liveUrl: `https://chzzk.naver.com/live/${item.channel.channelId}`,
+          liveUrl: `https://chzzk.naver.com/live/${item.channelId}`,
           startedAt: new Date(item.openDate),
         }));
     } catch (error: unknown) {

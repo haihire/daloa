@@ -680,15 +680,22 @@ export class StreamersService implements OnModuleInit {
     }
   }
 
-  /** Chzzk 라이브 캐시 조회 */
+  /** Chzzk 라이브 조회 (캐시 우선, 없으면 직접 API 호출) */
   async getChzzkLives(minViewers = 0): Promise<ChzzkLiveItem[]> {
     try {
+      // 1. 캐시 확인
       const cached = await this.redis.get(CHZZK_LIVE_CACHE_KEY);
-      if (!cached) return [];
-      const lives: ChzzkLiveItem[] = JSON.parse(cached);
+      if (cached) {
+        const lives: ChzzkLiveItem[] = JSON.parse(cached);
+        return this.chzzk.filterByViewerCount(lives, minViewers);
+      }
+
+      // 2. 캐시 없으면 직접 API 호출
+      this.logger.debug('Chzzk 캐시 미스 → 직접 API 호출');
+      const lives = await this.chzzk.fetchLivesByCategory('Lost_Ark', 50);
       return this.chzzk.filterByViewerCount(lives, minViewers);
     } catch (error: unknown) {
-      this.logger.debug(`Chzzk 캐시 조회 실패: ${toErrorMessage(error)}`);
+      this.logger.debug(`Chzzk 조회 실패: ${toErrorMessage(error)}`);
       return [];
     }
   }
