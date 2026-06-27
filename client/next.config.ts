@@ -18,8 +18,20 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "livecloud-thumb.akamaized.net",
       },
+      {
+        protocol: "https",
+        hostname: "nng-phinf.pstatic.net",
+      },
     ],
   },
+  rewrites: async () => ({
+    beforeFiles: [
+      {
+        source: "/api/:path*",
+        destination: `${process.env.NEST_API_URL || "http://localhost:3001"}/api/:path*`,
+      },
+    ],
+  }),
 };
 
 export default withSentryConfig(nextConfig, {
