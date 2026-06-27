@@ -20,11 +20,17 @@ export class ChzzkClient {
   private readonly http: AxiosInstance;
   private readonly clientId: string;
   private readonly clientSecret: string;
-  private readonly thumbnailResolution = '480';
+  private readonly thumbnailResolution: string;
+  private readonly livePageSize: number;
 
   constructor(private readonly config: ConfigService) {
     this.clientId = config.get<string>('CHZZK_CLIENT_ID', '');
     this.clientSecret = config.get<string>('CHZZK_CLIENT_SECRET', '');
+    this.thumbnailResolution = config.get<string>(
+      'CHZZK_THUMBNAIL_RESOLUTION',
+      '480',
+    );
+    this.livePageSize = config.get<number>('CHZZK_LIVE_PAGE_SIZE', 20);
 
     if (!this.clientId || !this.clientSecret) {
       this.logger.warn(
@@ -76,7 +82,7 @@ export class ChzzkClient {
         };
       }>('/open/v1/lives', {
         params: {
-          size: 20,
+          size: this.livePageSize,
           sortType: 'POPULAR',
           categoryId: 'Lost_Ark',
         },
