@@ -94,22 +94,34 @@ export class ChzzkClient {
       }
 
       // 응답 필터링: 로스트아크만 (정확 일치로 안정성 향상)
-      return response.data.content.data
+      const filtered = response.data.content.data
         .filter((item) => item.liveCategoryValue === '로스트아크')
         .map((item) => {
           const raw = item.liveThumbnailImageUrl || '';
+          const thumbnailUrl = raw && raw.length > 0 ? raw.replace('{type}', this.thumbnailResolution) : '';
+
+          // 첫 아이템만 로그: 썸네일 URL 치환 검증
+          if (!this.logger['__logged']) {
+            this.logger.debug(
+              `썸네일 URL 샘플: raw="${raw.substring(0, 80)}..." → resolved="${thumbnailUrl.substring(0, 80)}..."`,
+            );
+            this.logger['__logged'] = true;
+          }
+
           return {
             platform: 'chzzk' as const,
             channelId: item.channelId,
             channelName: item.channelName,
             title: item.liveTitle,
             viewerCount: item.concurrentUserCount,
-            thumbnailUrl: raw && raw.length > 0 ? raw.replace('{type}', this.thumbnailResolution) : '',
+            thumbnailUrl,
             channelImageUrl: item.channelImageUrl,
             liveUrl: `https://chzzk.naver.com/live/${item.channelId}`,
             startedAt: new Date(item.openDate),
           };
         });
+
+      return filtered;
     } catch (error: unknown) {
       this.logger.error(
         `Chzzk API 호출 실패: ${error instanceof Error ? error.message : String(error)}`,
