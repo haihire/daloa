@@ -81,9 +81,12 @@ export class ChzzkClient {
   }
 
   /**
-   * 로아 카테고리 라이브 목록 조회
-   * @param categoryId 로아 카테고리 ID (기본: 'lostarkvtj')
-   * @param limit 조회할 라이브 수
+   * 로스트아크 라이브 목록 조회
+   * @description Chzzk Open API /open/v1/lives에서 Lost_Ark 카테고리 라이브를 조회.
+   * API 응답에서 liveCategoryValue === '로스트아크' 필터링 후 반환.
+   * @param categoryId 무시됨 (Lost_Ark 고정)
+   * @param limit 무시됨 (CHZZK_LIVE_PAGE_SIZE env 사용)
+   * @returns 로스트아크 라이브 목록 (빈 배열도 정상)
    */
   async fetchLivesByCategory(
     categoryId = 'lostarkvtj',
@@ -167,9 +170,12 @@ export class ChzzkClient {
   }
 
   /**
-   * 카테고리 검색 (로아 categoryId 획득 등)
-   * @param query 검색어 (예: "로스트아크")
-   * @param limit 조회할 카테고리 수
+   * Chzzk 카테고리 검색
+   * @description /open/v1/categories/search로 카테고리명 검색.
+   * axios params 옵션으로 자동 UTF-8 인코딩됨 (수동 encodeURIComponent 금지).
+   * @param query 한글 검색어 (예: "로스트아크") - UTF-8로 자동 인코딩
+   * @param limit 결과 개수 (기본 20)
+   * @returns categoryId/categoryName 배열
    */
   async searchCategories(
     query: string,
