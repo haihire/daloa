@@ -25,28 +25,94 @@ export class ChzzkClient {
     this.clientSecret = config.get<string>('CHZZK_CLIENT_SECRET', '');
 
     this.http = axios.create({
-      baseURL: 'https://api.chzzk.naver.com',
+      baseURL: 'https://openapi.chzzk.naver.com',
       timeout: 10000,
     });
   }
 
   /**
-   * 로아 카테고리 라이브 목록 조회 (Stage A: 스텁)
-   *
-   * TODO Stage B: 앱 등록 후 체크리스트 4항 실측
-   * 1. 인증 헤더 포맷 확정 → 수정
-   * 2. `/open/v1/lives` 카테고리 필터 파라미터 지원 여부 확인
-   * 3. 실제 응답 스키마 확인 → 필드 매핑 수정
-   * 4. 페이지 예산 K 결정 → 상위 K페이지 스캔 로직 구현
+   * 로아 카테고리 라이브 목록 조회
+   * @param categoryId 로아 카테고리 ID (기본: 'lostarkvtj')
+   * @param limit 조회할 라이브 수
    */
   async fetchLivesByCategory(
-    _categoryId = 'lostarkvtj',
-    _limit = 50,
+    categoryId = 'lostarkvtj',
+    limit = 50,
   ): Promise<ChzzkLiveItem[]> {
-    this.logger.debug(
-      '[Stage A 스텁] Chzzk API 호출 시뮬레이션 — 빈 배열 반환',
-    );
-    return [];
+    try {
+      // Chzzk 공식 API: GET /open/v1/lives
+      // 호스트: https://openapi.chzzk.naver.com
+      // 인증: Client-Id, Client-Secret 헤더
+      const response = await this.http.get<{
+        code: number;
+        message?: string;
+        content?: {
+          data?: Array<{
+            liveId: string;
+            liveTitle: string;
+            liveCategory?: string;
+            liveCategoryValue?: string;
+            channel: {
+              channelId: string;
+              channelName: string;
+            };
+            liveImageUrl?: string;
+            defaultThumbnailImageUrl?: string;
+            concurrentUserCount: number;
+            openDate: string;
+          }>;
+          page?: {
+            next?: string;
+          };
+        };
+      }>('/open/v1/lives', {
+        params: {
+          size: limit,
+          sortType: 'POPULAR',
+          // 카테고리 필터 파라미터 (API가 지원하는지는 실측 필요)
+          // categoryId 와 liveCategory 중 실제 파라미터명은 응답으로 확인
+        },
+        headers: {
+          'Client-Id': this.clientId,
+          'Client-Secret': this.clientSecret,
+        },
+      });
+
+      if (response.data.code !== 200 || !response.data.content?.data) {
+        this.logger.warn(
+          `Chzzk API 응답 실패: code=${response.data.code}, message=${response.data.message}`,
+        );
+        return [];
+      }
+
+      // 응답 필드명 확인 후 필터링 (로아 카테고리만)
+      return response.data.content.data
+        .filter((item) => {
+          const cat =
+            item.liveCategory || item.liveCategoryValue || '';
+          // 실측 결과에 따라 필터링 로직 조정 필요
+          return cat.toLowerCase().includes('lost ark') ||
+            cat.toLowerCase().includes('로스트아크') ||
+            item.liveTitle.toLowerCase().includes('lost ark') ||
+            item.liveTitle.includes('로스트아크');
+        })
+        .map((item) => ({
+          platform: 'chzzk' as const,
+          channelId: item.channel.channelId,
+          channelName: item.channel.channelName,
+          title: item.liveTitle,
+          viewerCount: item.concurrentUserCount,
+          thumbnailUrl:
+            item.liveImageUrl || item.defaultThumbnailImageUrl || '',
+          liveUrl: `https://chzzk.naver.com/live/${item.channel.channelId}`,
+          startedAt: new Date(item.openDate),
+        }));
+    } catch (error: unknown) {
+      this.logger.error(
+        `Chzzk API 호출 실패: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return [];
+    }
   }
 
   /**
