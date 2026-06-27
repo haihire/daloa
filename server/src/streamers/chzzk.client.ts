@@ -20,6 +20,7 @@ export class ChzzkClient {
   private readonly http: AxiosInstance;
   private readonly clientId: string;
   private readonly clientSecret: string;
+  private readonly thumbnailResolution = '480';
 
   constructor(private readonly config: ConfigService) {
     this.clientId = config.get<string>('CHZZK_CLIENT_ID', '');
@@ -103,7 +104,7 @@ export class ChzzkClient {
             channelName: item.channelName,
             title: item.liveTitle,
             viewerCount: item.concurrentUserCount,
-            thumbnailUrl: raw && raw.length > 0 ? raw.replace('{type}', '480') : '',
+            thumbnailUrl: raw && raw.length > 0 ? raw.replace('{type}', this.thumbnailResolution) : '',
             channelImageUrl: item.channelImageUrl,
             liveUrl: `https://chzzk.naver.com/live/${item.channelId}`,
             startedAt: new Date(item.openDate),
