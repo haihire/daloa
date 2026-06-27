@@ -663,7 +663,9 @@ export class StreamersService implements OnModuleInit {
     try {
       const lives = await this.chzzk.fetchLivesByCategory('lostarkvtj', 50);
       if (lives.length === 0) {
-        this.logger.warn('Chzzk 라이브 목록 0개');
+        this.logger.warn(
+          `Chzzk 라이브 갱신: 로아 라이브 0개 (캐시 미갱신)`,
+        );
         return;
       }
       const serialized = JSON.stringify(lives);
@@ -672,7 +674,9 @@ export class StreamersService implements OnModuleInit {
         CHZZK_LIVE_CACHE_TTL,
         serialized,
       );
-      this.logger.log(`Chzzk 라이브 캐시 저장: ${lives.length}개`);
+      this.logger.log(
+        `Chzzk 라이브 캐시 저장: ${lives.length}개 (TTL ${CHZZK_LIVE_CACHE_TTL}초)`,
+      );
     } catch (error: unknown) {
       this.logger.error(
         `Chzzk 라이브 갱신 실패: ${toErrorMessage(error)}`,
@@ -687,13 +691,21 @@ export class StreamersService implements OnModuleInit {
       const cached = await this.redis.get(CHZZK_LIVE_CACHE_KEY);
       if (cached) {
         const lives: ChzzkLiveItem[] = JSON.parse(cached);
-        return this.chzzk.filterByViewerCount(lives, minViewers);
+        const filtered = this.chzzk.filterByViewerCount(lives, minViewers);
+        this.logger.debug(
+          `Chzzk 캐시 hit: ${lives.length}개 → 필터링 후 ${filtered.length}개 (최소시청자 ${minViewers})`,
+        );
+        return filtered;
       }
 
       // 2. 캐시 없으면 직접 API 호출
       this.logger.debug('Chzzk 캐시 미스 → 직접 API 호출');
       const lives = await this.chzzk.fetchLivesByCategory('Lost_Ark', 50);
-      return this.chzzk.filterByViewerCount(lives, minViewers);
+      const filtered = this.chzzk.filterByViewerCount(lives, minViewers);
+      this.logger.debug(
+        `Chzzk 직접 호출: ${lives.length}개 → 필터링 후 ${filtered.length}개`,
+      );
+      return filtered;
     } catch (error: unknown) {
       this.logger.debug(`Chzzk 조회 실패: ${toErrorMessage(error)}`);
       return [];
