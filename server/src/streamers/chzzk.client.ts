@@ -64,7 +64,7 @@ export class ChzzkClient {
             liveCategoryValue?: string;
             channelId: string;
             channelName: string;
-            liveThumbnailImageUrl?: string;
+            channelImageUrl?: string;
             concurrentUserCount: number;
             openDate: string;
           }>;
@@ -100,8 +100,7 @@ export class ChzzkClient {
           channelName: item.channelName,
           title: item.liveTitle,
           viewerCount: item.concurrentUserCount,
-          thumbnailUrl: (item.liveThumbnailImageUrl || '')
-            .replace('{type}', ''),
+          thumbnailUrl: item.channelImageUrl || '',
           liveUrl: `https://chzzk.naver.com/live/${item.channelId}`,
           startedAt: new Date(item.openDate),
         }));
