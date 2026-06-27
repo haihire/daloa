@@ -58,6 +58,7 @@ export class ChzzkClient {
   private readonly clientSecret: string;
   private readonly thumbnailResolution: string;
   private readonly livePageSize: number;
+  private readonly kBudget: number;
 
   constructor(private readonly config: ConfigService) {
     this.clientId = config.get<string>('CHZZK_CLIENT_ID', '');
@@ -67,6 +68,7 @@ export class ChzzkClient {
       '480',
     );
     this.livePageSize = config.get<number>('CHZZK_LIVE_PAGE_SIZE', 20);
+    this.kBudget = config.get<number>('CHZZK_LIVE_K_BUDGET', 2);
 
     if (!this.clientId || !this.clientSecret) {
       this.logger.warn(
@@ -93,39 +95,57 @@ export class ChzzkClient {
     limit = 50,
   ): Promise<ChzzkLiveItem[]> {
     try {
-      // Chzzk 공식 API: GET /open/v1/lives
-      // 호스트: https://openapi.chzzk.naver.com
-      // 인증: Client-Id, Client-Secret 헤더
-      this.logger.debug(
-        `API 호출: categoryId=${categoryId}, limit=${limit}, clientId=${this.clientId ? '***' : 'EMPTY'}, secret=${this.clientSecret ? '***' : 'EMPTY'}`,
-      );
+      const allLives: ChzzkLiveRawItem[] = [];
+      let nextPageUrl: string | undefined;
+      let pageCount = 0;
 
-      const response = await this.http.get<ChzzkLiveResponse>(
-        '/open/v1/lives',
-        {
-          params: {
-            size: this.livePageSize,
-            sortType: 'POPULAR',
-            categoryId: 'Lost_Ark',
-          },
-          headers: {
-            'Client-Id': this.clientId,
-            'Client-Secret': this.clientSecret,
-          },
-        },
-      );
+      // K 예산만큼 페이지 스캔
+      for (let i = 0; i < this.kBudget; i++) {
+        let response: any;
 
-      if (response.data.code !== 200 || !response.data.content?.data) {
-        this.logger.warn(
-          `Chzzk API 응답 실패: code=${response.data.code}, message=${response.data.message}`,
+        if (nextPageUrl) {
+          // page.next URL 사용 (전체 URL이므로 직접 호출)
+          response = await this.http.get<ChzzkLiveResponse>(nextPageUrl, {
+            headers: {
+              'Client-Id': this.clientId,
+              'Client-Secret': this.clientSecret,
+            },
+          });
+        } else {
+          // 첫 페이지: categoryId 파라미터 사용
+          response = await this.http.get<ChzzkLiveResponse>(
+            '/open/v1/lives',
+            {
+              params: {
+                size: this.livePageSize,
+                sortType: 'POPULAR',
+                categoryId: 'Lost_Ark',
+              },
+              headers: {
+                'Client-Id': this.clientId,
+                'Client-Secret': this.clientSecret,
+              },
+            },
+          );
+        }
+
+        if (response.data.code !== 200 || !response.data.content?.data) {
+          this.logger.warn(
+            `Chzzk API 응답 실패 (페이지 ${pageCount + 1}): code=${response.data.code}`,
+          );
+          break;
+        }
+
+        allLives.push(...response.data.content.data);
+        pageCount++;
+        nextPageUrl = response.data.content.page?.next;
+
+        this.logger.debug(
+          `Chzzk API 페이지 ${pageCount}: ${response.data.content.data.length}개 추가 (합계 ${allLives.length}개)`,
         );
-        return [];
-      }
 
-      const allLives = response.data.content.data;
-      this.logger.debug(
-        `Chzzk API: size=${this.livePageSize} 요청 → ${allLives.length}개 응답`,
-      );
+        if (!nextPageUrl) break;
+      }
 
       // 응답 필터링: 로스트아크만 (정확 일치로 안정성 향상)
       const filtered = allLives
@@ -156,7 +176,7 @@ export class ChzzkClient {
         });
 
       this.logger.debug(
-        `Chzzk 필터링: ${allLives.length}개 → ${filtered.length}개 (로스트아크)`,
+        `Chzzk 스캔 완료: ${pageCount}페이지 ${allLives.length}개 → 필터링 후 ${filtered.length}개 (로스트아크)`,
       );
 
       return filtered;
