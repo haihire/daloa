@@ -69,8 +69,7 @@ export class ChzzkClient {
         params: {
           size: limit,
           sortType: 'POPULAR',
-          // 카테고리 필터 파라미터 (API가 지원하는지는 실측 필요)
-          // categoryId 와 liveCategory 중 실제 파라미터명은 응답으로 확인
+          categoryId: 'Lost_Ark', // 로스트아크 카테고리 필터
         },
         headers: {
           'Client-Id': this.clientId,
@@ -85,17 +84,9 @@ export class ChzzkClient {
         return [];
       }
 
-      // 응답 필드명 확인 후 필터링 (로아 카테고리만)
+      // 응답 필터링: liveCategory가 Lost_Ark인 경우만 (추가 안전장치)
       return response.data.content.data
-        .filter((item) => {
-          const cat =
-            item.liveCategory || item.liveCategoryValue || '';
-          // 실측 결과에 따라 필터링 로직 조정 필요
-          return cat.toLowerCase().includes('lost ark') ||
-            cat.toLowerCase().includes('로스트아크') ||
-            item.liveTitle.toLowerCase().includes('lost ark') ||
-            item.liveTitle.includes('로스트아크');
-        })
+        .filter((item) => item.liveCategory === 'Lost_Ark' || item.liveCategoryValue === '로스트아크')
         .map((item) => ({
           platform: 'chzzk' as const,
           channelId: item.channel.channelId,
@@ -123,5 +114,54 @@ export class ChzzkClient {
     minViewers = 0,
   ): ChzzkLiveItem[] {
     return items.filter((item) => item.viewerCount >= minViewers);
+  }
+
+  /**
+   * 카테고리 검색 (로아 categoryId 획득 등)
+   * @param query 검색어 (예: "로스트아크")
+   * @param limit 조회할 카테고리 수
+   */
+  async searchCategories(
+    query: string,
+    limit = 20,
+  ): Promise<Array<{ categoryId: string; categoryName: string }>> {
+    try {
+      const response = await this.http.get<{
+        code: number;
+        content?: {
+          categories?: Array<{
+            categoryId: string;
+            categoryName?: string;
+            categoryValue?: string;
+          }>;
+        };
+      }>('/open/v1/categories/search', {
+        params: {
+          query, // axios가 자동으로 UTF-8 인코딩
+          size: limit,
+        },
+        headers: {
+          'Client-Id': this.clientId,
+          'Client-Secret': this.clientSecret,
+        },
+      });
+
+      if (response.data.code !== 200 || !response.data.content?.categories) {
+        this.logger.warn(
+          `카테고리 검색 실패: code=${response.data.code}`,
+        );
+        return [];
+      }
+
+      return response.data.content.categories.map((cat) => ({
+        categoryId: cat.categoryId,
+        categoryName: cat.categoryName || cat.categoryValue || '',
+      }));
+    } catch (error: unknown) {
+      this.logger.error(
+        `카테고리 검색 API 호출 실패: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return [];
+    }
   }
 }
