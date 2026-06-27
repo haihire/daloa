@@ -122,8 +122,13 @@ export class ChzzkClient {
         return [];
       }
 
+      const allLives = response.data.content.data;
+      this.logger.debug(
+        `Chzzk API: size=${this.livePageSize} 요청 → ${allLives.length}개 응답`,
+      );
+
       // 응답 필터링: 로스트아크만 (정확 일치로 안정성 향상)
-      const filtered = response.data.content.data
+      const filtered = allLives
         .filter((item) => item.liveCategoryValue === '로스트아크')
         .map((item) => {
           const raw = item.liveThumbnailImageUrl || '';
@@ -149,6 +154,10 @@ export class ChzzkClient {
             startedAt: new Date(item.openDate),
           };
         });
+
+      this.logger.debug(
+        `Chzzk 필터링: ${allLives.length}개 → ${filtered.length}개 (로스트아크)`,
+      );
 
       return filtered;
     } catch (error: unknown) {
