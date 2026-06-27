@@ -20,6 +20,27 @@ export default function ChzzkList({
   const [failedImages, setFailedImages] = React.useState<Set<string>>(
     new Set(),
   );
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [displayItems, setDisplayItems] = React.useState<ChzzkLiveItem[]>(
+    initialItems,
+  );
+
+  React.useEffect(() => {
+    setDisplayItems(initialItems);
+  }, [initialItems]);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      const res = await fetch('/api/streamers/live?minViewers=0');
+      const data = (await res.json()) as ChzzkLiveItem[];
+      setDisplayItems(data);
+    } catch (error) {
+      console.error('새로고침 실패:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const handleImageError = (channelId: string) => {
     setFailedImages((prev) => new Set([...prev, channelId]));
@@ -37,17 +58,27 @@ export default function ChzzkList({
 
   return (
     <div className="flex flex-col gap-2">
-      <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-        🎮 Chzzk 라이브
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+          🎮 Chzzk 라이브
+        </h2>
+        <button
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className="text-xs px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 transition-colors"
+          aria-label="새로고침"
+        >
+          {isRefreshing ? '새로고침 중...' : '새로고침'}
+        </button>
+      </div>
 
-      {initialItems.length === 0 ? (
+      {displayItems.length === 0 ? (
         <div className="flex items-center justify-center rounded-lg border border-slate-200 bg-slate-50 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
           현재 로스트아크 라이브가 없습니다
         </div>
       ) : (
         <div className="flex gap-3 overflow-x-auto pb-2">
-          {initialItems.map((item) => (
+          {displayItems.map((item) => (
             <button
               key={item.channelId}
               onClick={() => handleClick(item)}
