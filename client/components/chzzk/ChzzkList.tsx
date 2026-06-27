@@ -77,15 +77,15 @@ export default function ChzzkList({
           현재 로스트아크 라이브가 없습니다
         </div>
       ) : (
-        <div className="flex gap-3 overflow-x-auto pb-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
           {displayItems.map((item) => (
             <button
               key={item.channelId}
               onClick={() => handleClick(item)}
-              className="group shrink-0 rounded-lg border border-slate-200 bg-white transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
+              className="group h-full flex flex-col rounded-lg border border-slate-200 bg-white transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
               aria-label={`${item.title} - ${item.channelName}`}
             >
-              <div className="relative h-[190px] w-[270px] overflow-hidden rounded-t-lg bg-gradient-to-br from-purple-600 to-pink-600 dark:from-purple-700 dark:to-pink-700 flex items-center justify-center">
+              <div className="relative aspect-video w-full overflow-hidden rounded-t-lg bg-gradient-to-br from-purple-600 to-pink-600 dark:from-purple-700 dark:to-pink-700 flex items-center justify-center">
                 {!failedImages.has(item.channelId) && item.thumbnailUrl ? (
                   <Image
                     src={item.thumbnailUrl}
@@ -120,7 +120,7 @@ export default function ChzzkList({
               </div>
 
               <div className="flex flex-col gap-1 p-3">
-                <h3 className="line-clamp-2 text-left text-sm font-semibold text-slate-900 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                <h3 className="line-clamp-2 min-h-[2.5rem] text-left text-sm font-semibold text-slate-900 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400">
                   {item.title}
                 </h3>
                 <p className="text-left text-xs text-slate-600 dark:text-slate-400">

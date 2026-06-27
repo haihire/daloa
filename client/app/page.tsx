@@ -116,11 +116,11 @@ export default async function Home() {
               fallback={
                 <div className="animate-pulse space-y-2 pt-2">
                   <div className="h-5 w-36 rounded bg-slate-200 dark:bg-slate-700" />
-                  <div className="flex gap-3 overflow-hidden">
-                    {[0, 1, 2].map((i) => (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                    {[0, 1, 2, 3, 4].map((i) => (
                       <div
                         key={i}
-                        className="h-[190px] w-[270px] shrink-0 rounded-lg bg-slate-200 dark:bg-slate-700"
+                        className="aspect-video w-full rounded-lg bg-slate-200 dark:bg-slate-700"
                       />
                     ))}
                   </div>
