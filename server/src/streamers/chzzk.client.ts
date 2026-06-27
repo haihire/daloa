@@ -14,6 +14,42 @@ export interface ChzzkLiveItem {
   startedAt: Date;
 }
 
+// Chzzk API 응답 타입
+interface ChzzkLiveRawItem {
+  liveId: string;
+  liveTitle: string;
+  liveCategory?: string;
+  liveCategoryValue?: string;
+  channelId: string;
+  channelName: string;
+  channelImageUrl?: string;
+  liveThumbnailImageUrl?: string;
+  concurrentUserCount: number;
+  openDate: string;
+}
+
+interface ChzzkLiveResponse {
+  code: number;
+  message?: string;
+  content?: {
+    data?: ChzzkLiveRawItem[];
+    page?: {
+      next?: string;
+    };
+  };
+}
+
+interface ChzzkCategoryResponse {
+  code: number;
+  content?: {
+    categories?: Array<{
+      categoryId: string;
+      categoryName?: string;
+      categoryValue?: string;
+    }>;
+  };
+}
+
 @Injectable()
 export class ChzzkClient {
   private readonly logger = new Logger(ChzzkClient.name);
@@ -61,36 +97,20 @@ export class ChzzkClient {
         `API 호출: categoryId=${categoryId}, limit=${limit}, clientId=${this.clientId ? '***' : 'EMPTY'}, secret=${this.clientSecret ? '***' : 'EMPTY'}`,
       );
 
-      const response = await this.http.get<{
-        code: number;
-        message?: string;
-        content?: {
-          data?: Array<{
-            liveId: string;
-            liveTitle: string;
-            liveCategory?: string;
-            liveCategoryValue?: string;
-            channelId: string;
-            channelName: string;
-            channelImageUrl?: string;
-            concurrentUserCount: number;
-            openDate: string;
-          }>;
-          page?: {
-            next?: string;
-          };
-        };
-      }>('/open/v1/lives', {
-        params: {
-          size: this.livePageSize,
-          sortType: 'POPULAR',
-          categoryId: 'Lost_Ark',
+      const response = await this.http.get<ChzzkLiveResponse>(
+        '/open/v1/lives',
+        {
+          params: {
+            size: this.livePageSize,
+            sortType: 'POPULAR',
+            categoryId: 'Lost_Ark',
+          },
+          headers: {
+            'Client-Id': this.clientId,
+            'Client-Secret': this.clientSecret,
+          },
         },
-        headers: {
-          'Client-Id': this.clientId,
-          'Client-Secret': this.clientSecret,
-        },
-      });
+      );
 
       if (response.data.code !== 200 || !response.data.content?.data) {
         this.logger.warn(
@@ -156,25 +176,19 @@ export class ChzzkClient {
     limit = 20,
   ): Promise<Array<{ categoryId: string; categoryName: string }>> {
     try {
-      const response = await this.http.get<{
-        code: number;
-        content?: {
-          categories?: Array<{
-            categoryId: string;
-            categoryName?: string;
-            categoryValue?: string;
-          }>;
-        };
-      }>('/open/v1/categories/search', {
-        params: {
-          query, // axios가 자동으로 UTF-8 인코딩
-          size: limit,
+      const response = await this.http.get<ChzzkCategoryResponse>(
+        '/open/v1/categories/search',
+        {
+          params: {
+            query, // axios가 자동으로 UTF-8 인코딩
+            size: limit,
+          },
+          headers: {
+            'Client-Id': this.clientId,
+            'Client-Secret': this.clientSecret,
+          },
         },
-        headers: {
-          'Client-Id': this.clientId,
-          'Client-Secret': this.clientSecret,
-        },
-      });
+      );
 
       if (response.data.code !== 200 || !response.data.content?.categories) {
         this.logger.warn(
