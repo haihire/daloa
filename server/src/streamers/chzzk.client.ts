@@ -152,9 +152,25 @@ export class ChzzkClient {
 
       return filtered;
     } catch (error: unknown) {
-      this.logger.error(
-        `Chzzk API 호출 실패: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      if (axios.isAxiosError(error)) {
+        if (error.response) {
+          this.logger.error(
+            `Chzzk API 응답 에러: ${error.response.status} ${error.response.statusText} - ${error.response.data?.message || ''}`,
+          );
+        } else if (error.request) {
+          this.logger.error(
+            `Chzzk API 네트워크 에러: ${error.message}`,
+          );
+        } else {
+          this.logger.error(
+            `Chzzk API 요청 생성 실패: ${error.message}`,
+          );
+        }
+      } else {
+        this.logger.error(
+          `Chzzk API 호출 실패: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
       return [];
     }
   }
@@ -208,9 +224,25 @@ export class ChzzkClient {
         categoryName: cat.categoryName || cat.categoryValue || '',
       }));
     } catch (error: unknown) {
-      this.logger.error(
-        `카테고리 검색 API 호출 실패: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      if (axios.isAxiosError(error)) {
+        if (error.response) {
+          this.logger.error(
+            `카테고리 검색 API 응답 에러: ${error.response.status} ${error.response.statusText}`,
+          );
+        } else if (error.request) {
+          this.logger.error(
+            `카테고리 검색 API 네트워크 에러: ${error.message}`,
+          );
+        } else {
+          this.logger.error(
+            `카테고리 검색 API 요청 생성 실패: ${error.message}`,
+          );
+        }
+      } else {
+        this.logger.error(
+          `카테고리 검색 API 호출 실패: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
       return [];
     }
   }
