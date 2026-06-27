@@ -24,6 +24,12 @@ export class ChzzkClient {
     this.clientId = config.get<string>('CHZZK_CLIENT_ID', '');
     this.clientSecret = config.get<string>('CHZZK_CLIENT_SECRET', '');
 
+    if (!this.clientId || !this.clientSecret) {
+      this.logger.warn(
+        `Chzzk 인증정보 미설정: clientId=${this.clientId ? '***' : 'EMPTY'}, secret=${this.clientSecret ? '***' : 'EMPTY'}`,
+      );
+    }
+
     this.http = axios.create({
       baseURL: 'https://openapi.chzzk.naver.com',
       timeout: 10000,
