@@ -32,3 +32,14 @@ export interface ClassSummary {
   summary: string;
   updatedAt: string;
 }
+
+export interface ChzzkLiveItem {
+  platform: 'chzzk';
+  channelId: string;
+  channelName: string;
+  title: string;
+  viewerCount: number;
+  thumbnailUrl: string;
+  liveUrl: string;
+  startedAt: string;
+}

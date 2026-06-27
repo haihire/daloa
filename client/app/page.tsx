@@ -3,7 +3,7 @@ import { after } from "next/server";
 import StatBuildList from "@/components/characters/StatBuildList";
 import ClassSummaryList from "@/components/class-summary/ClassSummaryList";
 import SiteList from "@/components/sites/SiteList";
-import YoutubeSection from "@/components/youtube/YoutubeSection";
+import ChzzkSection from "@/components/chzzk/ChzzkSection";
 import type { ClassSummary, Site, StatBuildTab } from "@/types";
 import type { Metadata } from "next";
 
@@ -127,7 +127,7 @@ export default async function Home() {
                 </div>
               }
             >
-              <YoutubeSection />
+              <ChzzkSection />
             </Suspense>
 
             <div className="flex flex-col gap-4 sm:hidden">

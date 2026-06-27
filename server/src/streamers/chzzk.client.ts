@@ -53,9 +53,6 @@ export class ChzzkClient {
         `API 호출: categoryId=${categoryId}, limit=${limit}, clientId=${this.clientId ? '***' : 'EMPTY'}, secret=${this.clientSecret ? '***' : 'EMPTY'}`,
       );
 
-      // URL 수동 구성 (axios params 인코딩 이슈 회피) — size=20 (API 제한?)
-      const url = `/open/v1/lives?size=20&sortType=POPULAR&categoryId=Lost_Ark`;
-
       const response = await this.http.get<{
         code: number;
         message?: string;
@@ -67,8 +64,7 @@ export class ChzzkClient {
             liveCategoryValue?: string;
             channelId: string;
             channelName: string;
-            liveImageUrl?: string;
-            defaultThumbnailImageUrl?: string;
+            liveThumbnailImageUrl?: string;
             concurrentUserCount: number;
             openDate: string;
           }>;
@@ -76,7 +72,12 @@ export class ChzzkClient {
             next?: string;
           };
         };
-      }>(url, {
+      }>('/open/v1/lives', {
+        params: {
+          size: 20,
+          sortType: 'POPULAR',
+          categoryId: 'Lost_Ark',
+        },
         headers: {
           'Client-Id': this.clientId,
           'Client-Secret': this.clientSecret,
@@ -90,17 +91,17 @@ export class ChzzkClient {
         return [];
       }
 
-      // 응답 필터링: liveCategory가 Lost_Ark인 경우만 (추가 안전장치)
+      // 응답 필터링: 로스트아크만 (정확 일치로 안정성 향상)
       return response.data.content.data
-        .filter((item) => item.liveCategory === 'Lost_Ark' || item.liveCategoryValue === '로스트아크')
+        .filter((item) => item.liveCategoryValue === '로스트아크')
         .map((item) => ({
           platform: 'chzzk' as const,
           channelId: item.channelId,
           channelName: item.channelName,
           title: item.liveTitle,
           viewerCount: item.concurrentUserCount,
-          thumbnailUrl:
-            item.liveImageUrl || item.defaultThumbnailImageUrl || '',
+          thumbnailUrl: (item.liveThumbnailImageUrl || '')
+            .replace('{type}', ''),
           liveUrl: `https://chzzk.naver.com/live/${item.channelId}`,
           startedAt: new Date(item.openDate),
         }));
