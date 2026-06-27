@@ -47,8 +47,13 @@ function createService(options?: {
     findRecentVideos: jest.fn().mockResolvedValue(options?.dbVideos ?? []),
   };
 
-  const service = new StreamersService(redis as never, db as never, config);
-  return { service, redis, db };
+  const chzzk = {
+    fetchLivesByCategory: jest.fn().mockResolvedValue([]),
+    filterByViewerCount: jest.fn((items) => items),
+  };
+
+  const service = new StreamersService(redis as never, db as never, config, chzzk as never);
+  return { service, redis, db, chzzk };
 }
 
 describe('StreamersService', () => {

@@ -6,6 +6,7 @@ import Redis, { type Redis as RedisClient } from 'ioredis';
 import { isLocalQuotaApisDisabled } from '../common/local-dev-flags';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { StreamersRepository } from './streamers.repository';
+import { ChzzkClient, type ChzzkLiveItem } from './chzzk.client';
 
 const CACHE_PREFIX = 'youtube:videos:page:';
 const POPULAR_CACHE_KEY = 'youtube:popular:first';
@@ -19,6 +20,10 @@ const POPULAR_MAX_LIMIT = 50;
 const POPULAR_MAX_PAGES = 8;
 const POPULAR_WINDOW_DAYS = 7; // 인기 영상 노출 창(게시일 기준 최근 7일)
 const BLOCKED_KEY = 'youtube:blocked'; // 관리자가 숨긴 videoId Set
+
+// Chzzk 라이브
+const CHZZK_LIVE_CACHE_KEY = 'live:chzzk:current';
+const CHZZK_LIVE_CACHE_TTL = 90; // 90초 (크론 1분 + 1.5배 grace)
 
 export interface PopularResponse {
   items: YoutubeVideoItem[];
@@ -130,6 +135,7 @@ export class StreamersService implements OnModuleInit {
     @Inject(REDIS_CLIENT) private readonly redis: RedisClient,
     private readonly streamersRepo: StreamersRepository,
     private readonly config: ConfigService,
+    private readonly chzzk: ChzzkClient,
   ) {
     const keys: string[] = [];
     const first = config.get<string>('YOUTUBE_API_KEY', '');
@@ -650,6 +656,49 @@ export class StreamersService implements OnModuleInit {
       }));
 
     return { items, nextPageToken };
+  }
+
+  /** Chzzk 라이브 조회 및 캐시 저장 */
+  private async updateChzzkLives(): Promise<void> {
+    try {
+      const lives = await this.chzzk.fetchLivesByCategory('lostarkvtj', 50);
+      if (lives.length === 0) {
+        this.logger.warn('Chzzk 라이브 목록 0개');
+        return;
+      }
+      const serialized = JSON.stringify(lives);
+      await this.redis.setex(
+        CHZZK_LIVE_CACHE_KEY,
+        CHZZK_LIVE_CACHE_TTL,
+        serialized,
+      );
+      this.logger.log(`Chzzk 라이브 캐시 저장: ${lives.length}개`);
+    } catch (error: unknown) {
+      this.logger.error(
+        `Chzzk 라이브 갱신 실패: ${toErrorMessage(error)}`,
+      );
+    }
+  }
+
+  /** Chzzk 라이브 캐시 조회 */
+  async getChzzkLives(minViewers = 0): Promise<ChzzkLiveItem[]> {
+    try {
+      const cached = await this.redis.get(CHZZK_LIVE_CACHE_KEY);
+      if (!cached) return [];
+      const lives: ChzzkLiveItem[] = JSON.parse(cached);
+      return this.chzzk.filterByViewerCount(lives, minViewers);
+    } catch (error: unknown) {
+      this.logger.debug(`Chzzk 캐시 조회 실패: ${toErrorMessage(error)}`);
+      return [];
+    }
+  }
+
+  /** 1분마다 Chzzk 라이브 갱신 (워커0만) */
+  @Cron('0 */1 * * * *')
+  async refreshChzzkLives(): Promise<void> {
+    const inst = process.env.NODE_APP_INSTANCE;
+    if (inst !== undefined && inst !== '0') return;
+    await this.updateChzzkLives();
   }
 }
 

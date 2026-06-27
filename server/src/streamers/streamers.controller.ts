@@ -45,4 +45,17 @@ export class StreamersController {
     const days = Number.parseInt(daysRaw ?? '30', 10);
     return this.streamersService.getViewHistory(Number.isNaN(days) ? 30 : days);
   }
+
+  /**
+   * GET /api/streamers/live?platform=chzzk&minViewers=100
+   * 실시간 라이브 스트리머 (Redis 1분 캐시)
+   */
+  @Get('live')
+  @Header('Cache-Control', 'public, s-maxage=60')
+  getLivesStreamers(@Query('minViewers') minViewersRaw?: string) {
+    const minViewers = Number.parseInt(minViewersRaw ?? '0', 10);
+    return this.streamersService.getChzzkLives(
+      Number.isNaN(minViewers) ? 0 : minViewers,
+    );
+  }
 }
