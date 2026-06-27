@@ -96,38 +96,29 @@ export class ChzzkClient {
   ): Promise<ChzzkLiveItem[]> {
     try {
       const allLives: ChzzkLiveRawItem[] = [];
-      let nextPageUrl: string | undefined;
+      let nextToken: string | undefined;
       let pageCount = 0;
+      const pageSize = Math.min(this.livePageSize, 20); // API 최대값 20
 
       // K 예산만큼 페이지 스캔
       for (let i = 0; i < this.kBudget; i++) {
         let response: any;
 
-        if (nextPageUrl) {
-          // page.next URL 사용 (전체 URL이므로 직접 호출)
-          response = await this.http.get<ChzzkLiveResponse>(nextPageUrl, {
+        // 모든 페이지: next 토큰을 쿼리 파라미터로 전달
+        response = await this.http.get<ChzzkLiveResponse>(
+          '/open/v1/lives',
+          {
+            params: {
+              size: pageSize,
+              sortType: 'POPULAR',
+              ...(nextToken ? { next: nextToken } : {}),
+            },
             headers: {
               'Client-Id': this.clientId,
               'Client-Secret': this.clientSecret,
             },
-          });
-        } else {
-          // 첫 페이지: categoryId 파라미터 사용
-          response = await this.http.get<ChzzkLiveResponse>(
-            '/open/v1/lives',
-            {
-              params: {
-                size: this.livePageSize,
-                sortType: 'POPULAR',
-                categoryId: 'Lost_Ark',
-              },
-              headers: {
-                'Client-Id': this.clientId,
-                'Client-Secret': this.clientSecret,
-              },
-            },
-          );
-        }
+          },
+        );
 
         if (response.data.code !== 200 || !response.data.content?.data) {
           this.logger.warn(
@@ -136,15 +127,25 @@ export class ChzzkClient {
           break;
         }
 
-        allLives.push(...response.data.content.data);
+        const pageData = response.data.content.data;
+        allLives.push(...pageData);
         pageCount++;
-        nextPageUrl = response.data.content.page?.next;
 
         this.logger.debug(
-          `Chzzk API 페이지 ${pageCount}: ${response.data.content.data.length}개 추가 (합계 ${allLives.length}개)`,
+          `Chzzk API 페이지 ${pageCount}: ${pageData.length}개 추가 (합계 ${allLives.length}개)`,
         );
 
-        if (!nextPageUrl) break;
+        // 조기종료: 마지막 아이템 시청자 < 10 (인기순이라 이후 로아는 극소)
+        const lastItem = pageData[pageData.length - 1];
+        if (lastItem?.concurrentUserCount < 10) {
+          this.logger.debug(
+            `조기종료: 시청자 ${lastItem.concurrentUserCount} < 10 (페이지 ${pageCount})`,
+          );
+          break;
+        }
+
+        nextToken = response.data.content.page?.next;
+        if (!nextToken) break;
       }
 
       // 응답 필터링: 로스트아크만 (정확 일치로 안정성 향상)
