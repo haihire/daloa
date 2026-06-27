@@ -40,6 +40,7 @@ export interface ChzzkLiveItem {
   title: string;
   viewerCount: number;
   thumbnailUrl: string;
+  channelImageUrl?: string;
   liveUrl: string;
   startedAt: string;
 }

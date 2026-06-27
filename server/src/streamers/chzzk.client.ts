@@ -9,6 +9,7 @@ export interface ChzzkLiveItem {
   title: string;
   viewerCount: number;
   thumbnailUrl: string;
+  channelImageUrl?: string;
   liveUrl: string;
   startedAt: Date;
 }
@@ -94,16 +95,20 @@ export class ChzzkClient {
       // 응답 필터링: 로스트아크만 (정확 일치로 안정성 향상)
       return response.data.content.data
         .filter((item) => item.liveCategoryValue === '로스트아크')
-        .map((item) => ({
-          platform: 'chzzk' as const,
-          channelId: item.channelId,
-          channelName: item.channelName,
-          title: item.liveTitle,
-          viewerCount: item.concurrentUserCount,
-          thumbnailUrl: item.channelImageUrl || '',
-          liveUrl: `https://chzzk.naver.com/live/${item.channelId}`,
-          startedAt: new Date(item.openDate),
-        }));
+        .map((item) => {
+          const raw = item.liveThumbnailImageUrl || '';
+          return {
+            platform: 'chzzk' as const,
+            channelId: item.channelId,
+            channelName: item.channelName,
+            title: item.liveTitle,
+            viewerCount: item.concurrentUserCount,
+            thumbnailUrl: raw && raw.length > 0 ? raw.replace('{type}', '480') : '',
+            channelImageUrl: item.channelImageUrl,
+            liveUrl: `https://chzzk.naver.com/live/${item.channelId}`,
+            startedAt: new Date(item.openDate),
+          };
+        });
     } catch (error: unknown) {
       this.logger.error(
         `Chzzk API 호출 실패: ${error instanceof Error ? error.message : String(error)}`,

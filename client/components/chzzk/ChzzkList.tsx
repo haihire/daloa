@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import Image from "next/image";
 import type { ChzzkLiveItem } from "@/types";
 import { event as gaEvent } from "@/lib/gtag";
@@ -16,6 +17,14 @@ export default function ChzzkList({
 }: {
   initialItems?: ChzzkLiveItem[];
 }) {
+  const [failedImages, setFailedImages] = React.useState<Set<string>>(
+    new Set(),
+  );
+
+  const handleImageError = (channelId: string) => {
+    setFailedImages((prev) => new Set([...prev, channelId]));
+  };
+
   const handleClick = (item: ChzzkLiveItem) => {
     gaEvent({
       action: "click_chzzk_live",
@@ -46,9 +55,18 @@ export default function ChzzkList({
               aria-label={`${item.title} - ${item.channelName}`}
             >
               <div className="relative h-[190px] w-[270px] overflow-hidden rounded-t-lg bg-gradient-to-br from-purple-600 to-pink-600 dark:from-purple-700 dark:to-pink-700 flex items-center justify-center">
-                {item.thumbnailUrl ? (
+                {!failedImages.has(item.channelId) && item.thumbnailUrl ? (
                   <Image
                     src={item.thumbnailUrl}
+                    alt={item.channelName}
+                    fill
+                    className="object-cover"
+                    unoptimized
+                    onError={() => handleImageError(item.channelId)}
+                  />
+                ) : item.channelImageUrl ? (
+                  <Image
+                    src={item.channelImageUrl}
                     alt={item.channelName}
                     fill
                     className="object-cover"
