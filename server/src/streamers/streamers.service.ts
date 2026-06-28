@@ -730,6 +730,14 @@ export class StreamersService implements OnModuleInit {
   /** YouTube 라이브 조회 및 캐시 저장 */
   private async updateYoutubeLives(): Promise<void> {
     try {
+      // 로컬 쿼터 보호 (형제 메서드와 일관성)
+      if (this.quotaApisDisabled) {
+        this.logger.debug(
+          'YouTube 라이브: LOCAL_DISABLE_QUOTA_APIS=true → 스킵',
+        );
+        return;
+      }
+
       // 쿼터 체크
       const quotaExceeded = await this.redis.get(QUOTA_KEY);
       if (quotaExceeded) {
@@ -738,7 +746,7 @@ export class StreamersService implements OnModuleInit {
       }
 
       // 1. search.list: 로스트아크 라이브 검색
-      const searchRes = await this.youtubeClient.search.list({
+      const searchRes = await this.youtube.search.list({
         part: ['snippet'],
         q: '로스트아크',
         type: ['video'],
@@ -760,7 +768,7 @@ export class StreamersService implements OnModuleInit {
       }
 
       // 2. videos.list: 상세정보(시청자수, 시작시간)
-      const videosRes = await this.youtubeClient.videos.list({
+      const videosRes = await this.youtube.videos.list({
         part: ['snippet', 'liveStreamingDetails'],
         id: videoIds,
       });
