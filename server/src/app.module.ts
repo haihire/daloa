@@ -3,13 +3,11 @@ import { SentryModule } from '@sentry/nestjs/setup';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { LostarkModule } from './lostark/lostark.module';
-import { CharactersModule } from './characters/characters.module';
 import { SitesModule } from './sites/sites.module';
 import { RedisModule } from './redis/redis.module';
 import { KakaoModule } from './kakao/kakao.module';
 import { StreamersModule } from './streamers/streamers.module';
 import { UsersModule } from './users/users.module';
-import { ClassSummaryModule } from './class-summary/class-summary.module';
 import { AdminModule } from './admin/admin.module';
 import { RevalidateService } from './revalidate/revalidate.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -25,13 +23,11 @@ const runScheduler =
     ConfigModule.forRoot({ isGlobal: true }),
     ...(runScheduler ? [ScheduleModule.forRoot()] : []),
     LostarkModule,
-    CharactersModule,
     SitesModule,
     RedisModule,
     KakaoModule,
     StreamersModule,
     UsersModule,
-    ClassSummaryModule,
     AdminModule,
     PrismaModule,
   ],

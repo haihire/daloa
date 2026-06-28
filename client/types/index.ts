@@ -3,6 +3,7 @@ export interface Site {
   href: string;
   category: string;
   description: string;
+  clickCount?: number;
 }
 
 export interface YoutubeVideo {

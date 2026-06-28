@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
 
 export interface ChzzkLiveItem {
-  platform: 'chzzk';
+  platform: 'chzzk' | 'youtube';
   channelName: string;
   channelId: string;
   title: string;

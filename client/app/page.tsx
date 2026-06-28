@@ -1,10 +1,8 @@
 import { Suspense } from "react";
 import { after } from "next/server";
-import StatBuildList from "@/components/characters/StatBuildList";
-import ClassSummaryList from "@/components/class-summary/ClassSummaryList";
 import SiteList from "@/components/sites/SiteList";
 import StreamSection from "@/components/stream/StreamSection";
-import type { ClassSummary, Site, StatBuildTab } from "@/types";
+import type { Site } from "@/types";
 import type { Metadata } from "next";
 
 // 홈 전용 canonical (루트 레이아웃에 두면 하위 페이지가 상속받아 색인 병합 문제 → 페이지별 지정)
@@ -55,25 +53,13 @@ async function timedFetch<T>(label: string, url: string, revalidate: number) {
 }
 
 export default async function Home() {
-  const [sitesRes, statRes, summaryRes] = await Promise.all([
+  const [sitesRes] = await Promise.all([
     timedFetch<Site[]>("sites", `${API}/api/sites`, 3600),
-    timedFetch<StatBuildTab[]>(
-      "stat-builds",
-      `${API}/api/characters/stat-builds`,
-      300,
-    ),
-    timedFetch<ClassSummary[]>(
-      "class-summary",
-      `${API}/api/class-summary`,
-      3600,
-    ),
   ]);
 
-  // 응답 종료 후 섹션별 서버 타이밍을 비동기로 기록(렌더/캐싱에 영향 없음).
-  // 정적 ISR이므로 재검증 렌더 시점(5분당 1회)에만 실행된다.
   after(async () => {
     await Promise.all(
-      [sitesRes, statRes, summaryRes].map((res) =>
+      [sitesRes].map((res) =>
         recordServerTiming({
           name: res.name,
           path: res.path,
@@ -84,13 +70,11 @@ export default async function Home() {
   });
 
   const sites = sitesRes.data;
-  const statBuilds = statRes.data;
-  const summaries = Array.isArray(summaryRes.data) ? summaryRes.data : [];
 
   return (
     <div className="flex min-h-screen flex-col">
       <div className="flex-1 py-3">
-        <div className="grid grid-cols-1 gap-4 pl-4 pr-7 sm:px-4 xl:grid-cols-[160px_minmax(0,1fr)_160px]">
+        <div className="grid grid-cols-1 gap-4 px-1 sm:px-2 md:px-3 xl:grid-cols-[1fr_minmax(0,1100px)_1fr] xl:px-0">
           <div className="hidden xl:block" aria-hidden="true" />
 
           <main className="flex flex-col gap-2">
@@ -101,15 +85,7 @@ export default async function Home() {
             </header>
 
             <section className="flex flex-col gap-4">
-              <div className="grid gap-4 sm:grid-cols-[320px_minmax(0,1fr)]">
-                <div className="hidden h-full flex-col gap-4 sm:flex">
-                  <StatBuildList tabs={statBuilds} />
-                  <ClassSummaryList summaries={summaries} />
-                </div>
-                <div>
-                  <SiteList sites={sites} />
-                </div>
-              </div>
+              <SiteList sites={sites} />
             </section>
 
             <Suspense
@@ -132,10 +108,7 @@ export default async function Home() {
               </div>
             </Suspense>
 
-            <div className="flex flex-col gap-4 sm:hidden">
-              <StatBuildList tabs={statBuilds} />
-              <ClassSummaryList summaries={summaries} />
-            </div>
+
           </main>
 
           <div className="hidden xl:block" aria-hidden="true" />
