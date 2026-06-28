@@ -64,9 +64,8 @@ export default function StreamList({
   };
 
   const handleClick = (item: ChzzkLiveItem) => {
-    gaEvent({
-      action: "click_chzzk_live",
-      category: "engagement",
+    gaEvent("click_live", {
+      platform,
       label: item.channelName,
       value: item.viewerCount,
     });
