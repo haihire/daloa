@@ -114,7 +114,7 @@ export default async function Home() {
 
             <Suspense
               fallback={
-                <div className="animate-pulse space-y-2 pt-2">
+                <div className="animate-pulse space-y-2 pt-2 mt-4">
                   <div className="h-5 w-36 rounded bg-slate-200 dark:bg-slate-700" />
                   <div className="flex gap-2 overflow-hidden">
                     {[0, 1, 2, 3, 4, 5, 6].map((i) => (
@@ -127,7 +127,9 @@ export default async function Home() {
                 </div>
               }
             >
-              <ChzzkSection />
+              <div className="mt-4">
+                <ChzzkSection />
+              </div>
             </Suspense>
 
             <div className="flex flex-col gap-4 sm:hidden">
