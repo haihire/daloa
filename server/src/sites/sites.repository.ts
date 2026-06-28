@@ -7,6 +7,7 @@ export interface SiteRecord {
   href: string;
   category: string | null;
   description: string | null;
+  clickCount: number;
 }
 
 export interface AdminSiteRecord extends SiteRecord {
@@ -45,20 +46,32 @@ export class SitesRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findActive(): Promise<SiteRecord[]> {
-    const rows = await this.prisma.loa_sites.findMany({
-      where: { is_active: true },
-      orderBy: { seq: 'asc' },
-      select: {
-        seq: true,
-        name: true,
-        href: true,
-        category: true,
-        description: true,
-      },
-    });
+    // 각 사이트의 클릭수(apm_site_clicks)를 href 기준으로 LEFT JOIN해 인기 순위 산출에 사용
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        seq: bigint;
+        name: string;
+        href: string;
+        category: string | null;
+        description: string | null;
+        click_count: bigint;
+      }>
+    >`
+      SELECT s.seq, s.name, s.href, s.category, s.description,
+             COUNT(c.id) AS click_count
+      FROM loa_sites s
+      LEFT JOIN apm_site_clicks c ON c.site_href = s.href
+      WHERE s.is_active = true
+      GROUP BY s.seq, s.name, s.href, s.category, s.description
+      ORDER BY s.seq ASC
+    `;
     return rows.map((row) => ({
-      ...row,
       seq: Number(row.seq),
+      name: row.name,
+      href: row.href,
+      category: row.category,
+      description: row.description,
+      clickCount: Number(row.click_count),
     }));
   }
 
@@ -93,6 +106,7 @@ export class SitesRepository {
       icon: row.icon,
       is_active: row.is_active ? 1 : 0,
       click_count: Number(row.click_count),
+      clickCount: Number(row.click_count),
     }));
   }
 
