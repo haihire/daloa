@@ -74,49 +74,54 @@ export default function StreamList({
     window.open(item.liveUrl, "_blank");
   };
 
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-          🎮 라이브
-        </h2>
-        <div className="flex items-center gap-1">
-          <div className="flex bg-slate-200 dark:bg-slate-700 rounded p-0.5">
-            <button
-              onClick={() => handlePlatformChange('chzzk')}
-              disabled={isRefreshing}
-              className={`text-xs px-2 py-1 rounded transition-colors ${
-                platform === 'chzzk'
-                  ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white font-semibold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              } disabled:opacity-50`}
-              aria-label="치지직 라이브"
-            >
-              치지직
-            </button>
-            <button
-              onClick={() => handlePlatformChange('youtube')}
-              disabled={isRefreshing}
-              className={`text-xs px-2 py-1 rounded transition-colors ${
-                platform === 'youtube'
-                  ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white font-semibold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              } disabled:opacity-50`}
-              aria-label="유튜브 라이브"
-            >
-              유튜브
-            </button>
-          </div>
+  // 토글 버튼 섹션을 메모이제이션 (displayItems 변경 시 재렌더링 방지)
+  const controlsBar = React.useMemo(() => (
+    <div className="flex items-center justify-between gap-2">
+      <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+        🎮 라이브
+      </h2>
+      <div className="flex items-center gap-1">
+        <div className="flex bg-slate-200 dark:bg-slate-700 rounded p-0.5">
           <button
-            onClick={handleRefresh}
+            onClick={() => handlePlatformChange('chzzk')}
             disabled={isRefreshing}
-            className="text-xs px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 transition-colors"
-            aria-label="새로고침"
+            className={`text-xs px-2 py-1 rounded transition-colors ${
+              platform === 'chzzk'
+                ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white font-semibold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            } disabled:opacity-50`}
+            aria-label="치지직 라이브"
           >
-            {isRefreshing ? '중...' : '새로고침'}
+            치지직
+          </button>
+          <button
+            onClick={() => handlePlatformChange('youtube')}
+            disabled={isRefreshing}
+            className={`text-xs px-2 py-1 rounded transition-colors ${
+              platform === 'youtube'
+                ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white font-semibold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            } disabled:opacity-50`}
+            aria-label="유튜브 라이브"
+          >
+            유튜브
           </button>
         </div>
+        <button
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className="text-xs px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 transition-colors"
+          aria-label="새로고침"
+        >
+          {isRefreshing ? '중...' : '새로고침'}
+        </button>
       </div>
+    </div>
+  ), [platform, isRefreshing, handlePlatformChange, handleRefresh]);
+
+  return (
+    <div className="flex flex-col gap-2">
+      {controlsBar}
 
       {displayItems.length === 0 ? (
         <div className="flex items-center justify-center rounded-lg border border-slate-200 bg-slate-50 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
@@ -158,11 +163,6 @@ export default function StreamList({
                   <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
                   라이브
                 </div>
-
-                {/* Viewer Count */}
-                <div className="absolute bottom-1 right-1 bg-black/70 text-white px-1.5 py-0.5 rounded text-[10px] font-medium">
-                  {formatViewCount(item.viewerCount)}명
-                </div>
               </div>
 
               <div className="flex flex-col gap-0.5 p-2">
@@ -172,6 +172,11 @@ export default function StreamList({
                 <p className="text-left text-xs text-slate-600 dark:text-slate-400">
                   {item.channelName}
                 </p>
+                <div className="flex justify-end pt-1">
+                  <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                    {formatViewCount(item.viewerCount)}명
+                  </span>
+                </div>
               </div>
             </button>
           ))}
