@@ -856,11 +856,20 @@ export class StreamersService implements OnModuleInit {
     }
   }
 
-  /** 10분마다 YouTube 라이브 갱신 (워커0만) */
-  @Cron('0 */10 * * * *')
+  /** 10분마다 YouTube 라이브 갱신 (워커0만, 로컬: 2시간마다) */
+  @Cron('0 */10 * * * *') // 운영: 10분 / 로컬: 2시간 (02:xx, 04:xx 등)
   async refreshYoutubeLives(): Promise<void> {
     const inst = process.env.NODE_APP_INSTANCE;
     if (inst !== undefined && inst !== '0') return;
+
+    // 로컬 환경: 2시간마다만 실행 (매 2시간 정각: 00:xx, 02:xx, 04:xx, ...)
+    if (process.env.NODE_ENV === 'development') {
+      const now = new Date();
+      if (now.getMinutes() !== 0 || now.getHours() % 2 !== 0) {
+        return;
+      }
+    }
+
     await this.updateYoutubeLives();
   }
 }
