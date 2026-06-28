@@ -46,6 +46,8 @@ export default function StreamList({
   };
 
   const handlePlatformChange = async (newPlatform: LivePlatform) => {
+    if (newPlatform === platform) return; // 이미 선택된 플랫폼 중복 클릭 방지
+
     setPlatform(newPlatform);
     setIsRefreshing(true);
     try {
