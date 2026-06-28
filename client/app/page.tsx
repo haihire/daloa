@@ -69,7 +69,8 @@ export default async function Home() {
     );
   });
 
-  const sites = sitesRes.data;
+  // prerender 안전장치: API가 배열이 아닌 값을 줘도 깨지지 않도록 방어
+  const sites = Array.isArray(sitesRes.data) ? sitesRes.data : [];
 
   return (
     <div className="flex min-h-screen flex-col">

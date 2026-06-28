@@ -29,11 +29,11 @@ export default function StreamList({
   const [refreshSpin, setRefreshSpin] = React.useState(false);
   const [platform, setPlatform] = React.useState<LivePlatform>('chzzk');
   const [displayItems, setDisplayItems] = React.useState<ChzzkLiveItem[]>(
-    initialItems,
+    Array.isArray(initialItems) ? initialItems : [],
   );
 
   React.useEffect(() => {
-    setDisplayItems(initialItems);
+    setDisplayItems(Array.isArray(initialItems) ? initialItems : []);
     setLoadedImages(new Set());
   }, [initialItems]);
 

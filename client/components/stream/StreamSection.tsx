@@ -11,5 +11,8 @@ export default async function StreamSection() {
     .then<ChzzkLiveItem[]>((r) => r.json())
     .catch(() => [] as ChzzkLiveItem[]);
 
-  return <StreamList initialItems={data} />;
+  // prerender 안전장치: API가 배열이 아닌 값(404 JSON 등)을 줘도 깨지지 않도록 방어
+  const items = Array.isArray(data) ? data : [];
+
+  return <StreamList initialItems={items} />;
 }
