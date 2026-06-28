@@ -12,7 +12,9 @@ function formatViewCount(n: number): string {
   return String(n);
 }
 
-export default function ChzzkList({
+export default export type LivePlatform = 'chzzk' | 'youtube';
+
+function ChzzkList({
   initialItems = [],
 }: {
   initialItems?: ChzzkLiveItem[];
@@ -21,6 +23,7 @@ export default function ChzzkList({
     new Set(),
   );
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [platform, setPlatform] = React.useState<LivePlatform>('chzzk');
   const [displayItems, setDisplayItems] = React.useState<ChzzkLiveItem[]>(
     initialItems,
   );
@@ -32,11 +35,25 @@ export default function ChzzkList({
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      const res = await fetch('/api/streamers/live?minViewers=0');
+      const res = await fetch(`/api/streamers/live?platform=${platform}&minViewers=0`);
       const data = (await res.json()) as ChzzkLiveItem[];
       setDisplayItems(data);
     } catch (error) {
       console.error('새로고침 실패:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handlePlatformChange = async (newPlatform: LivePlatform) => {
+    setPlatform(newPlatform);
+    setIsRefreshing(true);
+    try {
+      const res = await fetch(`/api/streamers/live?platform=${newPlatform}&minViewers=0`);
+      const data = (await res.json()) as ChzzkLiveItem[];
+      setDisplayItems(data);
+    } catch (error) {
+      console.error('플랫폼 전환 실패:', error);
     } finally {
       setIsRefreshing(false);
     }
@@ -58,18 +75,46 @@ export default function ChzzkList({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-          🎮 Chzzk 라이브
+          🎮 라이브
         </h2>
-        <button
-          onClick={handleRefresh}
-          disabled={isRefreshing}
-          className="text-xs px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 transition-colors"
-          aria-label="새로고침"
-        >
-          {isRefreshing ? '새로고침 중...' : '새로고침'}
-        </button>
+        <div className="flex items-center gap-1">
+          <div className="flex bg-slate-200 dark:bg-slate-700 rounded p-0.5">
+            <button
+              onClick={() => handlePlatformChange('chzzk')}
+              disabled={isRefreshing}
+              className={`text-xs px-2 py-1 rounded transition-colors ${
+                platform === 'chzzk'
+                  ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white font-semibold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              } disabled:opacity-50`}
+              aria-label="치지직 라이브"
+            >
+              치지직
+            </button>
+            <button
+              onClick={() => handlePlatformChange('youtube')}
+              disabled={isRefreshing}
+              className={`text-xs px-2 py-1 rounded transition-colors ${
+                platform === 'youtube'
+                  ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white font-semibold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              } disabled:opacity-50`}
+              aria-label="유튜브 라이브"
+            >
+              유튜브
+            </button>
+          </div>
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="text-xs px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 transition-colors"
+            aria-label="새로고침"
+          >
+            {isRefreshing ? '중...' : '새로고침'}
+          </button>
+        </div>
       </div>
 
       {displayItems.length === 0 ? (

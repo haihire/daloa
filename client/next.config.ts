@@ -22,6 +22,10 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "nng-phinf.pstatic.net",
       },
+      {
+        protocol: "https",
+        hostname: "i.ytimg.com",
+      },
     ],
   },
   rewrites: async () => ({
