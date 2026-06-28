@@ -14,7 +14,7 @@ function formatViewCount(n: number): string {
 
 export type LivePlatform = 'chzzk' | 'youtube';
 
-export default function ChzzkList({
+export default function StreamList({
   initialItems = [],
 }: {
   initialItems?: ChzzkLiveItem[];

@@ -3,7 +3,7 @@ import { after } from "next/server";
 import StatBuildList from "@/components/characters/StatBuildList";
 import ClassSummaryList from "@/components/class-summary/ClassSummaryList";
 import SiteList from "@/components/sites/SiteList";
-import ChzzkSection from "@/components/chzzk/ChzzkSection";
+import StreamSection from "@/components/stream/StreamSection";
 import type { ClassSummary, Site, StatBuildTab } from "@/types";
 import type { Metadata } from "next";
 
@@ -128,7 +128,7 @@ export default async function Home() {
               }
             >
               <div className="mt-4">
-                <ChzzkSection />
+                <StreamSection />
               </div>
             </Suspense>
 
