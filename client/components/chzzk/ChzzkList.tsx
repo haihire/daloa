@@ -12,9 +12,9 @@ function formatViewCount(n: number): string {
   return String(n);
 }
 
-export default export type LivePlatform = 'chzzk' | 'youtube';
+export type LivePlatform = 'chzzk' | 'youtube';
 
-function ChzzkList({
+export default function ChzzkList({
   initialItems = [],
 }: {
   initialItems?: ChzzkLiveItem[];
