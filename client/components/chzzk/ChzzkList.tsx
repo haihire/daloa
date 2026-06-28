@@ -77,12 +77,12 @@ export default function ChzzkList({
           현재 로스트아크 라이브가 없습니다
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+        <div className="flex gap-2 overflow-x-auto pb-2">
           {displayItems.map((item) => (
             <button
               key={item.channelId}
               onClick={() => handleClick(item)}
-              className="group h-full flex flex-col rounded-lg border border-slate-200 bg-white transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
+              className="group shrink-0 w-[180px] flex flex-col rounded-lg border border-slate-200 bg-white transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
               aria-label={`${item.title} - ${item.channelName}`}
             >
               <div className="relative aspect-video w-full overflow-hidden rounded-t-lg bg-gradient-to-br from-purple-600 to-pink-600 dark:from-purple-700 dark:to-pink-700 flex items-center justify-center">
@@ -108,19 +108,19 @@ export default function ChzzkList({
                 )}
 
                 {/* Live Badge */}
-                <div className="absolute top-2 left-2 bg-red-600 text-white px-2 py-1 rounded text-xs font-semibold flex items-center gap-1">
-                  <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                <div className="absolute top-1 left-1 bg-red-600 text-white px-1.5 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
                   라이브
                 </div>
 
                 {/* Viewer Count */}
-                <div className="absolute bottom-2 right-2 bg-black/70 text-white px-2 py-1 rounded text-xs font-medium">
+                <div className="absolute bottom-1 right-1 bg-black/70 text-white px-1.5 py-0.5 rounded text-[10px] font-medium">
                   {formatViewCount(item.viewerCount)}명
                 </div>
               </div>
 
-              <div className="flex flex-col gap-1 p-3">
-                <h3 className="line-clamp-2 min-h-[2.5rem] text-left text-sm font-semibold text-slate-900 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400">
+              <div className="flex flex-col gap-0.5 p-2">
+                <h3 className="line-clamp-1 text-left text-xs font-semibold text-slate-900 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400">
                   {item.title}
                 </h3>
                 <p className="text-left text-xs text-slate-600 dark:text-slate-400">
