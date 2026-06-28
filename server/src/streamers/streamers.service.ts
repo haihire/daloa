@@ -6,6 +6,7 @@ import Redis, { type Redis as RedisClient } from 'ioredis';
 import { isLocalQuotaApisDisabled } from '../common/local-dev-flags';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { StreamersRepository } from './streamers.repository';
+import { ChzzkClient, type ChzzkLiveItem } from './chzzk.client';
 
 const CACHE_PREFIX = 'youtube:videos:page:';
 const POPULAR_CACHE_KEY = 'youtube:popular:first';
@@ -19,6 +20,15 @@ const POPULAR_MAX_LIMIT = 50;
 const POPULAR_MAX_PAGES = 8;
 const POPULAR_WINDOW_DAYS = 7; // 인기 영상 노출 창(게시일 기준 최근 7일)
 const BLOCKED_KEY = 'youtube:blocked'; // 관리자가 숨긴 videoId Set
+
+// Chzzk 라이브
+const CHZZK_LIVE_CACHE_KEY = 'live:chzzk:current';
+const CHZZK_LIVE_CACHE_TTL = 90; // 90초 (크론 1분 + 1.5배 grace)
+
+// YouTube 라이브
+const YOUTUBE_LIVE_CACHE_KEY = 'live:youtube:current';
+const YOUTUBE_LIVE_CACHE_TTL = 720; // 12분 (크론 10분 + 여유)
+// 참고: 라이브 폴링당 쿼터 ≈ search.list(100) + videos.list(1) = 101 units
 
 export interface PopularResponse {
   items: YoutubeVideoItem[];
@@ -130,6 +140,7 @@ export class StreamersService implements OnModuleInit {
     @Inject(REDIS_CLIENT) private readonly redis: RedisClient,
     private readonly streamersRepo: StreamersRepository,
     private readonly config: ConfigService,
+    private readonly chzzk: ChzzkClient,
   ) {
     const keys: string[] = [];
     const first = config.get<string>('YOUTUBE_API_KEY', '');
@@ -650,6 +661,209 @@ export class StreamersService implements OnModuleInit {
       }));
 
     return { items, nextPageToken };
+  }
+
+  /** Chzzk 라이브 조회 및 캐시 저장 */
+  private async updateChzzkLives(): Promise<void> {
+    try {
+      const lives = await this.chzzk.fetchLivesByCategory();
+      if (lives.length === 0) {
+        this.logger.warn(`Chzzk 라이브 갱신: 로아 라이브 0개 (캐시 미갱신)`);
+        return;
+      }
+      const serialized = JSON.stringify(lives);
+      await this.redis.setex(
+        CHZZK_LIVE_CACHE_KEY,
+        CHZZK_LIVE_CACHE_TTL,
+        serialized,
+      );
+      this.logger.log(
+        `Chzzk 라이브 캐시 저장: ${lives.length}개 (TTL ${CHZZK_LIVE_CACHE_TTL}초)`,
+      );
+    } catch (error: unknown) {
+      this.logger.error(`Chzzk 라이브 갱신 실패: ${toErrorMessage(error)}`);
+    }
+  }
+
+  /** Chzzk 라이브 조회 (캐시 우선, 없으면 직접 API 호출) */
+  async getChzzkLives(minViewers = 0): Promise<ChzzkLiveItem[]> {
+    try {
+      // 1. 캐시 확인
+      const cached = await this.redis.get(CHZZK_LIVE_CACHE_KEY);
+      if (cached) {
+        const lives = JSON.parse(cached) as ChzzkLiveItem[];
+        const filtered = this.chzzk.filterByViewerCount(lives, minViewers);
+        this.logger.debug(
+          `Chzzk 캐시 hit: ${lives.length}개 → 필터링 후 ${filtered.length}개 (최소시청자 ${minViewers})`,
+        );
+        return filtered;
+      }
+
+      // 2. 캐시 없으면 직접 API 호출
+      this.logger.debug('Chzzk 캐시 미스 → 직접 API 호출');
+      const lives = await this.chzzk.fetchLivesByCategory();
+      const filtered = this.chzzk.filterByViewerCount(lives, minViewers);
+      this.logger.debug(
+        `Chzzk 직접 호출: ${lives.length}개 → 필터링 후 ${filtered.length}개`,
+      );
+      return filtered;
+    } catch (error: unknown) {
+      this.logger.debug(`Chzzk 조회 실패: ${toErrorMessage(error)}`);
+      return [];
+    }
+  }
+
+  /** 1분마다 Chzzk 라이브 갱신 (워커0만) */
+  @Cron('0 */1 * * * *')
+  async refreshChzzkLives(): Promise<void> {
+    const inst = process.env.NODE_APP_INSTANCE;
+    if (inst !== undefined && inst !== '0') return;
+    await this.updateChzzkLives();
+  }
+
+  /** YouTube 라이브 조회 및 캐시 저장 */
+  private async updateYoutubeLives(): Promise<void> {
+    try {
+      // 쿼터 체크
+      const quotaExceeded = await this.redis.get(QUOTA_KEY);
+      if (quotaExceeded) {
+        this.logger.warn('YouTube 라이브: 쿼터 초과 → 직전 캐시 유지');
+        return;
+      }
+
+      // 1. search.list: 로스트아크 라이브 검색
+      const searchRes = await this.youtube.search.list({
+        part: ['snippet'],
+        q: '로스트아크',
+        type: ['video'],
+        eventType: 'live',
+        order: 'viewCount',
+        maxResults: 20,
+      });
+
+      const videoIds: string[] = [];
+      for (const item of searchRes.data.items || []) {
+        if (item.id?.videoId) {
+          videoIds.push(item.id.videoId);
+        }
+      }
+
+      if (videoIds.length === 0) {
+        this.logger.debug('YouTube 라이브: 검색 결과 0개');
+        return;
+      }
+
+      // 2. videos.list: 상세정보(시청자수, 시작시간)
+      const videosRes = await this.youtube.videos.list({
+        part: ['snippet', 'liveStreamingDetails'],
+        id: videoIds,
+      });
+
+      // 3. LiveEntry 매핑
+      const lives: ChzzkLiveItem[] = [];
+      for (const video of videosRes.data.items || []) {
+        if (!video.snippet || !video.liveStreamingDetails || !video.id)
+          continue;
+
+        const concurrentViewers = Number(
+          video.liveStreamingDetails.concurrentViewers ?? 0,
+        );
+        if (concurrentViewers < 0) continue; // 라이브 종료 케이스
+
+        lives.push({
+          platform: 'youtube',
+          channelName: video.snippet.channelTitle || '',
+          channelId: video.snippet.channelId || '',
+          title: video.snippet.title || '',
+          viewerCount: concurrentViewers,
+          thumbnailUrl: video.snippet.thumbnails?.medium?.url || '',
+          liveUrl: `https://www.youtube.com/watch?v=${video.id}`,
+          startedAt: video.liveStreamingDetails.actualStartTime
+            ? new Date(video.liveStreamingDetails.actualStartTime)
+            : new Date(),
+        });
+      }
+
+      if (lives.length === 0) {
+        this.logger.debug('YouTube 라이브: 필터링 후 0개');
+        return;
+      }
+
+      const serialized = JSON.stringify(lives);
+      await this.redis.setex(
+        YOUTUBE_LIVE_CACHE_KEY,
+        YOUTUBE_LIVE_CACHE_TTL,
+        serialized,
+      );
+      this.logger.log(
+        `YouTube 라이브 캐시 저장: ${lives.length}개 (TTL ${YOUTUBE_LIVE_CACHE_TTL}초)`,
+      );
+    } catch (error: unknown) {
+      const apiError = toYoutubeApiError(error);
+      const quotaErr =
+        apiError.response?.data?.error?.errors?.[0]?.reason === 'quotaExceeded';
+
+      if (quotaErr) {
+        const ttl = secondsUntilQuotaReset();
+        await this.redis.set(QUOTA_KEY, '1', 'EX', ttl).catch(() => {});
+        this.logger.warn(`YouTube 라이브: 쿼터 초과 (${ttl}초 후 리셋)`);
+      } else {
+        this.logger.error(`YouTube 라이브 갱신 실패: ${toErrorMessage(error)}`);
+      }
+    }
+  }
+
+  /** YouTube 라이브 조회 (캐시 우선, 없으면 직접 API 호출) */
+  async getYoutubeLives(minViewers = 0): Promise<ChzzkLiveItem[]> {
+    try {
+      // 1. 캐시 확인
+      const cached = await this.redis.get(YOUTUBE_LIVE_CACHE_KEY);
+      if (cached) {
+        const lives = JSON.parse(cached) as ChzzkLiveItem[];
+        const filtered = this.chzzk.filterByViewerCount(lives, minViewers);
+        this.logger.debug(
+          `YouTube 캐시 hit: ${lives.length}개 → 필터링 후 ${filtered.length}개 (최소시청자 ${minViewers})`,
+        );
+        return filtered;
+      }
+
+      // 2. 캐시 없으면 직접 API 호출
+      this.logger.debug('YouTube 캐시 미스 → 직접 API 호출');
+      await this.updateYoutubeLives();
+
+      // 다시 캐시 확인
+      const cached2 = await this.redis.get(YOUTUBE_LIVE_CACHE_KEY);
+      if (cached2) {
+        const lives = JSON.parse(cached2) as ChzzkLiveItem[];
+        const filtered = this.chzzk.filterByViewerCount(lives, minViewers);
+        this.logger.debug(
+          `YouTube 직접 호출 후: ${lives.length}개 → 필터링 후 ${filtered.length}개`,
+        );
+        return filtered;
+      }
+
+      return [];
+    } catch (error: unknown) {
+      this.logger.debug(`YouTube 라이브 조회 실패: ${toErrorMessage(error)}`);
+      return [];
+    }
+  }
+
+  /** 10분마다 YouTube 라이브 갱신 (워커0만, 로컬: 2시간마다) */
+  @Cron('0 */10 * * * *') // 운영: 10분 / 로컬: 2시간 (02:xx, 04:xx 등)
+  async refreshYoutubeLives(): Promise<void> {
+    const inst = process.env.NODE_APP_INSTANCE;
+    if (inst !== undefined && inst !== '0') return;
+
+    // 로컬 환경: 2시간마다만 실행 (매 2시간 정각: 00:xx, 02:xx, 04:xx, ...)
+    if (process.env.NODE_ENV === 'development') {
+      const now = new Date();
+      if (now.getMinutes() !== 0 || now.getHours() % 2 !== 0) {
+        return;
+      }
+    }
+
+    await this.updateYoutubeLives();
   }
 }
 

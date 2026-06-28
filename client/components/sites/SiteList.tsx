@@ -120,6 +120,14 @@ export default function SiteList({ sites }: Props) {
     ...sites.filter((s) => !favSet.has(s.href)),
   ];
 
+  // 클릭수(인기도) 기준 순위 맵 — 클릭수가 1 이상인 사이트만 순위 부여(수치는 표시 안 함)
+  const rankMap = new Map<string, number>();
+  [...sites]
+    .sort((a, b) => (b.clickCount ?? 0) - (a.clickCount ?? 0))
+    .forEach((s, i) => {
+      if ((s.clickCount ?? 0) > 0) rankMap.set(s.href, i + 1);
+    });
+
   const detectDeviceType = (): "mobile" | "desktop" | "tablet" | "bot" | "unknown" => {
     const ua = navigator.userAgent.toLowerCase();
     if (/bot|crawler|spider|crawling/.test(ua)) return "bot";
@@ -130,12 +138,13 @@ export default function SiteList({ sites }: Props) {
   };
 
   return (
-    <section className="flex max-h-[56vh] flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-white/80 shadow-md backdrop-blur dark:border-slate-700/70 dark:bg-slate-800/80 sm:h-[590px] sm:max-h-none">
-      <div className="stagger flex-1 overflow-y-auto p-4 pr-5 sm:pr-4">
-        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    <section className="flex max-h-[58vh] flex-col rounded-2xl border border-slate-200/70 bg-white/80 shadow-md backdrop-blur dark:border-slate-700/70 dark:bg-slate-800/80 sm:h-[560px] sm:max-h-none">
+      <div className="stagger flex-1 overflow-y-auto rounded-2xl px-1 py-3 sm:px-2">
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
           {sorted.map((site) => {
             const isFav = favSet.has(site.href);
             const favicon = faviconUrl(site.href); // 사이트당 1회만 파싱
+            const rank = rankMap.get(site.href); // 클릭수 기준 순위 (없으면 미표시)
             const trackSiteClick = () => {
               const payload = {
                 type: "site-click",
@@ -215,6 +224,22 @@ export default function SiteList({ sites }: Props) {
 
                   <div className="flex items-start justify-between gap-2 pr-5">
                     <div className="flex min-w-0 items-center gap-1.5">
+                      {rank && (
+                        <span
+                          className={`flex h-4 min-w-4 shrink-0 items-center justify-center rounded px-1 text-[10px] font-bold leading-none ${
+                            rank === 1
+                              ? "bg-amber-400 text-amber-950"
+                              : rank === 2
+                                ? "bg-slate-300 text-slate-700"
+                                : rank === 3
+                                  ? "bg-orange-400 text-orange-950"
+                                  : "bg-slate-200 text-slate-500 dark:bg-slate-600 dark:text-slate-300"
+                          }`}
+                          aria-label={`인기 순위 ${rank}위`}
+                        >
+                          {rank}
+                        </span>
+                      )}
                       {favicon && (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img

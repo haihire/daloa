@@ -3,6 +3,7 @@ export interface Site {
   href: string;
   category: string;
   description: string;
+  clickCount?: number;
 }
 
 export interface YoutubeVideo {
@@ -31,4 +32,16 @@ export interface ClassSummary {
   className: string;
   summary: string;
   updatedAt: string;
+}
+
+export interface ChzzkLiveItem {
+  platform: 'chzzk';
+  channelId: string;
+  channelName: string;
+  title: string;
+  viewerCount: number;
+  thumbnailUrl: string;
+  channelImageUrl?: string;
+  liveUrl: string;
+  startedAt: string;
 }

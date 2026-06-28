@@ -45,4 +45,30 @@ export class StreamersController {
     const days = Number.parseInt(daysRaw ?? '30', 10);
     return this.streamersService.getViewHistory(Number.isNaN(days) ? 30 : days);
   }
+
+  /**
+   * GET /api/streamers/live?platform=chzzk|youtube&minViewers=100
+   * 실시간 라이브 스트리머 (Redis 캐시)
+   * - platform=chzzk (기본, TTL 90초)
+   * - platform=youtube (TTL 12분)
+   */
+  @Get('live')
+  @Header('Cache-Control', 'public, s-maxage=60')
+  getLivesStreamers(
+    @Query('platform') platform: string = 'chzzk',
+    @Query('minViewers') minViewersRaw?: string,
+  ) {
+    const minViewers = Number.parseInt(minViewersRaw ?? '0', 10);
+    const normalizedPlatform = platform === 'youtube' ? 'youtube' : 'chzzk';
+
+    if (normalizedPlatform === 'youtube') {
+      return this.streamersService.getYoutubeLives(
+        Number.isNaN(minViewers) ? 0 : minViewers,
+      );
+    }
+
+    return this.streamersService.getChzzkLives(
+      Number.isNaN(minViewers) ? 0 : minViewers,
+    );
+  }
 }
