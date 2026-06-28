@@ -95,13 +95,6 @@ model loa_class {
   loa_users       loa_users[]
 }
 
-model loa_class_summaries {
-  class_name String    @id(map: "idx_16570_primary")
-  summary    String?
-  updated_at DateTime? @db.Timestamptz(6)
-  title_hash String?
-}
-
 model loa_sites {
   seq         BigInt    @id(map: "idx_16576_primary") @default(autoincrement())
   name        String
