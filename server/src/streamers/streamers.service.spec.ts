@@ -49,10 +49,15 @@ function createService(options?: {
 
   const chzzk = {
     fetchLivesByCategory: jest.fn().mockResolvedValue([]),
-    filterByViewerCount: jest.fn((items) => items),
+    filterByViewerCount: jest.fn((items: unknown[]) => items),
   };
 
-  const service = new StreamersService(redis as never, db as never, config, chzzk as never);
+  const service = new StreamersService(
+    redis as never,
+    db as never,
+    config,
+    chzzk as never,
+  );
   return { service, redis, db, chzzk };
 }
 

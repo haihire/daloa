@@ -28,9 +28,7 @@ const CHZZK_LIVE_CACHE_TTL = 90; // 90초 (크론 1분 + 1.5배 grace)
 // YouTube 라이브
 const YOUTUBE_LIVE_CACHE_KEY = 'live:youtube:current';
 const YOUTUBE_LIVE_CACHE_TTL = 720; // 12분 (크론 10분 + 여유)
-const YOUTUBE_LIVE_QUOTA_PER_SEARCH = 100; // search.list
-const YOUTUBE_LIVE_QUOTA_PER_VIDEOS = 1; // videos.list
-const YOUTUBE_LIVE_QUOTA_PER_POLL = YOUTUBE_LIVE_QUOTA_PER_SEARCH + YOUTUBE_LIVE_QUOTA_PER_VIDEOS; // 101
+// 참고: 라이브 폴링당 쿼터 ≈ search.list(100) + videos.list(1) = 101 units
 
 export interface PopularResponse {
   items: YoutubeVideoItem[];
@@ -668,11 +666,9 @@ export class StreamersService implements OnModuleInit {
   /** Chzzk 라이브 조회 및 캐시 저장 */
   private async updateChzzkLives(): Promise<void> {
     try {
-      const lives = await this.chzzk.fetchLivesByCategory('lostarkvtj', 50);
+      const lives = await this.chzzk.fetchLivesByCategory();
       if (lives.length === 0) {
-        this.logger.warn(
-          `Chzzk 라이브 갱신: 로아 라이브 0개 (캐시 미갱신)`,
-        );
+        this.logger.warn(`Chzzk 라이브 갱신: 로아 라이브 0개 (캐시 미갱신)`);
         return;
       }
       const serialized = JSON.stringify(lives);
@@ -685,9 +681,7 @@ export class StreamersService implements OnModuleInit {
         `Chzzk 라이브 캐시 저장: ${lives.length}개 (TTL ${CHZZK_LIVE_CACHE_TTL}초)`,
       );
     } catch (error: unknown) {
-      this.logger.error(
-        `Chzzk 라이브 갱신 실패: ${toErrorMessage(error)}`,
-      );
+      this.logger.error(`Chzzk 라이브 갱신 실패: ${toErrorMessage(error)}`);
     }
   }
 
@@ -697,7 +691,7 @@ export class StreamersService implements OnModuleInit {
       // 1. 캐시 확인
       const cached = await this.redis.get(CHZZK_LIVE_CACHE_KEY);
       if (cached) {
-        const lives: ChzzkLiveItem[] = JSON.parse(cached);
+        const lives = JSON.parse(cached) as ChzzkLiveItem[];
         const filtered = this.chzzk.filterByViewerCount(lives, minViewers);
         this.logger.debug(
           `Chzzk 캐시 hit: ${lives.length}개 → 필터링 후 ${filtered.length}개 (최소시청자 ${minViewers})`,
@@ -707,7 +701,7 @@ export class StreamersService implements OnModuleInit {
 
       // 2. 캐시 없으면 직접 API 호출
       this.logger.debug('Chzzk 캐시 미스 → 직접 API 호출');
-      const lives = await this.chzzk.fetchLivesByCategory('Lost_Ark', 50);
+      const lives = await this.chzzk.fetchLivesByCategory();
       const filtered = this.chzzk.filterByViewerCount(lives, minViewers);
       this.logger.debug(
         `Chzzk 직접 호출: ${lives.length}개 → 필터링 후 ${filtered.length}개`,
@@ -768,7 +762,8 @@ export class StreamersService implements OnModuleInit {
       // 3. LiveEntry 매핑
       const lives: ChzzkLiveItem[] = [];
       for (const video of videosRes.data.items || []) {
-        if (!video.snippet || !video.liveStreamingDetails || !video.id) continue;
+        if (!video.snippet || !video.liveStreamingDetails || !video.id)
+          continue;
 
         const concurrentViewers = Number(
           video.liveStreamingDetails.concurrentViewers ?? 0,
@@ -813,9 +808,7 @@ export class StreamersService implements OnModuleInit {
         await this.redis.set(QUOTA_KEY, '1', 'EX', ttl).catch(() => {});
         this.logger.warn(`YouTube 라이브: 쿼터 초과 (${ttl}초 후 리셋)`);
       } else {
-        this.logger.error(
-          `YouTube 라이브 갱신 실패: ${toErrorMessage(error)}`,
-        );
+        this.logger.error(`YouTube 라이브 갱신 실패: ${toErrorMessage(error)}`);
       }
     }
   }
@@ -826,7 +819,7 @@ export class StreamersService implements OnModuleInit {
       // 1. 캐시 확인
       const cached = await this.redis.get(YOUTUBE_LIVE_CACHE_KEY);
       if (cached) {
-        const lives: ChzzkLiveItem[] = JSON.parse(cached);
+        const lives = JSON.parse(cached) as ChzzkLiveItem[];
         const filtered = this.chzzk.filterByViewerCount(lives, minViewers);
         this.logger.debug(
           `YouTube 캐시 hit: ${lives.length}개 → 필터링 후 ${filtered.length}개 (최소시청자 ${minViewers})`,
@@ -841,7 +834,7 @@ export class StreamersService implements OnModuleInit {
       // 다시 캐시 확인
       const cached2 = await this.redis.get(YOUTUBE_LIVE_CACHE_KEY);
       if (cached2) {
-        const lives: ChzzkLiveItem[] = JSON.parse(cached2);
+        const lives = JSON.parse(cached2) as ChzzkLiveItem[];
         const filtered = this.chzzk.filterByViewerCount(lives, minViewers);
         this.logger.debug(
           `YouTube 직접 호출 후: ${lives.length}개 → 필터링 후 ${filtered.length}개`,

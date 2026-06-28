@@ -84,16 +84,12 @@ export class ChzzkClient {
 
   /**
    * 로스트아크 라이브 목록 조회
-   * @description Chzzk Open API /open/v1/lives에서 Lost_Ark 카테고리 라이브를 조회.
+   * @description Chzzk Open API /open/v1/lives에서 라이브를 조회.
    * API 응답에서 liveCategoryValue === '로스트아크' 필터링 후 반환.
-   * @param categoryId 무시됨 (Lost_Ark 고정)
-   * @param limit 무시됨 (CHZZK_LIVE_PAGE_SIZE env 사용)
+   * 카테고리/개수는 Lost_Ark 고정 + CHZZK_LIVE_PAGE_SIZE env 사용(인자 없음).
    * @returns 로스트아크 라이브 목록 (빈 배열도 정상)
    */
-  async fetchLivesByCategory(
-    categoryId = 'lostarkvtj',
-    limit = 50,
-  ): Promise<ChzzkLiveItem[]> {
+  async fetchLivesByCategory(): Promise<ChzzkLiveItem[]> {
     try {
       const allLives: ChzzkLiveRawItem[] = [];
       let nextToken: string | undefined;
@@ -102,10 +98,8 @@ export class ChzzkClient {
 
       // K 예산만큼 페이지 스캔
       for (let i = 0; i < this.kBudget; i++) {
-        let response: any;
-
         // 모든 페이지: next 토큰을 쿼리 파라미터로 전달
-        response = await this.http.get<ChzzkLiveResponse>(
+        const response = await this.http.get<ChzzkLiveResponse>(
           '/open/v1/lives',
           {
             params: {
@@ -153,7 +147,10 @@ export class ChzzkClient {
         .filter((item) => item.liveCategoryValue === '로스트아크')
         .map((item) => {
           const raw = item.liveThumbnailImageUrl || '';
-          const thumbnailUrl = raw && raw.length > 0 ? raw.replace('{type}', this.thumbnailResolution) : '';
+          const thumbnailUrl =
+            raw && raw.length > 0
+              ? raw.replace('{type}', this.thumbnailResolution)
+              : '';
 
           // 첫 아이템만 로그: 썸네일 URL 치환 검증
           if (!this.logger['__logged']) {
@@ -184,17 +181,14 @@ export class ChzzkClient {
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         if (error.response) {
+          const respData = error.response.data as { message?: string } | null;
           this.logger.error(
-            `Chzzk API 응답 에러: ${error.response.status} ${error.response.statusText} - ${error.response.data?.message || ''}`,
+            `Chzzk API 응답 에러: ${error.response.status} ${error.response.statusText} - ${respData?.message || ''}`,
           );
         } else if (error.request) {
-          this.logger.error(
-            `Chzzk API 네트워크 에러: ${error.message}`,
-          );
+          this.logger.error(`Chzzk API 네트워크 에러: ${error.message}`);
         } else {
-          this.logger.error(
-            `Chzzk API 요청 생성 실패: ${error.message}`,
-          );
+          this.logger.error(`Chzzk API 요청 생성 실패: ${error.message}`);
         }
       } else {
         this.logger.error(
@@ -208,10 +202,7 @@ export class ChzzkClient {
   /**
    * 라이브 목록을 시청자수 기준으로 필터링
    */
-  filterByViewerCount(
-    items: ChzzkLiveItem[],
-    minViewers = 0,
-  ): ChzzkLiveItem[] {
+  filterByViewerCount(items: ChzzkLiveItem[], minViewers = 0): ChzzkLiveItem[] {
     return items.filter((item) => item.viewerCount >= minViewers);
   }
 
@@ -243,9 +234,7 @@ export class ChzzkClient {
       );
 
       if (response.data.code !== 200 || !response.data.content?.categories) {
-        this.logger.warn(
-          `카테고리 검색 실패: code=${response.data.code}`,
-        );
+        this.logger.warn(`카테고리 검색 실패: code=${response.data.code}`);
         return [];
       }
 

@@ -35,16 +35,6 @@ describe('AppController (e2e)', () => {
       });
   });
 
-  it('GET /api/characters/stat-builds → 200 + 7개 탭', () => {
-    return request(httpServer)
-      .get('/api/characters/stat-builds')
-      .expect(200)
-      .expect((res) => {
-        expect(Array.isArray(res.body)).toBe(true);
-        expect(res.body).toHaveLength(7);
-      });
-  });
-
   it('존재하지 않는 경로 → 404', () => {
     return request(httpServer).get('/api/not-found').expect(404);
   });

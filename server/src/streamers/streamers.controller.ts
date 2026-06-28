@@ -59,8 +59,7 @@ export class StreamersController {
     @Query('minViewers') minViewersRaw?: string,
   ) {
     const minViewers = Number.parseInt(minViewersRaw ?? '0', 10);
-    const normalizedPlatform =
-      platform === 'youtube' ? 'youtube' : 'chzzk';
+    const normalizedPlatform = platform === 'youtube' ? 'youtube' : 'chzzk';
 
     if (normalizedPlatform === 'youtube') {
       return this.streamersService.getYoutubeLives(
