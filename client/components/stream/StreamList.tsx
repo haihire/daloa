@@ -128,7 +128,7 @@ export default function StreamList({
           현재 로스트아크 라이브가 없습니다
         </div>
       ) : (
-        <div className="flex gap-2 overflow-x-auto pb-2">
+        <div className="flex gap-2 overflow-x-auto overflow-y-hidden pb-2">
           {displayItems.map((item) => (
             <button
               key={item.channelId}
