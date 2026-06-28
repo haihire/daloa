@@ -730,14 +730,6 @@ export class StreamersService implements OnModuleInit {
   /** YouTube 라이브 조회 및 캐시 저장 */
   private async updateYoutubeLives(): Promise<void> {
     try {
-      // 로컬 쿼터 보호 (형제 메서드와 일관성)
-      if (this.quotaApisDisabled) {
-        this.logger.debug(
-          'YouTube 라이브: LOCAL_DISABLE_QUOTA_APIS=true → 스킵',
-        );
-        return;
-      }
-
       // 쿼터 체크
       const quotaExceeded = await this.redis.get(QUOTA_KEY);
       if (quotaExceeded) {
