@@ -59,7 +59,7 @@ export default function RootLayout({
     <html
       lang="ko"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased overflow-y-scroll`}
     >
       <head>
         {/* 다크모드 FOUC 방지: hydration 전에 동기 실행 */}
