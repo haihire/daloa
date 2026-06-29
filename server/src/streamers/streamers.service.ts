@@ -721,96 +721,122 @@ export class StreamersService implements OnModuleInit {
     await this.updateChzzkLives();
   }
 
-  /** YouTube 라이브 조회 및 캐시 저장 */
+  /** YouTube 라이브 조회 및 캐시 저장 (키 할당량 초과 시 다음 키로 회전) */
   private async updateYoutubeLives(): Promise<void> {
-    try {
-      // 쿼터 체크
-      const quotaExceeded = await this.redis.get(QUOTA_KEY);
-      if (quotaExceeded) {
-        this.logger.warn('YouTube 라이브: 쿼터 초과 → 직전 캐시 유지');
+    // 쿼터 단축: 모든 키 소진이 기록돼 있으면 직전 캐시 유지
+    const quotaExceeded = await this.redis.get(QUOTA_KEY);
+    if (quotaExceeded) {
+      this.logger.warn('YouTube 라이브: 쿼터 초과 → 직전 캐시 유지');
+      return;
+    }
+
+    // 검색 경로(fetchWithRotation)와 동일하게, 키 할당량 초과 시 다음 키로 전환하며 재시도.
+    const total = this.youtubeKeys.length;
+    for (let attempt = 0; attempt < total; attempt++) {
+      try {
+        await this._fetchAndCacheYoutubeLives();
         return;
-      }
+      } catch (error: unknown) {
+        const reason =
+          toYoutubeApiError(error).response?.data?.error?.errors?.[0]?.reason;
+        const isQuota =
+          reason === 'quotaExceeded' ||
+          reason === 'dailyLimitExceeded' ||
+          /quota/i.test(toErrorMessage(error));
 
-      // 1. search.list: 로스트아크 라이브 검색
-      const searchRes = await this.youtube.search.list({
-        part: ['snippet'],
-        q: '로스트아크',
-        type: ['video'],
-        eventType: 'live',
-        order: 'viewCount',
-        maxResults: 20,
-      });
-
-      const videoIds: string[] = [];
-      for (const item of searchRes.data.items || []) {
-        if (item.id?.videoId) {
-          videoIds.push(item.id.videoId);
-        }
-      }
-
-      if (videoIds.length === 0) {
-        this.logger.debug('YouTube 라이브: 검색 결과 0개');
-        return;
-      }
-
-      // 2. videos.list: 상세정보(시청자수, 시작시간)
-      const videosRes = await this.youtube.videos.list({
-        part: ['snippet', 'liveStreamingDetails'],
-        id: videoIds,
-      });
-
-      // 3. LiveEntry 매핑
-      const lives: ChzzkLiveItem[] = [];
-      for (const video of videosRes.data.items || []) {
-        if (!video.snippet || !video.liveStreamingDetails || !video.id)
+        if (isQuota && attempt < total - 1) {
+          this.currentKeyIdx = (this.currentKeyIdx + 1) % total;
+          this.logger.warn(
+            `YouTube 라이브 키 ${attempt + 1}/${total} 할당량 초과 — 키 ${this.currentKeyIdx + 1}로 전환`,
+          );
           continue;
+        }
 
-        const concurrentViewers = Number(
-          video.liveStreamingDetails.concurrentViewers ?? 0,
-        );
-        if (concurrentViewers < 0) continue; // 라이브 종료 케이스
-
-        lives.push({
-          platform: 'youtube',
-          channelName: video.snippet.channelTitle || '',
-          channelId: video.snippet.channelId || '',
-          title: video.snippet.title || '',
-          viewerCount: concurrentViewers,
-          thumbnailUrl: video.snippet.thumbnails?.medium?.url || '',
-          liveUrl: `https://www.youtube.com/watch?v=${video.id}`,
-          startedAt: video.liveStreamingDetails.actualStartTime
-            ? new Date(video.liveStreamingDetails.actualStartTime)
-            : new Date(),
-        });
-      }
-
-      if (lives.length === 0) {
-        this.logger.debug('YouTube 라이브: 필터링 후 0개');
+        if (isQuota) {
+          // 모든 키 소진: 리셋까지 단축 플래그를 세워 불필요한 재호출(2.5s) 방지
+          const ttl = secondsUntilQuotaReset();
+          await this.redis.set(QUOTA_KEY, '1', 'EX', ttl).catch(() => {});
+          this.logger.warn(
+            `YouTube 라이브: 모든 키(${total}) 할당량 초과 (${ttl}초 후 리셋)`,
+          );
+        } else {
+          this.logger.error(
+            `YouTube 라이브 갱신 실패: ${toErrorMessage(error)}`,
+          );
+        }
         return;
-      }
-
-      const serialized = JSON.stringify(lives);
-      await this.redis.setex(
-        YOUTUBE_LIVE_CACHE_KEY,
-        YOUTUBE_LIVE_CACHE_TTL,
-        serialized,
-      );
-      this.logger.log(
-        `YouTube 라이브 캐시 저장: ${lives.length}개 (TTL ${YOUTUBE_LIVE_CACHE_TTL}초)`,
-      );
-    } catch (error: unknown) {
-      const apiError = toYoutubeApiError(error);
-      const quotaErr =
-        apiError.response?.data?.error?.errors?.[0]?.reason === 'quotaExceeded';
-
-      if (quotaErr) {
-        const ttl = secondsUntilQuotaReset();
-        await this.redis.set(QUOTA_KEY, '1', 'EX', ttl).catch(() => {});
-        this.logger.warn(`YouTube 라이브: 쿼터 초과 (${ttl}초 후 리셋)`);
-      } else {
-        this.logger.error(`YouTube 라이브 갱신 실패: ${toErrorMessage(error)}`);
       }
     }
+  }
+
+  /** 현재 키로 라이브 1회 조회 + 캐시 저장. API 실패는 throw → 호출자가 키 회전 판단 */
+  private async _fetchAndCacheYoutubeLives(): Promise<void> {
+    // 1. search.list: 로스트아크 라이브 검색
+    const searchRes = await this.youtube.search.list({
+      part: ['snippet'],
+      q: '로스트아크',
+      type: ['video'],
+      eventType: 'live',
+      order: 'viewCount',
+      maxResults: 20,
+    });
+
+    const videoIds: string[] = [];
+    for (const item of searchRes.data.items || []) {
+      if (item.id?.videoId) {
+        videoIds.push(item.id.videoId);
+      }
+    }
+
+    if (videoIds.length === 0) {
+      this.logger.debug('YouTube 라이브: 검색 결과 0개');
+      return;
+    }
+
+    // 2. videos.list: 상세정보(시청자수, 시작시간)
+    const videosRes = await this.youtube.videos.list({
+      part: ['snippet', 'liveStreamingDetails'],
+      id: videoIds,
+    });
+
+    // 3. LiveEntry 매핑
+    const lives: ChzzkLiveItem[] = [];
+    for (const video of videosRes.data.items || []) {
+      if (!video.snippet || !video.liveStreamingDetails || !video.id) continue;
+
+      const concurrentViewers = Number(
+        video.liveStreamingDetails.concurrentViewers ?? 0,
+      );
+      if (concurrentViewers < 0) continue; // 라이브 종료 케이스
+
+      lives.push({
+        platform: 'youtube',
+        channelName: video.snippet.channelTitle || '',
+        channelId: video.snippet.channelId || '',
+        title: video.snippet.title || '',
+        viewerCount: concurrentViewers,
+        thumbnailUrl: video.snippet.thumbnails?.medium?.url || '',
+        liveUrl: `https://www.youtube.com/watch?v=${video.id}`,
+        startedAt: video.liveStreamingDetails.actualStartTime
+          ? new Date(video.liveStreamingDetails.actualStartTime)
+          : new Date(),
+      });
+    }
+
+    if (lives.length === 0) {
+      this.logger.debug('YouTube 라이브: 필터링 후 0개');
+      return;
+    }
+
+    const serialized = JSON.stringify(lives);
+    await this.redis.setex(
+      YOUTUBE_LIVE_CACHE_KEY,
+      YOUTUBE_LIVE_CACHE_TTL,
+      serialized,
+    );
+    this.logger.log(
+      `YouTube 라이브 캐시 저장: ${lives.length}개 (TTL ${YOUTUBE_LIVE_CACHE_TTL}초)`,
+    );
   }
 
   /** YouTube 라이브 조회 (캐시 우선, 없으면 직접 API 호출) */
@@ -849,8 +875,10 @@ export class StreamersService implements OnModuleInit {
     }
   }
 
-  /** 10분마다 YouTube 라이브 갱신 (워커0만, 로컬: 2시간마다) */
-  @Cron('0 */10 * * * *') // 운영: 10분 / 로컬: 2시간 (02:xx, 04:xx 등)
+  /** 20분마다 YouTube 라이브 갱신 (워커0만, 로컬: 2시간마다)
+   *  search.list=100유닛/회 → 20분(72회/일)=7,200유닛/일. 단일 프로젝트 10,000 한도 내,
+   *  키 회전(updateYoutubeLives)과 합쳐 쿼터 소진 방지. */
+  @Cron('0 */20 * * * *') // 운영: 20분 / 로컬: 2시간 (02:xx, 04:xx 등)
   async refreshYoutubeLives(): Promise<void> {
     const inst = process.env.NODE_APP_INSTANCE;
     if (inst !== undefined && inst !== '0') return;
