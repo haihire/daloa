@@ -37,6 +37,29 @@ export default function StreamList({
     setLoadedImages(new Set());
   }, [initialItems]);
 
+  // SSR/ISR 캐시가 비었거나 stale일 수 있어, 마운트 시 클라이언트에서 현재 치지직 라이브를
+  // 한 번 보정 조회한다. (백엔드는 14개 반환해도 SSR 캐시 때문에 "없음"으로 보이던 문제 방지)
+  React.useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/streamers/live?platform=chzzk&minViewers=0`,
+        );
+        const data = (await res.json()) as ChzzkLiveItem[];
+        if (!cancelled && Array.isArray(data) && data.length > 0) {
+          setDisplayItems(data);
+        }
+      } catch {
+        // best-effort 보정
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // 마운트 시 1회만 (초기 플랫폼은 chzzk)
+  }, []);
+
   const handleRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     setRefreshSpin(true);
@@ -92,6 +115,27 @@ export default function StreamList({
       label: item.channelName,
       value: item.viewerCount,
     });
+    // 스트림 클릭 텔레메트리 — 모니터링 "스트림 클릭 타임라인"에 집계
+    // (기존 youtube-click 인프라 재활용: videoId 자리에 channelId)
+    try {
+      const payload = JSON.stringify({
+        type: "youtube-click",
+        videoId: item.channelId,
+        videoTitle: item.title,
+        channelTitle: item.channelName,
+      });
+      const blob = new Blob([payload], { type: "application/json" });
+      if (!navigator.sendBeacon("/api/telemetry", blob)) {
+        void fetch("/api/telemetry", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+          keepalive: true,
+        }).catch(() => {});
+      }
+    } catch {
+      // best-effort telemetry
+    }
     window.open(item.liveUrl, "_blank");
   };
 

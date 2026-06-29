@@ -274,8 +274,8 @@ export class AdminMonitoringService implements OnModuleInit {
       youtubeClickTotal,
     ] = await Promise.all([
       this.monitoringRepo.findSummary(this.SLOW_THRESHOLD_MS),
-      this.monitoringRepo.findSiteClickSeriesDays(14),
-      this.monitoringRepo.findYoutubeClickSeriesDays(14),
+      this.monitoringRepo.findSiteClickSeriesDays(7),
+      this.monitoringRepo.findYoutubeClickSeriesDays(7),
       this.monitoringRepo.findSectionSeries(bucketHours, safeRangeDays),
       this.monitoringRepo.findPageVisits(),
       this.monitoringRepo.findDimensionVisits(),
