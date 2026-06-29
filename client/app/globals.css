@@ -119,6 +119,9 @@ body {
 .admin-shell {
   background: var(--admin-bg);
   color: var(--admin-text);
+  /* 어드민은 항상 라이트 테마. OS/브라우저 다크모드가 native 컨트롤
+     (date picker, select 등)에 적용되는 것을 막는다. */
+  color-scheme: light;
 }
 .admin-sidebar {
   background: var(--admin-sidebar-bg);

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -7,7 +8,6 @@ const NAV = [
   { href: "/admin/monitoring", label: "모니터링" },
   { href: "/admin/containers", label: "컨테이너 현황" },
   { href: "/admin/sites", label: "사이트 관리" },
-  { href: "/admin/youtube", label: "유튜브" },
   { href: "/admin/inven", label: "사이트 추천" },
 ];
 
@@ -18,6 +18,17 @@ export default function AdminLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+
+  // 어드민은 항상 라이트 테마. 메인 사이트의 다크모드(html.dark)가 어드민의
+  // dark: variant 클래스에 적용되지 않도록, 어드민 진입 동안 dark를 제거하고 이탈 시 복원한다.
+  useEffect(() => {
+    const html = document.documentElement;
+    const wasDark = html.classList.contains("dark");
+    html.classList.remove("dark");
+    return () => {
+      if (wasDark) html.classList.add("dark");
+    };
+  }, []);
 
   async function logout() {
     await fetch("/api/admin/auth/logout", { method: "POST" });

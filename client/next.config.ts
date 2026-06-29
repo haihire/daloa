@@ -28,8 +28,11 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // afterFiles: app router의 route handler(/api/admin/* 등 쿠키·인증 처리)를 먼저 매칭하고,
+  // 매칭되는 핸들러가 없는 경로(예: /api/streamers/live)만 Nest 백엔드로 프록시한다.
+  // beforeFiles로 두면 이 rewrite가 모든 route handler를 가로채 admin 인증 쿠키가 깨진다.
   rewrites: async () => ({
-    beforeFiles: [
+    afterFiles: [
       {
         source: "/api/:path*",
         destination: `${process.env.NEST_API_URL || "http://localhost:3001"}/api/:path*`,
