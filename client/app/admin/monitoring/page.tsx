@@ -193,7 +193,7 @@ export default function MonitoringPage() {
     async function loadSectionOnly() {
       try {
         const res = await fetch(
-          `/api/admin/monitoring/dashboard?days=10&pvDays=${pageVisitDays}`,
+          `/api/admin/monitoring/dashboard?days=7&pvDays=${pageVisitDays}`,
           { cache: "no-store" },
         );
         if (!alive || !res.ok) return;
@@ -382,7 +382,9 @@ export default function MonitoringPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2.3fr)_minmax(0,1fr)] xl:items-stretch">
+        {/* 왼쪽: 그래프 영역 (좌측 컬럼) */}
+        <div className="flex min-w-0 flex-col gap-4">
         <div className="admin-card p-3">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -436,7 +438,7 @@ export default function MonitoringPage() {
               )}
             </div>
           </div>
-          <div className="h-48">
+          <div className="h-56">
             {pageLoadLoading ? (
               <div className="grid h-full place-items-center text-sm text-[color:var(--admin-text-muted)]">
                 불러오는 중...
@@ -506,7 +508,7 @@ export default function MonitoringPage() {
                 누적 {siteClickTotal.toLocaleString()}회
               </span>
             </div>
-            <div className="h-40">
+            <div className="h-52">
               {loading ? (
                 <div className="grid h-full place-items-center text-sm text-[color:var(--admin-text-muted)]">
                   불러오는 중...
@@ -552,12 +554,12 @@ export default function MonitoringPage() {
 
           <div className="admin-card p-3">
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-sm font-semibold">유튜브 클릭 타임라인 (일)</p>
+              <p className="text-sm font-semibold">스트림 클릭 타임라인 (일)</p>
               <span className="text-xs text-[color:var(--admin-text-muted)]">
                 누적 {(data.youtubeClickTotal ?? 0).toLocaleString()}회
               </span>
             </div>
-            <div className="h-40">
+            <div className="h-52">
               {loading ? (
                 <div className="grid h-full place-items-center text-sm text-[color:var(--admin-text-muted)]">
                   불러오는 중...
@@ -593,7 +595,7 @@ export default function MonitoringPage() {
                       dataKey="count"
                       stroke="#ef4444"
                       fill="#fecaca"
-                      name="유튜브 클릭"
+                      name="스트림 클릭"
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -673,7 +675,7 @@ export default function MonitoringPage() {
               </p>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-[color:var(--admin-text-muted)]">
-                  최근 10일
+                  최근 7일
                 </span>
                 <div className="flex gap-1">
                   {(["sites", "stat-builds", "youtube"] as const).map(
@@ -762,7 +764,13 @@ export default function MonitoringPage() {
           </div>
         </div>
 
-        <div className="grid auto-rows-min content-start gap-4 xl:grid-cols-4">
+        </div>
+        {/* 오른쪽: 통계 목록 (우측 세로 컬럼)
+            xl에서는 relative 래퍼(높이는 grid stretch로 왼쪽 그래프 높이에 맞춰짐) 안에
+            내부 그리드를 absolute inset-0으로 띄워, 오른쪽 콘텐츠가 행 높이를 늘리지 못하게 한다.
+            → 행 높이는 왼쪽 그래프 높이로만 결정되고, 넘치는 항목은 각 카드 내부 스크롤로 처리. */}
+        <div className="xl:relative xl:min-w-0">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:absolute xl:inset-0 xl:grid-cols-1 xl:grid-rows-4 xl:[&>div]:min-h-0 xl:[&>div]:overflow-y-auto">
           <div className="admin-card p-3">
             <div className="mb-2 flex items-center justify-between">
               <p className="text-sm font-semibold">사이트 클릭 상위</p>
@@ -904,6 +912,7 @@ export default function MonitoringPage() {
               )}
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
