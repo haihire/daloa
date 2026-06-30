@@ -7,8 +7,8 @@ ENV NODE_ENV=production
 
 RUN apk add --no-cache docker-cli python3 py3-pip && pip install --break-system-packages curl-cffi beautifulsoup4 lxml
 
-COPY package*.json ./
-RUN npm ci --omit=dev
+COPY package.json pnpm-lock.yaml .npmrc ./
+RUN corepack enable && pnpm install --prod --frozen-lockfile
 RUN npm i -g pm2
 
 COPY generated ./generated

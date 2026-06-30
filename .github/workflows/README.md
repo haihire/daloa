@@ -30,7 +30,7 @@
 
 ### server-e2e.yml — Server E2E (Manual)
 - **트리거**: 수동 전용
-- **동작**: PostgreSQL·Redis 서비스 컨테이너 띄우고 `npm run test:e2e` 실행
+- **동작**: PostgreSQL·Redis 서비스 컨테이너 띄우고 `pnpm test:e2e` 실행
 - **위치**: PR 자동 E2E는 pr-ci.yml에 통합됨. 이 파일은 **회귀 재현·단독 디버깅용 수동 fallback**으로만 유지.
 
 ---
@@ -40,7 +40,7 @@
 ### main-post-merge.yml — 서버 배포
 - **트리거**: `main`에 push되고 `server/**` 또는 `client/**` 변경 시 (+ 수동)
 - **동작**:
-  1. 서버 빌드(`npm ci` → `npm run build`)
+  1. 서버 빌드(`pnpm install --frozen-lockfile` → `pnpm build`)
   2. `./server` Docker 이미지 빌드 → **ECR push** (태그 = commit SHA)
   3. **SSM**으로 EC2에 접속해 `git pull` + `.env` 갱신 + 이미지 pull + `docker compose --profile production up -d` + nginx 재시작
   4. (선택) 헬스체크, 배포 이벤트(`service:nest`)를 모니터링 DB에 기록
