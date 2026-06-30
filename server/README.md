@@ -8,8 +8,8 @@
 
 ```bash
 cd server
-npm install
-npm run start:dev  # http://localhost:3001
+pnpm install
+pnpm start:dev  # http://localhost:3001
 ```
 
 `.env` 설정:

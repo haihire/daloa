@@ -8,8 +8,8 @@
 
 ```bash
 cd client
-npm install
-npm run dev   # http://localhost:3000
+pnpm install
+pnpm dev   # http://localhost:3000
 ```
 
 `.env.local` 설정:
@@ -100,7 +100,7 @@ client/
 
 ```bash
 cd client
-npm test
+pnpm test
 ```
 
 Vitest + Testing Library 기반.

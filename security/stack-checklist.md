@@ -26,7 +26,7 @@
 - [x] **SQL 인젝션** → Prisma ORM이 파라미터 바인딩 처리. raw 쿼리(`$queryRaw`) 쓸 땐 `Prisma.sql`/태그드 템플릿으로 파라미터화 (문자열 연결 금지)
 - [x] **XSS** → React가 기본 escape. `dangerouslySetInnerHTML` 사용처만 점검
 - [ ] **입력 화이트리스트 검증** ⚠️ — `class-validator`/`class-transformer` **미설치**. NestJS DTO에 `ValidationPipe` 적용 안 돼 있을 가능성 → 추가 권장
-  - 권장: `npm i class-validator class-transformer` → `app.useGlobalPipes(new ValidationPipe({ whitelist: true }))`
+  - 권장: `pnpm add class-validator class-transformer` → `app.useGlobalPipes(new ValidationPipe({ whitelist: true }))`
 - [ ] **CSRF** → JWT를 쿠키가 아닌 `Authorization` 헤더로 보내면 CSRF 영향 적음. **쿠키 세션을 쓴다면** CSRF 토큰 필요 (현재 `admin:session` 저장 방식 확인 후 판단)
 - [ ] `cheerio` 크롤링 대상 HTML/URL 신뢰 범위 점검 (외부 입력으로 크롤 대상이 정해지면 SSRF 연결)
 
@@ -59,10 +59,10 @@
 
 - [ ] **에러 노출 통제** → 프로덕션에서 스택트레이스·DB 에러 숨김 (NestJS exception filter)
 - [ ] **불필요 기능 제거** → `start:debug`, 디버그 포트, 샘플 라우트 프로덕션 비활성
-- [ ] **보안 헤더** → CSP, X-Frame-Options, X-Content-Type-Options 등. **`helmet` 미설치** → Nginx에서 헤더 추가하거나 `npm i helmet` 검토
+- [ ] **보안 헤더** → CSP, X-Frame-Options, X-Content-Type-Options 등. **`helmet` 미설치** → Nginx에서 헤더 추가하거나 `pnpm add helmet` 검토
 - [ ] **`server_tokens off`** (Nginx 버전 숨김)
 - [ ] **CORS** 화이트리스트 (`app.enableCors`에 허용 origin만, `*` 지양)
-- [ ] **의존성 취약점 스캔** → `npm audit` 정기 실행, lock 파일 커밋. Prisma/Next 등 메이저 최신이라 패치 추적
+- [ ] **의존성 취약점 스캔** → `pnpm audit` 정기 실행, lock 파일 커밋. Prisma/Next 등 메이저 최신이라 패치 추적
 
 ## 6. SSRF / 외부 호출 (A10)
 

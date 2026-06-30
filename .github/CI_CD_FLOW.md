@@ -76,7 +76,7 @@ GitHub **Settings > Rules > Rulesets** 기준. (구 Branch protection rules 아�
 ```
 main 머지
   │
-  ├─ 1. server 빌드 (npm ci → npm run build)
+  ├─ 1. server 빌드 (pnpm install --frozen-lockfile → pnpm build)
   ├─ 2. ./server Docker 이미지 빌드 → ECR push (태그 = commit SHA)
   ├─ 3. SSM으로 EC2 접속:
   │       git pull origin main         (레포 설정 파일 동기화)
