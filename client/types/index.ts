@@ -28,14 +28,8 @@ export interface StatBuildTab {
   items: StatBuildItem[];
 }
 
-export interface ClassSummary {
-  className: string;
-  summary: string;
-  updatedAt: string;
-}
-
 export interface ChzzkLiveItem {
-  platform: 'chzzk';
+  platform: "chzzk";
   channelId: string;
   channelName: string;
   title: string;
