@@ -11,7 +11,3 @@ function isTrueEnv(config: ConfigService, key: string): boolean {
 export function isLocalQuotaApisDisabled(config: ConfigService): boolean {
   return isTrueEnv(config, 'LOCAL_DISABLE_QUOTA_APIS');
 }
-
-export function isClassSummaryDisabled(config: ConfigService): boolean {
-  return isTrueEnv(config, 'DISABLE_CLASS_SUMMARY');
-}
