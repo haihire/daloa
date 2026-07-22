@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import type { Site } from "@/types";
 import { event as gaEvent } from "@/lib/gtag";
 
@@ -66,6 +66,27 @@ function subscribeFavorites(onStoreChange: () => void): () => void {
   };
 }
 
+function persistFavorites(next: string[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    window.dispatchEvent(new Event(FAVORITES_EVENT));
+  } catch {
+    // ignore
+  }
+}
+
+/** from을 빼서 to 자리에 끼워넣은 새 배열. 둘 중 하나라도 없으면 원본 그대로. */
+function moveItem(order: string[], from: string, to: string): string[] {
+  const fromIdx = order.indexOf(from);
+  const toIdx = order.indexOf(to);
+  if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return order;
+
+  const next = [...order];
+  next.splice(fromIdx, 1);
+  next.splice(toIdx, 0, from);
+  return next;
+}
+
 function StarIcon({ filled }: { filled: boolean }) {
   return (
     <svg
@@ -91,6 +112,13 @@ export default function SiteList({ sites }: Props) {
     () => EMPTY_FAVORITES,
   );
 
+  // 드래그 중에만 쓰는 미리보기 순서. 저장은 드롭 시점에만 하므로,
+  // 목록 밖에 놓아 drop 없이 dragend가 오면 null로 되돌아가 원위치된다.
+  const [dragOrder, setDragOrder] = useState<string[] | null>(null);
+  const [draggingHref, setDraggingHref] = useState<string | null>(null);
+  // 드래그 직후 브라우저가 click을 흘리면 사이트가 열려버리므로 한 번 무시한다.
+  const justDragged = useRef(false);
+
   const toggleFavorite = (href: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const isCurrentlyFav = favorites.includes(href);
@@ -103,18 +131,45 @@ export default function SiteList({ sites }: Props) {
       site_href: href,
       action: isCurrentlyFav ? "remove" : "add",
     });
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      window.dispatchEvent(new Event(FAVORITES_EVENT));
-    } catch {
-      // ignore
-    }
+    persistFavorites(next);
   };
 
-  const favSet = new Set(favorites);
+  const handleDragStart = (href: string, e: React.DragEvent) => {
+    setDraggingHref(href);
+    justDragged.current = true;
+    setDragOrder(favorites);
+    e.dataTransfer.effectAllowed = "move";
+    // Firefox는 데이터가 없으면 드래그를 시작하지 않는다.
+    e.dataTransfer.setData("text/plain", href);
+  };
+
+  // 다른 즐겨찾기 위로 들어오면 미리보기 순서를 즉시 바꿔 보여준다.
+  const handleDragEnter = (href: string) => {
+    if (!draggingHref || draggingHref === href) return;
+    setDragOrder((current) => moveItem(current ?? favorites, draggingHref, href));
+  };
+
+  // 목록 안에 놓았을 때만 저장 확정.
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (draggingHref && dragOrder) persistFavorites(dragOrder);
+  };
+
+  const handleDragEnd = () => {
+    setDraggingHref(null);
+    setDragOrder(null);
+    // click은 dragend 다음 틱에 올 수 있어 바로 내리지 않는다.
+    setTimeout(() => {
+      justDragged.current = false;
+    }, 0);
+  };
+
+  // 드래그 중이면 미리보기 순서로, 아니면 저장된 순서로 렌더
+  const favoriteOrder = dragOrder ?? favorites;
+  const favSet = new Set(favoriteOrder);
   // 즐겨찾기: 추가 순서대로 상단 / 나머지: 원래 서버 순서
   const sorted = [
-    ...favorites
+    ...favoriteOrder
       .map((href) => sites.find((s) => s.href === href))
       .filter((s): s is Site => s !== undefined),
     ...sites.filter((s) => !favSet.has(s.href)),
@@ -140,7 +195,14 @@ export default function SiteList({ sites }: Props) {
   return (
     <section className="flex max-h-[58vh] flex-col rounded-2xl border border-slate-200/70 bg-white/80 shadow-md backdrop-blur dark:border-slate-700/70 dark:bg-slate-800/80 sm:h-[560px] sm:max-h-none">
       <div className="stagger flex-1 overflow-y-auto rounded-2xl px-1 py-3 sm:px-2">
-        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        {/* 목록 전체가 드롭 영역. 여기 밖에서 놓으면 drop이 안 걸려 원위치된다. */}
+        <ul
+          className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3"
+          onDragOver={(e) => {
+            if (draggingHref) e.preventDefault();
+          }}
+          onDrop={handleDrop}
+        >
           {sorted.map((site) => {
             const isFav = favSet.has(site.href);
             const favicon = faviconUrl(site.href); // 사이트당 1회만 파싱
@@ -196,7 +258,16 @@ export default function SiteList({ sites }: Props) {
                 <div
                   role="button"
                   tabIndex={0}
+                  draggable={isFav}
+                  onDragStart={
+                    isFav ? (e) => handleDragStart(site.href, e) : undefined
+                  }
+                  onDragEnter={
+                    isFav ? () => handleDragEnter(site.href) : undefined
+                  }
+                  onDragEnd={isFav ? handleDragEnd : undefined}
                   onClick={() => {
+                    if (justDragged.current) return;
                     trackSiteClick();
                     window.open(site.href, "_blank", "noopener,noreferrer");
                   }}
@@ -210,6 +281,10 @@ export default function SiteList({ sites }: Props) {
                     isFav
                       ? "border-blue-400 bg-blue-50 hover:border-blue-500 hover:bg-blue-50 dark:bg-blue-950/40 dark:border-blue-700 dark:hover:bg-blue-950/60"
                       : "border-slate-200 bg-slate-50 hover:border-cyan-300 hover:bg-cyan-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-cyan-700 dark:hover:bg-cyan-950/30"
+                  } ${
+                    draggingHref === site.href
+                      ? "opacity-40 ring-2 ring-blue-400"
+                      : ""
                   }`}
                 >
                   {/* 별 버튼 */}

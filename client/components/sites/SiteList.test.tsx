@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import SiteList from "./SiteList";
@@ -292,5 +292,141 @@ describe("SiteList", () => {
     expect(screen.getByText("로스트아크")).toBeInTheDocument();
 
     setItemSpy.mockRestore();
+  });
+});
+
+const A = "https://a.test";
+const B = "https://b.test";
+const C = "https://c.test";
+
+const DRAG_SITES: Site[] = [
+  { name: "가나다", href: A, category: "공식", description: "첫번째" },
+  { name: "라마바", href: B, category: "공식", description: "두번째" },
+  { name: "사아자", href: C, category: "공식", description: "세번째" },
+];
+
+/** jsdom에는 DataTransfer가 없어 드래그 이벤트에 붙일 최소 구현을 만든다. */
+function createDataTransfer() {
+  const store: Record<string, string> = {};
+  return {
+    effectAllowed: "",
+    setData: (key: string, value: string) => {
+      store[key] = value;
+    },
+    getData: (key: string) => store[key] ?? "",
+  };
+}
+
+function cards(container: HTMLElement): HTMLElement[] {
+  return Array.from(
+    container.querySelectorAll('[role="button"]'),
+  ) as HTMLElement[];
+}
+
+function cardFor(container: HTMLElement, name: string): HTMLElement {
+  const found = cards(container).find((card) =>
+    card.textContent?.includes(name),
+  );
+  if (!found) throw new Error(`카드를 찾을 수 없음: ${name}`);
+  return found;
+}
+
+/** 화면에 보이는 카드 이름 순서 */
+function renderedOrder(container: HTMLElement): string[] {
+  return cards(container).map(
+    (card) =>
+      DRAG_SITES.find((site) => card.textContent?.includes(site.name))?.name ??
+      "",
+  );
+}
+
+function storedFavorites(): string[] {
+  return JSON.parse(localStorage.getItem("loa_favorites") || "[]") as string[];
+}
+
+describe("SiteList 즐겨찾기 드래그 정렬", () => {
+  beforeEach(() => {
+    localStorageMock.clear();
+    Object.defineProperty(window, "localStorage", {
+      value: localStorageMock,
+      writable: true,
+    });
+    localStorage.setItem("loa_favorites", JSON.stringify([A, B, C]));
+  });
+
+  afterEach(() => {
+    localStorageMock.clear();
+  });
+
+  it("즐겨찾기 카드는 draggable이고 일반 카드는 draggable이 아니다", () => {
+    localStorage.setItem("loa_favorites", JSON.stringify([A]));
+    const { container } = render(<SiteList sites={DRAG_SITES} />);
+
+    expect(cardFor(container, "가나다")).toHaveAttribute("draggable", "true");
+    expect(cardFor(container, "라마바")).toHaveAttribute("draggable", "false");
+  });
+
+  it("첫 즐겨찾기를 마지막 위로 드래그해 놓으면 저장 순서가 바뀐다", () => {
+    const { container } = render(<SiteList sites={DRAG_SITES} />);
+    const dataTransfer = createDataTransfer();
+    const list = container.querySelector("ul") as HTMLElement;
+
+    fireEvent.dragStart(cardFor(container, "가나다"), { dataTransfer });
+    fireEvent.dragEnter(cardFor(container, "사아자"), { dataTransfer });
+    fireEvent.dragOver(list, { dataTransfer });
+    fireEvent.drop(list, { dataTransfer });
+
+    expect(storedFavorites()).toEqual([B, C, A]);
+  });
+
+  it("마지막 즐겨찾기를 맨 앞으로 드래그해 놓으면 저장 순서가 바뀐다", () => {
+    const { container } = render(<SiteList sites={DRAG_SITES} />);
+    const dataTransfer = createDataTransfer();
+    const list = container.querySelector("ul") as HTMLElement;
+
+    fireEvent.dragStart(cardFor(container, "사아자"), { dataTransfer });
+    fireEvent.dragEnter(cardFor(container, "가나다"), { dataTransfer });
+    fireEvent.dragOver(list, { dataTransfer });
+    fireEvent.drop(list, { dataTransfer });
+
+    expect(storedFavorites()).toEqual([C, A, B]);
+  });
+
+  it("드래그하는 동안에는 화면 순서만 바뀌고 아직 저장되지 않는다", () => {
+    const { container } = render(<SiteList sites={DRAG_SITES} />);
+    const dataTransfer = createDataTransfer();
+
+    fireEvent.dragStart(cardFor(container, "가나다"), { dataTransfer });
+    fireEvent.dragEnter(cardFor(container, "사아자"), { dataTransfer });
+
+    expect(renderedOrder(container)).toEqual(["라마바", "사아자", "가나다"]);
+    expect(storedFavorites()).toEqual([A, B, C]);
+  });
+
+  it("목록 밖에 놓아 drop 없이 끝나면 순서가 원래대로 돌아온다", () => {
+    const { container } = render(<SiteList sites={DRAG_SITES} />);
+    const dataTransfer = createDataTransfer();
+    const dragged = cardFor(container, "가나다");
+
+    fireEvent.dragStart(dragged, { dataTransfer });
+    fireEvent.dragEnter(cardFor(container, "사아자"), { dataTransfer });
+    // 목록 밖에서 손을 뗀 상황: drop 없이 dragEnd만 발생
+    fireEvent.dragEnd(dragged, { dataTransfer });
+
+    expect(storedFavorites()).toEqual([A, B, C]);
+    expect(renderedOrder(container)).toEqual(["가나다", "라마바", "사아자"]);
+  });
+
+  it("즐겨찾기가 아닌 카드 위로는 순서가 바뀌지 않는다", () => {
+    localStorage.setItem("loa_favorites", JSON.stringify([A, B]));
+    const { container } = render(<SiteList sites={DRAG_SITES} />);
+    const dataTransfer = createDataTransfer();
+    const list = container.querySelector("ul") as HTMLElement;
+
+    fireEvent.dragStart(cardFor(container, "가나다"), { dataTransfer });
+    fireEvent.dragEnter(cardFor(container, "사아자"), { dataTransfer });
+    fireEvent.drop(list, { dataTransfer });
+
+    expect(storedFavorites()).toEqual([A, B]);
   });
 });
