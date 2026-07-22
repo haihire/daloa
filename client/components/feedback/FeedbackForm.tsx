@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useState } from "react";
 import { event as gaEvent } from "@/lib/gtag";
 
 const MAX_LENGTH = 500;
@@ -14,12 +14,12 @@ function detectDeviceType(): "mobile" | "desktop" | "tablet" | "bot" | "unknown"
   return "unknown";
 }
 
+/** 헤더에 들어가는 한 줄짜리 익명 피드백 폼 (입력창 상시 노출). */
 export default function FeedbackForm() {
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
-  const fieldId = useId();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -66,58 +66,48 @@ export default function FeedbackForm() {
   }
 
   return (
-    <section className="flex flex-col rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-md backdrop-blur dark:border-slate-700/70 dark:bg-slate-800/80 lg:h-[560px]">
-      <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-        💬 의견 남기기
-      </h2>
-      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-        익명으로 전달됩니다. 개인정보는 저장하지 않아요.
-      </p>
-
-      <form onSubmit={submit} className="mt-3 flex flex-1 flex-col">
-        <label htmlFor={fieldId} className="sr-only">
-          의견
-        </label>
-        <textarea
-          id={fieldId}
+    // 안내 문구는 absolute로 띄워 헤더 높이를 밀지 않게 한다.
+    <div className="relative">
+      <form onSubmit={submit} className="flex items-center gap-1.5">
+        <input
+          type="text"
           value={message}
           maxLength={MAX_LENGTH}
+          aria-label="의견 남기기"
           onChange={(e) => {
             setMessage(e.target.value);
-            // 새로 입력을 시작하면 이전 전송 결과 문구를 치운다
+            // 다시 입력을 시작하면 이전 전송 결과 문구를 치운다
             if (done) setDone(false);
             if (error) setError("");
           }}
-          placeholder="불편한 점이나 추가했으면 하는 사이트를 알려주세요."
-          className="min-h-[120px] flex-1 resize-none rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-cyan-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
+          placeholder="의견을 남겨주세요"
+          className="h-8 w-full min-w-0 rounded-full border border-slate-300 bg-white/90 px-3 text-xs text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-cyan-500 dark:border-slate-600 dark:bg-slate-800/90 dark:text-slate-100 dark:placeholder:text-slate-500"
         />
-
-        <div className="mt-1 flex min-h-5 items-center justify-between gap-2">
-          <span className="text-xs">
-            {error && (
-              <span role="alert" className="text-red-500 dark:text-red-400">
-                {error}
-              </span>
-            )}
-            {done && !error && (
-              <span role="status" className="text-cyan-600 dark:text-cyan-400">
-                소중한 의견 감사합니다! 🙌
-              </span>
-            )}
-          </span>
-          <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
-            {message.length}/{MAX_LENGTH}
-          </span>
-        </div>
-
         <button
           type="submit"
           disabled={sending}
-          className="mt-2 w-full rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="h-8 shrink-0 rounded-full bg-cyan-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {sending ? "전송 중..." : "제출"}
+          {sending ? "전송 중" : "제출"}
         </button>
       </form>
-    </section>
+
+      {error && (
+        <p
+          role="alert"
+          className="absolute left-3 top-full mt-1 text-xs text-red-500 dark:text-red-400"
+        >
+          {error}
+        </p>
+      )}
+      {done && !error && (
+        <p
+          role="status"
+          className="absolute left-3 top-full mt-1 text-xs text-cyan-600 dark:text-cyan-400"
+        >
+          소중한 의견 감사합니다! 🙌
+        </p>
+      )}
+    </div>
   );
 }

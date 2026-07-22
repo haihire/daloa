@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import FeedbackForm from "./FeedbackForm";
 
-const PLACEHOLDER = /불편한 점이나 추가했으면 하는 사이트/;
+const PLACEHOLDER = "의견을 남겨주세요";
 
 function mockFetchOk() {
   return vi.fn().mockResolvedValue({

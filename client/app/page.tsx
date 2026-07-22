@@ -80,16 +80,20 @@ export default async function Home() {
           <div className="hidden xl:block" aria-hidden="true" />
 
           <main className="flex flex-col gap-2">
-            <header className="fade-in text-center">
-              <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-xl">
+            {/* sm 이상: 제목은 가운데 유지하고 폼을 우측에 띄운다.
+                right-12는 우상단에 fixed로 떠 있는 다크모드 토글(right-4 + 32px)과 겹치지 않을 만큼의 여백.
+                sm 미만: 폼이 제목 아래 한 줄로 내려간다. */}
+            <header className="fade-in relative flex flex-col items-center gap-2 sm:block sm:min-h-9">
+              <h1 className="text-center text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-xl">
                 로모아
               </h1>
+              <div className="w-full sm:absolute sm:right-12 sm:top-1/2 sm:w-72 sm:-translate-y-1/2">
+                <FeedbackForm />
+              </div>
             </header>
 
-            {/* 사이트 목록 우측에 피드백 폼. 좁은 화면(lg 미만)에서는 목록 아래로 접힌다. */}
-            <section className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_300px]">
+            <section className="flex flex-col gap-4">
               <SiteList sites={sites} />
-              <FeedbackForm />
             </section>
 
             <Suspense
