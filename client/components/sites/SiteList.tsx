@@ -247,7 +247,7 @@ export default function SiteList({ sites }: Props) {
         ) : (
           // 목록 전체가 드롭 영역. 여기 밖에서 놓으면 drop이 안 걸려 원위치된다.
           <ul
-            className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3"
+            className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 sm:gap-2 xl:grid-cols-3"
             onDragOver={(e) => {
               if (draggingHref) e.preventDefault();
             }}
@@ -323,7 +323,7 @@ export default function SiteList({ sites }: Props) {
                         window.open(site.href, "_blank", "noopener,noreferrer");
                       }
                     }}
-                    className={`relative flex h-full cursor-pointer select-none flex-col rounded-xl border p-3 transition-all duration-200 hover:-translate-y-0.5 ${
+                    className={`relative flex h-full cursor-pointer select-none flex-col rounded-xl border p-2 transition-all duration-200 hover:-translate-y-0.5 sm:p-3 ${
                       isFav
                         ? "border-blue-400 bg-blue-50 hover:border-blue-500 hover:bg-blue-50 dark:bg-blue-950/40 dark:border-blue-700 dark:hover:bg-blue-950/60"
                         : "border-slate-200 bg-slate-50 hover:border-cyan-300 hover:bg-cyan-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-cyan-700 dark:hover:bg-cyan-950/30"
@@ -387,19 +387,20 @@ export default function SiteList({ sites }: Props) {
                             }}
                           />
                         )}
-                        <span className="truncate font-semibold text-slate-900 dark:text-slate-100">
+                        <span className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100 sm:text-base">
                           {site.name}
                         </span>
                       </div>
+                      {/* 모바일은 아이콘+이름만 남겨 한 줄로 — 카테고리/설명은 sm부터 */}
                       <span
-                        className={`shrink-0 rounded-full px-2 py-0.5 text-xs text-white ${
+                        className={`hidden shrink-0 rounded-full px-2 py-0.5 text-xs text-white sm:inline-block ${
                           isFav ? "bg-blue-500" : "bg-slate-700 dark:bg-slate-600"
                         }`}
                       >
                         {site.category}
                       </span>
                     </div>
-                    <p className="mt-1.5 text-sm text-slate-600 dark:text-slate-400">
+                    <p className="mt-1.5 hidden text-sm text-slate-600 dark:text-slate-400 sm:block">
                       {site.description}
                     </p>
                   </div>
