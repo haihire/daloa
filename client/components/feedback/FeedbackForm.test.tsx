@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import FeedbackForm from "./FeedbackForm";
@@ -42,6 +42,8 @@ describe("FeedbackForm", () => {
   });
 
   afterEach(() => {
+    // 가짜 타이머를 쓴 테스트가 실패해도 다음 테스트로 새지 않도록 항상 되돌린다
+    vi.useRealTimers();
     localStorageMock.clear();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -117,35 +119,49 @@ describe("FeedbackForm", () => {
     });
   });
 
-  it("전송에 성공하면 감사 문구를 보여주고 입력창을 비운다", async () => {
+  it("전송에 성공하면 체크 표시가 뜨고 입력창이 비워진다", async () => {
     const user = userEvent.setup();
     render(<FeedbackForm />);
 
     await user.type(screen.getByPlaceholderText(PLACEHOLDER), "좋은 사이트네요");
     await user.click(screen.getByRole("button", { name: "제출" }));
 
-    expect(
-      await screen.findByText(/소중한 의견 감사합니다/),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent("✓");
     expect(screen.getByPlaceholderText(PLACEHOLDER)).toHaveValue("");
   });
 
-  it("전송 성공 후 다시 입력하면 감사 문구가 사라진다", async () => {
+  it("체크 표시는 3초 뒤 사라진다", async () => {
+    vi.useFakeTimers();
+    // userEvent는 내부 지연이 가짜 타이머와 얽혀 멈추므로 여기서만 fireEvent를 쓴다
+    const { container } = render(<FeedbackForm />);
+
+    fireEvent.change(screen.getByPlaceholderText(PLACEHOLDER), {
+      target: { value: "의견" },
+    });
+    fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+    // 가짜 타이머 중에는 waitFor가 진행되지 않으므로 fetch 프라미스를 직접 소진시킨다
+    await act(async () => {});
+    expect(screen.getByRole("status")).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+    });
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("전송 성공 후 다시 입력하면 체크 표시가 사라진다", async () => {
     const user = userEvent.setup();
     render(<FeedbackForm />);
 
     await user.type(screen.getByPlaceholderText(PLACEHOLDER), "첫 의견");
     await user.click(screen.getByRole("button", { name: "제출" }));
-    expect(
-      await screen.findByText(/소중한 의견 감사합니다/),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("status")).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText(PLACEHOLDER), "두번째");
 
     await waitFor(() => {
-      expect(
-        screen.queryByText(/소중한 의견 감사합니다/),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
     });
   });
 

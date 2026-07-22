@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { event as gaEvent } from "@/lib/gtag";
 import { readVisitStats } from "@/lib/visitor-stats";
 
@@ -21,6 +21,13 @@ export default function FeedbackForm() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+
+  // 전송 완료 체크는 3초만 보여준다
+  useEffect(() => {
+    if (!done) return;
+    const timer = setTimeout(() => setDone(false), 3000);
+    return () => clearTimeout(timer);
+  }, [done]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -96,6 +103,18 @@ export default function FeedbackForm() {
         >
           {sending ? "전송 중" : "제출"}
         </button>
+        {/* 자리를 항상 잡아둬 체크가 떴다 사라질 때 입력창 폭이 흔들리지 않게 한다 */}
+        <span className="flex w-4 shrink-0 justify-center">
+          {done && (
+            <span
+              role="status"
+              aria-label="전송 완료"
+              className="text-sm font-bold text-cyan-600 dark:text-cyan-400"
+            >
+              ✓
+            </span>
+          )}
+        </span>
       </form>
 
       {error && (
@@ -104,14 +123,6 @@ export default function FeedbackForm() {
           className="absolute left-3 top-full mt-1 text-xs text-red-500 dark:text-red-400"
         >
           {error}
-        </p>
-      )}
-      {done && !error && (
-        <p
-          role="status"
-          className="absolute left-3 top-full mt-1 text-xs text-cyan-600 dark:text-cyan-400"
-        >
-          소중한 의견 감사합니다! 🙌
         </p>
       )}
     </div>
