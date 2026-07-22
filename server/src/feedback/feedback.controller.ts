@@ -24,13 +24,24 @@ export class FeedbackController {
   create(
     @Req() req: Request,
     @Headers('x-telemetry-token') token: string | undefined,
-    @Body() body: { message?: string; path?: string; deviceType?: string },
+    @Body()
+    body: {
+      message?: string;
+      path?: string;
+      deviceType?: string;
+      visitDays?: unknown;
+      visitCount?: unknown;
+      firstSeenAt?: unknown;
+    },
   ) {
     this.assertAllowed(req, token);
     return this.feedback.submit({
       message: body?.message,
       path: body?.path,
       deviceType: body?.deviceType,
+      visitDays: body?.visitDays,
+      visitCount: body?.visitCount,
+      firstSeenAt: body?.firstSeenAt,
       clientIp: readClientIp(req),
     });
   }

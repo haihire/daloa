@@ -12,12 +12,37 @@ function mockFetchOk() {
   });
 }
 
+// 이 환경의 전역 localStorage는 Node의 빈 스텁이라 메서드가 없다.
+// 다른 테스트들과 동일하게 동작하는 목을 심어준다.
+const localStorageMock = (() => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, value: string) => {
+      store[key] = value;
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      store = {};
+    },
+  };
+})();
+
 describe("FeedbackForm", () => {
   beforeEach(() => {
+    // 방문 이력이 테스트 간에 새지 않도록 매번 비운다
+    localStorageMock.clear();
+    Object.defineProperty(window, "localStorage", {
+      value: localStorageMock,
+      writable: true,
+    });
     vi.stubGlobal("fetch", mockFetchOk());
   });
 
   afterEach(() => {
+    localStorageMock.clear();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -46,6 +71,49 @@ describe("FeedbackForm", () => {
       .calls[0];
     expect(JSON.parse(init.body as string)).toMatchObject({
       message: "검색이 느려요",
+    });
+  });
+
+  it("저장된 방문 이력이 있으면 요약을 함께 보낸다", async () => {
+    localStorage.setItem(
+      "loa_visit_stats",
+      JSON.stringify({
+        firstSeenAt: "2026-05-01",
+        lastVisitDay: "2026-07-21",
+        days: 12,
+        total: 32,
+      }),
+    );
+    const user = userEvent.setup();
+    render(<FeedbackForm />);
+
+    await user.type(screen.getByPlaceholderText(PLACEHOLDER), "단골 의견");
+    await user.click(screen.getByRole("button", { name: "제출" }));
+
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    const [, init] = (fetch as unknown as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      visitDays: 12,
+      visitCount: 32,
+      firstSeenAt: "2026-05-01",
+    });
+  });
+
+  it("방문 이력이 없으면 0으로 보낸다", async () => {
+    const user = userEvent.setup();
+    render(<FeedbackForm />);
+
+    await user.type(screen.getByPlaceholderText(PLACEHOLDER), "첫 방문 의견");
+    await user.click(screen.getByRole("button", { name: "제출" }));
+
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    const [, init] = (fetch as unknown as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      visitDays: 0,
+      visitCount: 0,
+      firstSeenAt: null,
     });
   });
 

@@ -9,9 +9,38 @@ interface Feedback {
   path: string;
   device_type: string;
   created_at: string;
+  visit_days: number;
+  visit_count: number;
+  first_seen_at: string | null;
 }
 
 const PAGE_SIZE = 20;
+/** 이 일수 이상 방문했으면 단골로 본다 */
+const REGULAR_VISIT_DAYS = 7;
+
+/**
+ * 방문 이력 뱃지. 작성자 브라우저가 스스로 센 값이라 참고용이다
+ * (캐시 삭제·기기 변경 시 초기화되고, 조작도 가능).
+ * visit_days 0 = 기능 배포 이전 데이터라 "첫 방문"과 구분한다.
+ */
+function visitorBadge(days: number): { label: string; className: string } {
+  if (days <= 0) {
+    return { label: "기록 없음", className: "bg-gray-100 text-gray-500" };
+  }
+  if (days >= REGULAR_VISIT_DAYS) {
+    return { label: "🔥 단골", className: "bg-orange-100 text-orange-700" };
+  }
+  if (days >= 2) {
+    return { label: "재방문", className: "bg-sky-100 text-sky-700" };
+  }
+  return { label: "첫 방문", className: "bg-slate-100 text-slate-600" };
+}
+
+function daysAgo(iso: string): number | null {
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return null;
+  return Math.floor((Date.now() - then.getTime()) / 86_400_000);
+}
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -114,6 +143,30 @@ export default function AdminFeedbackPage() {
                   <time dateTime={item.created_at}>
                     {formatDate(item.created_at)}
                   </time>
+                  {(() => {
+                    const badge = visitorBadge(item.visit_days);
+                    return (
+                      <span
+                        className={`rounded-full px-2 py-0.5 font-medium ${badge.className}`}
+                      >
+                        {badge.label}
+                      </span>
+                    );
+                  })()}
+                  {item.visit_days > 0 && (
+                    <span>
+                      방문 {item.visit_days}일 · {item.visit_count}회
+                      {item.first_seen_at &&
+                        (() => {
+                          const ago = daysAgo(item.first_seen_at);
+                          return ago === null
+                            ? null
+                            : ago <= 0
+                              ? " · 첫 방문 오늘"
+                              : ` · 첫 방문 ${ago}일 전`;
+                        })()}
+                    </span>
+                  )}
                   <span className="admin-badge admin-badge-neutral">
                     {item.device_type}
                   </span>

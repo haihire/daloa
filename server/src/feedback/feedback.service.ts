@@ -17,7 +17,28 @@ export interface FeedbackSubmitInput {
   message?: string;
   path?: string;
   deviceType?: string;
+  visitDays?: unknown;
+  visitCount?: unknown;
+  firstSeenAt?: unknown;
   clientIp: string;
+}
+
+/** 브라우저가 보내온 값이라 신뢰할 수 없다 — 말이 되는 범위로만 받는다. */
+const MAX_VISIT_STAT = 100_000;
+
+function clampVisitStat(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0) return 0;
+  return Math.min(MAX_VISIT_STAT, Math.trunc(raw));
+}
+
+/** YYYY-MM-DD만 받고, 미래 날짜나 형식 오류는 버린다. */
+function parseFirstSeenAt(raw: unknown): Date | null {
+  if (typeof raw !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+
+  const parsed = new Date(`${raw}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  if (parsed.getTime() > Date.now()) return null;
+  return parsed;
 }
 
 @Injectable()
@@ -47,6 +68,9 @@ export class FeedbackService {
       message,
       path: (input.path ?? '/').slice(0, 200),
       deviceType: input.deviceType ?? 'unknown',
+      visitDays: clampVisitStat(input.visitDays),
+      visitCount: clampVisitStat(input.visitCount),
+      firstSeenAt: parseFirstSeenAt(input.firstSeenAt),
     });
     return { ok: true, id };
   }

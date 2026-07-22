@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { recordVisit } from "@/lib/visitor-stats";
 
 function classifyDevice(userAgent: string): "mobile" | "desktop" | "tablet" | "bot" | "unknown" {
   const ua = userAgent.toLowerCase();
@@ -36,6 +37,9 @@ export default function MonitoringBeacon() {
 
   useEffect(() => {
     if (pathname.startsWith("/admin")) return;
+
+    // 브라우저 로컬 방문 카운터. 서버로 보내지 않고, 피드백 제출 시에만 요약이 첨부된다.
+    recordVisit();
 
     const userAgent = navigator.userAgent ?? "";
     const localeCountry =

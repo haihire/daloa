@@ -30,6 +30,9 @@ describe('FeedbackService', () => {
       message: '검색이 느려요',
       path: '/',
       deviceType: 'desktop',
+      visitDays: 0,
+      visitCount: 0,
+      firstSeenAt: null,
     });
     expect(result).toEqual({ ok: true, id: 42 });
   });
@@ -64,7 +67,84 @@ describe('FeedbackService', () => {
       message: '의견',
       path: '/',
       deviceType: 'unknown',
+      visitDays: 0,
+      visitCount: 0,
+      firstSeenAt: null,
     });
+  });
+
+  // 방문 이력은 브라우저가 보내는 값이라 신뢰할 수 없다 — 저장 전에 걸러야 한다.
+  it('방문 이력 요약을 그대로 저장한다', async () => {
+    const { service, repo } = createService();
+
+    await service.submit({
+      message: '의견',
+      visitDays: 12,
+      visitCount: 32,
+      firstSeenAt: '2026-05-01',
+      clientIp: '1.1.1.1',
+    });
+
+    expect(repo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        visitDays: 12,
+        visitCount: 32,
+        firstSeenAt: new Date('2026-05-01T00:00:00Z'),
+      }),
+    );
+  });
+
+  it('음수·소수·비정상 타입의 방문 수치는 0으로 떨어뜨린다', async () => {
+    const { service, repo } = createService();
+
+    await service.submit({
+      message: '의견',
+      visitDays: -5,
+      visitCount: '많이',
+      clientIp: '1.1.1.1',
+    });
+
+    expect(repo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ visitDays: 0, visitCount: 0 }),
+    );
+  });
+
+  it('터무니없이 큰 방문 수치는 상한으로 자른다', async () => {
+    const { service, repo } = createService();
+
+    await service.submit({
+      message: '의견',
+      visitDays: 99_999_999,
+      visitCount: 99_999_999,
+      clientIp: '1.1.1.1',
+    });
+
+    expect(repo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ visitDays: 100_000, visitCount: 100_000 }),
+    );
+  });
+
+  it('미래 날짜나 형식이 틀린 첫 방문일은 버린다', async () => {
+    const { service, repo } = createService();
+    const future = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+
+    await service.submit({
+      message: '의견',
+      firstSeenAt: future,
+      clientIp: '1.1.1.1',
+    });
+    expect(repo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ firstSeenAt: null }),
+    );
+
+    await service.submit({
+      message: '의견',
+      firstSeenAt: '2026/05/01',
+      clientIp: '2.2.2.2',
+    });
+    expect(repo.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({ firstSeenAt: null }),
+    );
   });
 
   it('같은 IP가 10분 내 6번째로 제출하면 429를 던진다', async () => {

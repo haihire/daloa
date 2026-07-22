@@ -7,12 +7,19 @@ export interface FeedbackRecord {
   path: string;
   device_type: string;
   created_at: Date;
+  /** 작성자 브라우저가 센 방문 이력 요약. 0 = 기록 없음(기능 배포 이전) */
+  visit_days: number;
+  visit_count: number;
+  first_seen_at: Date | null;
 }
 
 export interface FeedbackCreateInput {
   message: string;
   path: string;
   deviceType: string;
+  visitDays: number;
+  visitCount: number;
+  firstSeenAt: Date | null;
 }
 
 export interface FeedbackPage {
@@ -30,6 +37,9 @@ export class FeedbackRepository {
         message: input.message,
         path: input.path,
         device_type: input.deviceType,
+        visit_days: input.visitDays,
+        visit_count: input.visitCount,
+        first_seen_at: input.firstSeenAt,
       },
       select: { id: true },
     });
@@ -54,6 +64,9 @@ export class FeedbackRepository {
         path: row.path,
         device_type: row.device_type,
         created_at: row.created_at,
+        visit_days: row.visit_days,
+        visit_count: row.visit_count,
+        first_seen_at: row.first_seen_at,
       })),
       total,
     };

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { event as gaEvent } from "@/lib/gtag";
+import { readVisitStats } from "@/lib/visitor-stats";
 
 const MAX_LENGTH = 500;
 
@@ -37,6 +38,8 @@ export default function FeedbackForm() {
     setSending(true);
     setError("");
     try {
+      // 방문 이력 "요약"만 첨부한다 — 식별자는 보내지 않으므로 익명이 유지된다.
+      const visit = readVisitStats();
       const res = await fetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -44,6 +47,9 @@ export default function FeedbackForm() {
           message: trimmed,
           path: window.location.pathname,
           deviceType: detectDeviceType(),
+          visitDays: visit?.days ?? 0,
+          visitCount: visit?.total ?? 0,
+          firstSeenAt: visit?.firstSeenAt ?? null,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { message?: string };

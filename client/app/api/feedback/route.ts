@@ -61,6 +61,10 @@ export async function POST(req: NextRequest) {
         path: typeof body?.path === "string" ? body.path : "/",
         deviceType:
           typeof body?.deviceType === "string" ? body.deviceType : "unknown",
+        // 방문 이력 요약 (익명 — 식별자 아님). 검증/클램프는 Nest가 담당.
+        visitDays: body?.visitDays,
+        visitCount: body?.visitCount,
+        firstSeenAt: body?.firstSeenAt,
       }),
     });
 
