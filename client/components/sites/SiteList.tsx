@@ -3,7 +3,6 @@
 import { useSyncExternalStore } from "react";
 import type { Site } from "@/types";
 import { event as gaEvent } from "@/lib/gtag";
-import FeedbackButton from "@/components/feedback/FeedbackButton";
 
 interface Props {
   sites: Site[];
@@ -140,13 +139,7 @@ export default function SiteList({ sites }: Props) {
 
   return (
     <section className="flex max-h-[58vh] flex-col rounded-2xl border border-slate-200/70 bg-white/80 shadow-md backdrop-blur dark:border-slate-700/70 dark:bg-slate-800/80 sm:h-[560px] sm:max-h-none">
-      <div className="flex items-center justify-between gap-2 border-b border-slate-200/70 px-3 py-2 dark:border-slate-700/70">
-        <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-          사이트 모음
-        </h2>
-        <FeedbackButton />
-      </div>
-      <div className="stagger flex-1 overflow-y-auto rounded-b-2xl px-1 py-3 sm:px-2">
+      <div className="stagger flex-1 overflow-y-auto rounded-2xl px-1 py-3 sm:px-2">
         <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
           {sorted.map((site) => {
             const isFav = favSet.has(site.href);

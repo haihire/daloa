@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { after } from "next/server";
 import SiteList from "@/components/sites/SiteList";
+import FeedbackForm from "@/components/feedback/FeedbackForm";
 import StreamSection from "@/components/stream/StreamSection";
 import type { Site } from "@/types";
 import type { Metadata } from "next";
@@ -81,12 +82,14 @@ export default async function Home() {
           <main className="flex flex-col gap-2">
             <header className="fade-in text-center">
               <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-xl">
-                로모아 - 로아 사이트 모음
+                로모아
               </h1>
             </header>
 
-            <section className="flex flex-col gap-4">
+            {/* 사이트 목록 우측에 피드백 폼. 좁은 화면(lg 미만)에서는 목록 아래로 접힌다. */}
+            <section className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_300px]">
               <SiteList sites={sites} />
+              <FeedbackForm />
             </section>
 
             <Suspense
@@ -108,8 +111,6 @@ export default async function Home() {
                 <StreamSection />
               </div>
             </Suspense>
-
-
           </main>
 
           <div className="hidden xl:block" aria-hidden="true" />
