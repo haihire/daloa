@@ -358,12 +358,26 @@ describe("SiteList 즐겨찾기 드래그 정렬", () => {
     localStorageMock.clear();
   });
 
-  it("즐겨찾기 카드는 draggable이고 일반 카드는 draggable이 아니다", () => {
+  // 프리셋 탭으로도 끌 수 있어야 하므로 즐겨찾기 여부와 무관하게 전부 draggable이다.
+  it("모든 카드가 draggable이다", () => {
     localStorage.setItem("loa_favorites", JSON.stringify([A]));
     const { container } = render(<SiteList sites={DRAG_SITES} />);
 
     expect(cardFor(container, "가나다")).toHaveAttribute("draggable", "true");
-    expect(cardFor(container, "라마바")).toHaveAttribute("draggable", "false");
+    expect(cardFor(container, "라마바")).toHaveAttribute("draggable", "true");
+  });
+
+  it("즐겨찾기가 아닌 카드를 끌어도 즐겨찾기 순서는 바뀌지 않는다", () => {
+    localStorage.setItem("loa_favorites", JSON.stringify([A, B]));
+    const { container } = render(<SiteList sites={DRAG_SITES} />);
+    const dataTransfer = createDataTransfer();
+    const list = container.querySelector("ul") as HTMLElement;
+
+    fireEvent.dragStart(cardFor(container, "사아자"), { dataTransfer });
+    fireEvent.dragEnter(cardFor(container, "가나다"), { dataTransfer });
+    fireEvent.drop(list, { dataTransfer });
+
+    expect(storedFavorites()).toEqual([A, B]);
   });
 
   it("첫 즐겨찾기를 마지막 위로 드래그해 놓으면 저장 순서가 바뀐다", () => {
@@ -428,5 +442,175 @@ describe("SiteList 즐겨찾기 드래그 정렬", () => {
     fireEvent.drop(list, { dataTransfer });
 
     expect(storedFavorites()).toEqual([A, B]);
+  });
+});
+
+function storedPresets(): { id: string; name: string; hrefs: string[] }[] {
+  return JSON.parse(localStorage.getItem("loa_presets") || "[]");
+}
+
+function storedView(): string | null {
+  return localStorage.getItem("loa_active_view");
+}
+
+describe("SiteList 프리셋", () => {
+  beforeEach(() => {
+    localStorageMock.clear();
+    Object.defineProperty(window, "localStorage", {
+      value: localStorageMock,
+      writable: true,
+    });
+  });
+
+  afterEach(() => {
+    localStorageMock.clear();
+    vi.restoreAllMocks();
+  });
+
+  it("+ 버튼을 누르면 프리셋이 생기고 그 탭이 선택된다", async () => {
+    render(<SiteList sites={DRAG_SITES} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "프리셋 추가" }));
+
+    const presets = storedPresets();
+    expect(presets).toHaveLength(1);
+    expect(presets[0].name).toBe("프리셋1");
+    expect(storedView()).toBe(`preset:${presets[0].id}`);
+  });
+
+  it("카드를 프리셋 탭에 드롭하면 그 프리셋에 담긴다", async () => {
+    const { container } = render(<SiteList sites={DRAG_SITES} />);
+    await userEvent.click(screen.getByRole("button", { name: "프리셋 추가" }));
+    // 담는 대상을 고르려면 전체 탭으로 돌아가야 한다
+    await userEvent.click(screen.getByRole("button", { name: "전체" }));
+
+    const dataTransfer = createDataTransfer();
+    const tab = screen.getByRole("button", { name: "프리셋1" });
+    fireEvent.dragStart(cardFor(container, "라마바"), { dataTransfer });
+    fireEvent.dragOver(tab, { dataTransfer });
+    fireEvent.drop(tab, { dataTransfer });
+
+    expect(storedPresets()[0].hrefs).toEqual([B]);
+  });
+
+  it("프리셋 탭을 선택하면 담긴 사이트만 표시된다", async () => {
+    render(<SiteList sites={DRAG_SITES} />);
+    await userEvent.click(screen.getByRole("button", { name: "프리셋 추가" }));
+    const presetId = storedPresets()[0].id;
+    localStorage.setItem(
+      "loa_presets",
+      JSON.stringify([{ id: presetId, name: "프리셋1", hrefs: [C] }]),
+    );
+    // 저장소 변경을 알려 재렌더
+    fireEvent(window, new Event("loa_sites_store_changed"));
+
+    expect(screen.getByText("사아자")).toBeInTheDocument();
+    expect(screen.queryByText("가나다")).not.toBeInTheDocument();
+    expect(screen.queryByText("라마바")).not.toBeInTheDocument();
+  });
+
+  it("즐겨찾기 탭을 선택하면 즐겨찾기한 사이트만 표시된다", async () => {
+    localStorage.setItem("loa_favorites", JSON.stringify([B]));
+    render(<SiteList sites={DRAG_SITES} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "★ 즐겨찾기" }));
+
+    expect(screen.getByText("라마바")).toBeInTheDocument();
+    expect(screen.queryByText("가나다")).not.toBeInTheDocument();
+  });
+
+  it("마지막으로 본 탭이 저장되어 다시 열어도 유지된다", async () => {
+    const { unmount } = render(<SiteList sites={DRAG_SITES} />);
+    await userEvent.click(screen.getByRole("button", { name: "★ 즐겨찾기" }));
+    expect(storedView()).toBe("favorites");
+    unmount();
+
+    localStorage.setItem("loa_favorites", JSON.stringify([C]));
+    render(<SiteList sites={DRAG_SITES} />);
+
+    // 다시 렌더해도 즐겨찾기 탭이 유지되어 C만 보인다
+    expect(screen.getByText("사아자")).toBeInTheDocument();
+    expect(screen.queryByText("가나다")).not.toBeInTheDocument();
+  });
+
+  it("⊕ 버튼으로 프리셋에 담고 다시 눌러 뺄 수 있다", async () => {
+    render(<SiteList sites={DRAG_SITES} />);
+    await userEvent.click(screen.getByRole("button", { name: "프리셋 추가" }));
+    await userEvent.click(screen.getByRole("button", { name: "전체" }));
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "가나다 프리셋에 담기" }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: "프리셋1" }),
+    );
+    expect(storedPresets()[0].hrefs).toEqual([A]);
+
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: "프리셋1" }),
+    );
+    expect(storedPresets()[0].hrefs).toEqual([]);
+  });
+
+  it("프리셋 안에서 드래그하면 프리셋 순서만 바뀐다", () => {
+    localStorage.setItem("loa_favorites", JSON.stringify([A, B, C]));
+    localStorage.setItem(
+      "loa_presets",
+      JSON.stringify([{ id: "p1", name: "레이드", hrefs: [A, B, C] }]),
+    );
+    localStorage.setItem("loa_active_view", "preset:p1");
+    const { container } = render(<SiteList sites={DRAG_SITES} />);
+
+    const dataTransfer = createDataTransfer();
+    const list = container.querySelector("ul") as HTMLElement;
+    fireEvent.dragStart(cardFor(container, "가나다"), { dataTransfer });
+    fireEvent.dragEnter(cardFor(container, "사아자"), { dataTransfer });
+    fireEvent.drop(list, { dataTransfer });
+
+    expect(storedPresets()[0].hrefs).toEqual([B, C, A]);
+    // 즐겨찾기 순서는 건드리지 않는다
+    expect(storedFavorites()).toEqual([A, B, C]);
+  });
+
+  it("프리셋 이름을 바꾸면 저장된다", async () => {
+    localStorage.setItem(
+      "loa_presets",
+      JSON.stringify([{ id: "p1", name: "레이드", hrefs: [] }]),
+    );
+    localStorage.setItem("loa_active_view", "preset:p1");
+    render(<SiteList sites={DRAG_SITES} />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "레이드 이름 변경" }),
+    );
+    const input = screen.getByRole("textbox", { name: "프리셋 이름" });
+    await userEvent.clear(input);
+    await userEvent.type(input, "숙제{Enter}");
+
+    expect(storedPresets()[0].name).toBe("숙제");
+  });
+
+  it("프리셋을 삭제하면 목록에서 빠지고 전체 탭으로 돌아간다", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    localStorage.setItem(
+      "loa_presets",
+      JSON.stringify([{ id: "p1", name: "레이드", hrefs: [] }]),
+    );
+    localStorage.setItem("loa_active_view", "preset:p1");
+    render(<SiteList sites={DRAG_SITES} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "레이드 삭제" }));
+
+    expect(storedPresets()).toEqual([]);
+    expect(storedView()).toBe("all");
+  });
+
+  it("저장된 탭이 사라진 프리셋을 가리키면 전체 목록을 보여준다", () => {
+    localStorage.setItem("loa_active_view", "preset:없는id");
+    render(<SiteList sites={DRAG_SITES} />);
+
+    expect(screen.getByText("가나다")).toBeInTheDocument();
+    expect(screen.getByText("라마바")).toBeInTheDocument();
+    expect(screen.getByText("사아자")).toBeInTheDocument();
   });
 });
