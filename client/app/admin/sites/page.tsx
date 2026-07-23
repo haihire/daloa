@@ -108,6 +108,8 @@ export default function AdminSitesPage() {
   const [error, setError] = useState("");
   const [accessNotice, setAccessNotice] = useState("");
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
+  // 이름 필터 (버튼 없이 입력값으로 즉시 걸러냄)
+  const [query, setQuery] = useState("");
   const role = useAdminRole();
   const isGuest = role === "guest";
 
@@ -438,6 +440,13 @@ export default function AdminSitesPage() {
   const sortedSites = [...sites].sort(
     (a, b) => (b.click_count ?? 0) - (a.click_count ?? 0),
   );
+  // 이름 필터 — 공백만이면 전체 표시, 아니면 이름에 포함된 것만 (대소문자 무시)
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleSites = normalizedQuery
+    ? sortedSites.filter((site) =>
+        site.name.toLowerCase().includes(normalizedQuery),
+      )
+    : sortedSites;
 
   return (
     <div className="flex h-full flex-col">
@@ -578,6 +587,17 @@ export default function AdminSitesPage() {
           </p>
         </div>
       ) : (
+        <>
+        <div className="mb-4 shrink-0 max-w-xs">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="사이트 이름 검색"
+            aria-label="사이트 이름 검색"
+            className="admin-input"
+          />
+        </div>
         <div className="flex min-h-0 flex-1 items-stretch gap-4">
         <div className="admin-card overflow-hidden flex-1 min-w-0 flex flex-col">
           <div className="overflow-auto flex-1">
@@ -603,7 +623,19 @@ export default function AdminSitesPage() {
                 </tr>
               </thead>
               <tbody>
-                {sortedSites.map((site) => (
+                {visibleSites.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="py-8 text-center text-sm text-[color:var(--admin-text-muted)]"
+                    >
+                      {normalizedQuery
+                        ? `'${query.trim()}'에 해당하는 사이트가 없어요.`
+                        : "사이트가 없습니다."}
+                    </td>
+                  </tr>
+                )}
+                {visibleSites.map((site) => (
                   <tr
                     key={site.seq}
                     onClick={() => selectSite(site)}
@@ -762,6 +794,7 @@ export default function AdminSitesPage() {
           )}
         </div>
         </div>
+        </>
       )}
 
       {isProcessing && (
