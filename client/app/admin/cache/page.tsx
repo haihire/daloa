@@ -62,15 +62,18 @@ export default function AdminCachePage() {
   return (
     <div className="max-w-3xl">
       <div className="mb-8">
-        <h1 className="admin-page-title mb-2">Redis 캐시 무효화</h1>
+        {/* 게스트 안내는 제목 오른쪽에 붙인다. whitespace-pre로 정확히 2줄만 유지(추가 줄바꿈 방지) */}
+        <div className="mb-2 flex flex-wrap items-center gap-3">
+          <h1 className="admin-page-title">Redis 캐시 무효화</h1>
+          {accessNotice && (
+            <pre className="m-0 whitespace-pre rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs leading-tight text-amber-800">
+              {accessNotice}
+            </pre>
+          )}
+        </div>
         <p className="admin-page-subtitle">
           캐시를 삭제하면 다음 요청 시 DB에서 새로 조회합니다.
         </p>
-        {accessNotice && (
-          <pre className="mt-3 whitespace-pre-wrap rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            {accessNotice}
-          </pre>
-        )}
       </div>
 
       {isWorking && (

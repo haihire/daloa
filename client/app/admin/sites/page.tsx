@@ -443,10 +443,11 @@ export default function AdminSitesPage() {
     <div className="flex h-full flex-col">
       {/* 헤더 */}
       <div className="flex shrink-0 flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
-        <div>
+        {/* 게스트 안내는 제목 오른쪽에 붙인다. whitespace-pre로 정확히 2줄만 유지(추가 줄바꿈 방지) */}
+        <div className="flex flex-wrap items-center gap-3">
           <h1 className="admin-page-title">사이트 관리</h1>
           {accessNotice && (
-            <pre className="mt-3 whitespace-pre-wrap rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <pre className="m-0 whitespace-pre rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs leading-tight text-amber-800">
               {accessNotice}
             </pre>
           )}
