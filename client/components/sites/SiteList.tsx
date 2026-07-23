@@ -67,6 +67,8 @@ export default function SiteList({ sites }: Props) {
   // 목록 밖에 놓아 drop 없이 dragend가 오면 null로 되돌아가 원위치된다.
   const [dragOrder, setDragOrder] = useState<string[] | null>(null);
   const [draggingHref, setDraggingHref] = useState<string | null>(null);
+  // 이름 필터 (버튼 없이 입력값으로 즉시 걸러냄)
+  const [query, setQuery] = useState("");
   // 드래그 직후 브라우저가 click을 흘리면 사이트가 열려버리므로 한 번 무시한다.
   const justDragged = useRef(false);
 
@@ -222,9 +224,19 @@ export default function SiteList({ sites }: Props) {
     return "unknown";
   };
 
-  const emptyMessage = activePreset
-    ? "이 프리셋이 비어 있어요. 전체 탭에서 사이트를 끌어오거나 ⊕ 버튼으로 담아보세요."
-    : "즐겨찾기한 사이트가 없어요. 카드의 ★ 버튼을 눌러 추가해보세요.";
+  // 이름 필터 — 공백만이면 전체, 아니면 이름에 포함된 것만 (대소문자 무시)
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtered = normalizedQuery
+    ? visible.filter((site) =>
+        site.name.toLowerCase().includes(normalizedQuery),
+      )
+    : visible;
+
+  const emptyMessage = normalizedQuery
+    ? `‘${query.trim()}’에 해당하는 사이트가 없어요.`
+    : activePreset
+      ? "이 프리셋이 비어 있어요. 전체 탭에서 사이트를 끌어오거나 ⊕ 버튼으로 담아보세요."
+      : "즐겨찾기한 사이트가 없어요. 카드의 ★ 버튼을 눌러 추가해보세요.";
 
   return (
     <section className="flex max-h-[58vh] flex-col rounded-2xl border border-slate-200/70 bg-white/80 shadow-md backdrop-blur dark:border-slate-700/70 dark:bg-slate-800/80 sm:h-[560px] sm:max-h-none">
@@ -239,8 +251,19 @@ export default function SiteList({ sites }: Props) {
         onDropSite={addSiteToPreset}
       />
 
+      <div className="border-b border-slate-200/70 px-3 py-2 dark:border-slate-700/70">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="사이트 이름 검색"
+          aria-label="사이트 이름 검색"
+          className="w-full rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-cyan-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500"
+        />
+      </div>
+
       <div className="stagger flex-1 overflow-y-auto rounded-b-2xl px-1 py-3 sm:px-2">
-        {visible.length === 0 && view !== VIEW_ALL ? (
+        {filtered.length === 0 && (normalizedQuery !== "" || view !== VIEW_ALL) ? (
           <p className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
             {emptyMessage}
           </p>
@@ -253,7 +276,7 @@ export default function SiteList({ sites }: Props) {
             }}
             onDrop={handleDrop}
           >
-            {visible.map((site) => {
+            {filtered.map((site) => {
               const isFav = favSet.has(site.href);
               const favicon = faviconUrl(site.href); // 사이트당 1회만 파싱
               const rank = rankMap.get(site.href); // 클릭수 기준 순위 (없으면 미표시)
