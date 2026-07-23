@@ -127,17 +127,24 @@ export default function AdminFeedbackPage() {
           </pre>
         )}
       </div>
-      <p className="admin-page-subtitle">
-        메인 페이지에서 방문자가 익명으로 남긴 의견입니다. (총 {total}건)
-      </p>
-
       {error && (
         <div className="mt-4 rounded-lg border border-[color:var(--admin-danger)] bg-[color:var(--admin-danger-soft)] px-4 py-3 text-sm text-[color:var(--admin-danger)]">
           {error}
         </div>
       )}
 
-      <div className="admin-card mt-5 divide-y divide-[color:var(--admin-border)]">
+      {/* 총 건수는 리스트 우측 상단에 작게만 표시 */}
+      {total > 0 && (
+        <div className="mt-5 mb-1.5 text-right text-xs text-[color:var(--admin-text-muted)]">
+          총 {total}건
+        </div>
+      )}
+
+      <div
+        className={`admin-card divide-y divide-[color:var(--admin-border)] ${
+          total > 0 ? "" : "mt-5"
+        }`}
+      >
         {loading ? (
           <p className="px-5 py-10 text-center text-sm text-[color:var(--admin-text-muted)]">
             불러오는 중...
