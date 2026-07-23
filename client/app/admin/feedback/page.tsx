@@ -56,6 +56,8 @@ export default function AdminFeedbackPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  // 게스트가 쓰기(삭제)를 시도하면 제목 옆에 안내를 띄운다
+  const [accessNotice, setAccessNotice] = useState("");
   const role = useAdminRole();
   const isGuest = role === "guest";
 
@@ -82,11 +84,15 @@ export default function AdminFeedbackPage() {
     void load(page);
   }, [load, page]);
 
+  function requireMaster(action: string) {
+    if (!isGuest) return true;
+    setAccessNotice(buildGuestNotice(action));
+    return false;
+  }
+
   async function remove(id: number) {
-    if (isGuest) {
-      alert(buildGuestNotice("피드백 삭제"));
-      return;
-    }
+    if (!requireMaster("피드백 삭제")) return;
+
     if (!confirm("이 피드백을 삭제할까요? 되돌릴 수 없습니다.")) return;
 
     setDeletingId(id);
@@ -112,7 +118,15 @@ export default function AdminFeedbackPage() {
 
   return (
     <div>
-      <h1 className="admin-page-title">사용자 피드백</h1>
+      {/* 게스트 안내는 제목 오른쪽에 붙인다. whitespace-pre로 정확히 2줄만 유지(추가 줄바꿈 방지) */}
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="admin-page-title">사용자 피드백</h1>
+        {accessNotice && (
+          <pre className="m-0 whitespace-pre rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs leading-tight text-amber-800">
+            {accessNotice}
+          </pre>
+        )}
+      </div>
       <p className="admin-page-subtitle">
         메인 페이지에서 방문자가 익명으로 남긴 의견입니다. (총 {total}건)
       </p>
