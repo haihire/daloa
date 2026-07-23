@@ -7,7 +7,7 @@ import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/http-exception.filter';
 import { FileLoggerService } from './common/file-logger.service';
 import { KakaoService } from './kakao/kakao.service';
-import { AdminMonitoringService } from './admin/admin-monitoring.service';
+import { AdminMonitoringService } from './admin/monitoring/admin-monitoring.service';
 
 async function bootstrap() {
   const logger = new FileLoggerService();

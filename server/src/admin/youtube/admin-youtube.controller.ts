@@ -6,8 +6,8 @@ import {
   UseGuards,
   BadRequestException,
 } from '@nestjs/common';
-import { StreamersService } from '../streamers/streamers.service';
-import { AdminWriteGuard } from './admin.guard';
+import { StreamersService } from '../../streamers/streamers.service';
+import { AdminWriteGuard } from '../auth/admin.guard';
 
 @Controller('api/admin/youtube')
 @UseGuards(AdminWriteGuard)

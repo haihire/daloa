@@ -13,7 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { AdminGuard } from './admin.guard';
+import { AdminGuard } from '../auth/admin.guard';
 import { AdminMonitoringService } from './admin-monitoring.service';
 import { DockerStatsService } from './docker-stats.service';
 import { AiDiagnosisService, type ChatMessage } from './ai-diagnosis.service';

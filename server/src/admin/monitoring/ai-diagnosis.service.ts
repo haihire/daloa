@@ -10,7 +10,7 @@ import { DockerStatsService } from './docker-stats.service';
 import {
   MonitoringRepository,
   type ContainerName,
-} from './repositories/monitoring.repository';
+} from './monitoring.repository';
 import {
   INSTANCE_PRICING,
   BURST_NOTE,

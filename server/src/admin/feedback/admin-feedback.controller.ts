@@ -8,8 +8,8 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { FeedbackRepository } from '../feedback/feedback.repository';
-import { AdminGuard, AdminWriteGuard } from './admin.guard';
+import { FeedbackRepository } from '../../feedback/feedback.repository';
+import { AdminGuard, AdminWriteGuard } from '../auth/admin.guard';
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
