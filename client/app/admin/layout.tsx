@@ -9,6 +9,7 @@ const NAV = [
   { href: "/admin/containers", label: "컨테이너 현황" },
   { href: "/admin/sites", label: "사이트 관리" },
   { href: "/admin/inven", label: "사이트 추천" },
+  { href: "/admin/feedback", label: "사용자 피드백" },
 ];
 
 export default function AdminLayout({

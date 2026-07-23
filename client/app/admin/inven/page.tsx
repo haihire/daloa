@@ -54,13 +54,15 @@ export default function AdminInvenPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="admin-page-title">사이트 추천</h1>
-
-      {accessNotice && (
-        <pre className="whitespace-pre-wrap rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          {accessNotice}
-        </pre>
-      )}
+      {/* 안내는 absolute로 제목 오른쪽에 띄운다 — 떠도 아래 리스트가 밀리지 않게(레이아웃에서 빠짐) */}
+      <div className="relative w-fit">
+        <h1 className="admin-page-title">사이트 추천</h1>
+        {accessNotice && (
+          <pre className="absolute left-full top-1/2 my-0 ml-6 -translate-y-1/2 whitespace-pre rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs leading-tight text-amber-800">
+            {accessNotice}
+          </pre>
+        )}
+      </div>
 
       <CandidatesTab requireMaster={requireMaster} />
     </div>

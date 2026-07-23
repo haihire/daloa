@@ -1,6 +1,6 @@
 import { execFile } from 'child_process';
 import { DockerStatsService } from './docker-stats.service';
-import type { MonitoringRepository } from './repositories/monitoring.repository';
+import type { MonitoringRepository } from './monitoring.repository';
 
 jest.mock('child_process', () => ({ execFile: jest.fn() }));
 

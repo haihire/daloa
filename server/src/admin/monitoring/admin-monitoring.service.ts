@@ -4,7 +4,7 @@ import {
   type DeviceType,
   type VisitRow,
   MonitoringRepository,
-} from './repositories/monitoring.repository';
+} from './monitoring.repository';
 
 export interface AdminMonitoringDashboard {
   summary: {

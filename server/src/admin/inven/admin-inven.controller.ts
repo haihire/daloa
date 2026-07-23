@@ -9,12 +9,12 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { AdminGuard, AdminWriteGuard } from './admin.guard';
-import { AdminInvenRepository } from './repositories/admin-inven.repository';
+import { AdminGuard, AdminWriteGuard } from '../auth/admin.guard';
+import { AdminInvenRepository } from './admin-inven.repository';
 import { AdminInvenPipelineService } from './admin-inven-pipeline.service';
 import { SiteSuggestService } from './site-suggest.service';
-import { SitesRepository } from '../sites/sites.repository';
-import { SitesService } from '../sites/sites.service';
+import { SitesRepository } from '../../sites/sites.repository';
+import { SitesService } from '../../sites/sites.service';
 
 @Controller('api/admin/inven')
 @UseGuards(AdminGuard)

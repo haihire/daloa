@@ -9,11 +9,11 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import type Redis from 'ioredis';
-import { REDIS_CLIENT } from '../redis/redis.module';
+import { REDIS_CLIENT } from '../../redis/redis.module';
 import {
   AdminAuthRepository,
   type AdminRole,
-} from './repositories/admin-auth.repository';
+} from './admin-auth.repository';
 
 export type { AdminRole };
 
