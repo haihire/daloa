@@ -12,9 +12,9 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { SitesRepository } from '../sites/sites.repository';
-import { SitesService } from '../sites/sites.service';
-import { AdminGuard, AdminWriteGuard } from './admin.guard';
+import { SitesRepository } from '../../sites/sites.repository';
+import { SitesService } from '../../sites/sites.service';
+import { AdminGuard, AdminWriteGuard } from '../auth/admin.guard';
 
 @Controller('api/admin/sites')
 @UseGuards(AdminGuard)

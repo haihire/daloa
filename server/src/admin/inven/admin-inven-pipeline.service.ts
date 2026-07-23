@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { join } from 'path';
-import { AdminInvenRepository } from './repositories/admin-inven.repository';
+import { AdminInvenRepository } from './admin-inven.repository';
 import {
   SiteExtractorService,
   type CrawledPost,

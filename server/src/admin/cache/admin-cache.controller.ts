@@ -7,8 +7,8 @@ import {
   Inject,
 } from '@nestjs/common';
 import type { Redis } from 'ioredis';
-import { REDIS_CLIENT } from '../redis/redis.module';
-import { AdminWriteGuard } from './admin.guard';
+import { REDIS_CLIENT } from '../../redis/redis.module';
+import { AdminWriteGuard } from '../auth/admin.guard';
 
 const CACHE_KEYS: Record<string, string> = {
   sites: 'sites:all',

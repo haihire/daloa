@@ -7,7 +7,7 @@ import {
   MonitoringRepository,
   ContainerName,
   ContainerHistoryRow,
-} from './repositories/monitoring.repository';
+} from './monitoring.repository';
 
 const execFileAsync = promisify(execFile);
 

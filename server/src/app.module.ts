@@ -9,6 +9,7 @@ import { KakaoModule } from './kakao/kakao.module';
 import { StreamersModule } from './streamers/streamers.module';
 import { UsersModule } from './users/users.module';
 import { AdminModule } from './admin/admin.module';
+import { FeedbackModule } from './feedback/feedback.module';
 import { RevalidateService } from './revalidate/revalidate.service';
 import { PrismaModule } from './prisma/prisma.module';
 
@@ -29,6 +30,7 @@ const runScheduler =
     StreamersModule,
     UsersModule,
     AdminModule,
+    FeedbackModule,
     PrismaModule,
   ],
   providers: [RevalidateService],

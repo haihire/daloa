@@ -3,7 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import type {
   CrawledPost,
   SiteCandidateDraft,
-} from '../site-extractor.service';
+} from './site-extractor.service';
 
 export interface InvenPost {
   id: bigint;

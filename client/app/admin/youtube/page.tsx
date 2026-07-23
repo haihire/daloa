@@ -322,11 +322,12 @@ export default function AdminYoutubePage() {
       style={{ maxHeight: "calc(100vh - 64px)" }}
     >
       {/* 헤더 */}
-      <div className="flex items-end justify-between mb-5 shrink-0">
-        <div>
+      <div className="flex items-start justify-between mb-5 shrink-0">
+        {/* 안내는 absolute로 제목 오른쪽에 띄운다 — 떠도 아래 콘텐츠가 밀리지 않게(레이아웃에서 빠짐) */}
+        <div className="relative w-fit">
           <h1 className="admin-page-title">유튜브 인기 영상</h1>
           {accessNotice && (
-            <pre className="mt-3 whitespace-pre-wrap rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <pre className="absolute left-full top-1/2 my-0 ml-6 -translate-y-1/2 whitespace-pre rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs leading-tight text-amber-800">
               {accessNotice}
             </pre>
           )}

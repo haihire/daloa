@@ -1,7 +1,7 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { classifyStatBuild } from '../characters/characters.service';
-import { AdminCharactersRepository } from './repositories/admin-characters.repository';
-import { AdminGuard } from './admin.guard';
+import { classifyStatBuild } from '../../characters/characters.service';
+import { AdminCharactersRepository } from './admin-characters.repository';
+import { AdminGuard } from '../auth/admin.guard';
 
 @Controller('api/admin/characters')
 @UseGuards(AdminGuard)
