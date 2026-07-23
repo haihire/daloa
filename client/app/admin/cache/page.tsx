@@ -62,11 +62,11 @@ export default function AdminCachePage() {
   return (
     <div className="max-w-3xl">
       <div className="mb-8">
-        {/* 게스트 안내는 제목 오른쪽에 붙인다. whitespace-pre로 정확히 2줄만 유지(추가 줄바꿈 방지) */}
-        <div className="mb-2 flex flex-wrap items-center gap-3">
+        {/* 안내는 absolute로 제목 오른쪽에 띄운다 — 떠도 아래 콘텐츠가 밀리지 않게(레이아웃에서 빠짐) */}
+        <div className="relative mb-2 w-fit">
           <h1 className="admin-page-title">Redis 캐시 무효화</h1>
           {accessNotice && (
-            <pre className="m-0 whitespace-pre rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs leading-tight text-amber-800">
+            <pre className="absolute left-full top-1/2 my-0 ml-6 -translate-y-1/2 whitespace-pre rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs leading-tight text-amber-800">
               {accessNotice}
             </pre>
           )}
