@@ -322,7 +322,7 @@ export default function AdminYoutubePage() {
       style={{ maxHeight: "calc(100vh - 64px)" }}
     >
       {/* 헤더 */}
-      <div className="flex items-end justify-between mb-5 shrink-0">
+      <div className="flex items-start justify-between mb-5 shrink-0">
         {/* 게스트 안내는 제목 오른쪽에 붙인다. whitespace-pre로 정확히 2줄만 유지(추가 줄바꿈 방지) */}
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="admin-page-title">유튜브 인기 영상</h1>

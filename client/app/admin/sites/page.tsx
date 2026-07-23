@@ -442,7 +442,7 @@ export default function AdminSitesPage() {
   return (
     <div className="flex h-full flex-col">
       {/* 헤더 */}
-      <div className="flex shrink-0 flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+      <div className="flex shrink-0 flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
         {/* 게스트 안내는 제목 오른쪽에 붙인다. whitespace-pre로 정확히 2줄만 유지(추가 줄바꿈 방지) */}
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="admin-page-title">사이트 관리</h1>
