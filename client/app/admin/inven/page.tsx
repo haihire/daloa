@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { buildGuestNotice, useAdminRole } from "@/lib/admin-role";
+import { SITE_CATEGORIES } from "@/lib/site-categories";
 
 // ── 타입 ──────────────────────────────────────────────────────────────────────
 
@@ -166,7 +167,10 @@ function CandidatesTab({ requireMaster }: { requireMaster: (action: string) => b
     setForm({
       name: c.name || "",
       href: c.url,
-      category: c.category || "",
+      // 후보의 옛 카테고리가 고정 목록 밖이면 빈값으로 — select에 없는 값이 저장돼 CHECK 위반하는 것 방지
+      category: (SITE_CATEGORIES as readonly string[]).includes(c.category)
+        ? c.category
+        : "",
       description: c.description || "",
       icon: "",
     });
@@ -395,13 +399,30 @@ function CandidatesTab({ requireMaster }: { requireMaster: (action: string) => b
                   {(["name", "href", "category", "description", "icon"] as const).map((field) => (
                     <div key={field} className={field === "description" ? "col-span-2" : ""}>
                       <label className="admin-label capitalize">{field}</label>
-                      <input
-                        type="text"
-                        value={form[field]}
-                        disabled={saving}
-                        onChange={(e) => setForm((p) => ({ ...p, [field]: e.target.value }))}
-                        className="admin-input"
-                      />
+                      {field === "category" ? (
+                        // 승인 시 loa_sites에 그대로 저장되므로 CHECK 목록에서만 고른다
+                        <select
+                          value={form.category}
+                          disabled={saving}
+                          onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}
+                          className="admin-select"
+                        >
+                          <option value="">선택 안 함</option>
+                          {SITE_CATEGORIES.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          value={form[field]}
+                          disabled={saving}
+                          onChange={(e) => setForm((p) => ({ ...p, [field]: e.target.value }))}
+                          className="admin-input"
+                        />
+                      )}
                       {field === "icon" && aiIcon && aiIcon !== fetchedIcon && (
                         <div className="mt-2 flex items-center gap-3">
                           <span className="text-xs text-[color:var(--admin-text-muted)]">아이콘 선택</span>
