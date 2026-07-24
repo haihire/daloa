@@ -23,7 +23,9 @@ export interface AdminSessionPayload {
   role: AdminRole;
 }
 
-const SESSION_TTL = 60 * 60;
+// 클라이언트 쿠키 수명(client login route: 60*60*8)과 반드시 일치시킬 것.
+// 세션이 쿠키보다 먼저 죽으면 "로그인된 채로 write만 세션 없음" 증상이 난다.
+const SESSION_TTL = 60 * 60 * 8;
 const SESSION_PREFIX = 'admin:session:';
 
 @Injectable()
@@ -100,8 +102,12 @@ export class AdminAuthService implements OnModuleInit {
   }
 
   async verifySession(sessionId: string): Promise<AdminSessionPayload | null> {
-    const raw = await this.redis.get(`${SESSION_PREFIX}${sessionId}`);
+    const key = `${SESSION_PREFIX}${sessionId}`;
+    const raw = await this.redis.get(key);
     if (!raw) return null;
+    // 슬라이딩 만료: 활동이 있을 때마다 TTL을 갱신해 활성 사용자가
+    // 도중에 로그아웃되지 않도록 한다.
+    await this.redis.expire(key, SESSION_TTL);
     return JSON.parse(raw) as AdminSessionPayload;
   }
 
