@@ -28,14 +28,16 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  // afterFiles: app router의 route handler(/api/admin/* 등 쿠키·인증 처리)를 먼저 매칭하고,
-  // 매칭되는 핸들러가 없는 경로(예: /api/streamers/live)만 Nest 백엔드로 프록시한다.
-  // beforeFiles로 두면 이 rewrite가 모든 route handler를 가로채 admin 인증 쿠키가 깨진다.
+  // 매칭되는 핸들러가 없는 /api 경로(예: /api/streamers/live)만 Nest 백엔드로 프록시한다.
+  // 주의: afterFiles rewrite는 "정적 파일·정적 라우트" 뒤에, 그러나 "동적 라우트([id] 등)"
+  // '앞'에 검사된다. 그래서 /api/:path* 로 두면 /api/admin/sites/[id] 같은 동적 route handler가
+  // 이 rewrite에 먼저 잡혀 쿠키→x-admin-session 변환 없이 Nest로 프록시되고 "세션이 없습니다"가 뜬다.
+  // → 쿠키 인증이 필요한 /api/admin/* 은 negative lookahead로 제외해 항상 route handler를 타게 한다.
   rewrites: async () => ({
     afterFiles: [
       {
-        source: "/api/:path*",
-        destination: `${process.env.NEST_API_URL || "http://localhost:3001"}/api/:path*`,
+        source: "/api/:path((?!admin/).*)",
+        destination: `${process.env.NEST_API_URL || "http://localhost:3001"}/api/:path`,
       },
     ],
   }),
