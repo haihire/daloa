@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import { buildGuestNotice, useAdminRole } from "@/lib/admin-role";
+import { SITE_CATEGORIES } from "@/lib/site-categories";
 
 interface Site {
   seq: number;
@@ -79,21 +80,6 @@ function SiteCardPreview({ form }: { form: typeof EMPTY_FORM }) {
     </div>
   );
 }
-
-// 사이트 카테고리 고정 목록.
-// db/migrations/008_loa_sites_category_enum.sql 의 CHECK 목록 및
-// server/src/admin/inven/site-suggest.service.ts 의 CATEGORIES 와 반드시 같이 바꿀 것.
-const SITE_CATEGORIES = [
-  "계산기·툴",
-  "빌드·세팅",
-  "시세·경제",
-  "공략·정보",
-  "캐릭터·스펙",
-  "전투분석·통계",
-  "숙제·일정",
-  "커뮤니티",
-  "기타",
-] as const;
 
 const CATEGORY_TONE: Record<string, string> = {
   "계산기·툴": "border-amber-200 bg-amber-50 text-amber-700",
