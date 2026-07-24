@@ -19,8 +19,20 @@ export interface SiteSuggestion {
   icon: string;
 }
 
-// 사이트 관리에서 쓰는 카테고리와 결을 맞춘 추천 범위
-const CATEGORIES = ['정보', '커뮤니티', '거래', '방송', '공략', '도구', '기타'];
+// 사이트 관리에서 쓰는 카테고리와 동일한 고정 목록.
+// db/migrations/008_loa_sites_category_enum.sql 의 CHECK 목록 및
+// client/app/admin/sites/page.tsx 의 SITE_CATEGORIES 와 반드시 같이 바꿀 것.
+const CATEGORIES = [
+  '계산기·툴',
+  '빌드·세팅',
+  '시세·경제',
+  '공략·정보',
+  '캐릭터·스펙',
+  '전투분석·통계',
+  '숙제·일정',
+  '커뮤니티',
+  '기타',
+];
 
 interface SiteMeta {
   title: string;

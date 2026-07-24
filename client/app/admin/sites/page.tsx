@@ -80,24 +80,37 @@ function SiteCardPreview({ form }: { form: typeof EMPTY_FORM }) {
   );
 }
 
+// 사이트 카테고리 고정 목록.
+// db/migrations/008_loa_sites_category_enum.sql 의 CHECK 목록 및
+// server/src/admin/inven/site-suggest.service.ts 의 CATEGORIES 와 반드시 같이 바꿀 것.
+const SITE_CATEGORIES = [
+  "계산기·툴",
+  "빌드·세팅",
+  "시세·경제",
+  "공략·정보",
+  "캐릭터·스펙",
+  "전투분석·통계",
+  "숙제·일정",
+  "커뮤니티",
+  "기타",
+] as const;
+
+const CATEGORY_TONE: Record<string, string> = {
+  "계산기·툴": "border-amber-200 bg-amber-50 text-amber-700",
+  "빌드·세팅": "border-indigo-200 bg-indigo-50 text-indigo-700",
+  "시세·경제": "border-emerald-200 bg-emerald-50 text-emerald-700",
+  "공략·정보": "border-sky-200 bg-sky-50 text-sky-700",
+  "캐릭터·스펙": "border-violet-200 bg-violet-50 text-violet-700",
+  "전투분석·통계": "border-rose-200 bg-rose-50 text-rose-700",
+  "숙제·일정": "border-teal-200 bg-teal-50 text-teal-700",
+  커뮤니티: "border-blue-200 bg-blue-50 text-blue-700",
+  기타: "border-gray-200 bg-gray-100 text-gray-600",
+};
+
 function getCategoryTone(category: string | null) {
-  const value = (category ?? "").toLowerCase();
-
-  if (value.includes("공식") || value.includes("official")) {
-    return "border-sky-200 bg-sky-50 text-sky-700";
-  }
-  if (value.includes("커뮤니티") || value.includes("community")) {
-    return "border-violet-200 bg-violet-50 text-violet-700";
-  }
-  if (
-    value.includes("도구") ||
-    value.includes("tool") ||
-    value.includes("계산")
-  ) {
-    return "border-amber-200 bg-amber-50 text-amber-700";
-  }
-
-  return "border-gray-200 bg-gray-100 text-gray-600";
+  return (
+    CATEGORY_TONE[category ?? ""] ?? "border-gray-200 bg-gray-100 text-gray-600"
+  );
 }
 
 let sitesCache: Site[] | null = null;
@@ -530,15 +543,34 @@ export default function AdminSitesPage() {
                       className={field === "description" ? "col-span-2" : ""}
                     >
                       <label className="admin-label capitalize">{field}</label>
-                      <input
-                        type="text"
-                        value={form[field]}
-                        disabled={isProcessing}
-                        onChange={(e) =>
-                          setForm((p) => ({ ...p, [field]: e.target.value }))
-                        }
-                        className="admin-input"
-                      />
+                      {field === "category" ? (
+                        // 자유 입력이면 카테고리가 다시 난립하므로 고정 목록에서만 고른다
+                        <select
+                          value={form.category}
+                          disabled={isProcessing}
+                          onChange={(e) =>
+                            setForm((p) => ({ ...p, category: e.target.value }))
+                          }
+                          className="admin-select"
+                        >
+                          <option value="">선택 안 함</option>
+                          {SITE_CATEGORIES.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          value={form[field]}
+                          disabled={isProcessing}
+                          onChange={(e) =>
+                            setForm((p) => ({ ...p, [field]: e.target.value }))
+                          }
+                          className="admin-input"
+                        />
+                      )}
                     </div>
                   ))}
                 </div>
