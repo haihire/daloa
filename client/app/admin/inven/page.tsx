@@ -72,9 +72,21 @@ export default function AdminInvenPage() {
 
 // ── 추천 사이트 탭 ────────────────────────────────────────────────────────────
 
-type SiteForm = { name: string; href: string; category: string; description: string; icon: string };
+type SiteForm = {
+  name: string;
+  href: string;
+  category: string;
+  description: string;
+  icon: string;
+};
 
-const EMPTY_SITE_FORM: SiteForm = { name: "", href: "", category: "", description: "", icon: "" };
+const EMPTY_SITE_FORM: SiteForm = {
+  name: "",
+  href: "",
+  category: "",
+  description: "",
+  icon: "",
+};
 
 // 사이트 관리 탭과 동일한 카드 미리보기
 function SiteCardPreview({ form }: { form: SiteForm }) {
@@ -97,28 +109,48 @@ function SiteCardPreview({ form }: { form: SiteForm }) {
         <div className="flex min-w-0 items-center gap-1.5">
           {iconSrc && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={iconSrc} alt="" width={16} height={16} className="shrink-0 rounded-sm" />
+            <img
+              src={iconSrc}
+              alt=""
+              width={16}
+              height={16}
+              className="shrink-0 rounded-sm"
+            />
           )}
           <span className="truncate font-semibold text-[color:var(--admin-text)] text-sm">
-            {form.name || <span className="text-[color:var(--admin-text-subtle)]">이름</span>}
+            {form.name || (
+              <span className="text-[color:var(--admin-text-subtle)]">
+                이름
+              </span>
+            )}
           </span>
         </div>
-        <span className="admin-badge admin-badge-neutral">{form.category || "카테고리"}</span>
+        <span className="admin-badge admin-badge-neutral">
+          {form.category || "카테고리"}
+        </span>
       </div>
       <p className="mt-1.5 text-xs text-[color:var(--admin-text-muted)] line-clamp-2">
-        {form.description || <span className="text-[color:var(--admin-text-subtle)]">설명</span>}
+        {form.description || (
+          <span className="text-[color:var(--admin-text-subtle)]">설명</span>
+        )}
       </p>
     </div>
   );
 }
 
-function CandidatesTab({ requireMaster }: { requireMaster: (action: string) => boolean }) {
+function CandidatesTab({
+  requireMaster,
+}: {
+  requireMaster: (action: string) => boolean;
+}) {
   const [candidates, setCandidates] = useState<SiteCandidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState("");
   // 블랙리스트 등록 확인 모달 대상
-  const [confirmTarget, setConfirmTarget] = useState<SiteCandidate | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<SiteCandidate | null>(
+    null,
+  );
   // 사이트 추가 모달 대상 + 입력 폼
   const [addTarget, setAddTarget] = useState<SiteCandidate | null>(null);
   const [form, setForm] = useState<SiteForm>(EMPTY_SITE_FORM);
@@ -164,9 +196,10 @@ function CandidatesTab({ requireMaster }: { requireMaster: (action: string) => b
     if (!requireMaster("사이트 추가")) return;
     setAddTarget(c);
     setAiFilled(false);
+    console.log("c", c);
     setForm({
       name: c.name || "",
-      href: c.url,
+      href: c.domain ? `https://${c.domain}` : c.url || "",
       // 후보의 옛 카테고리가 고정 목록 밖이면 빈값으로 — select에 없는 값이 저장돼 CHECK 위반하는 것 방지
       category: (SITE_CATEGORIES as readonly string[]).includes(c.category)
         ? c.category
@@ -197,7 +230,9 @@ function CandidatesTab({ requireMaster }: { requireMaster: (action: string) => b
     setSuggesting(true);
     setFormError("");
     try {
-      const s = await apiFetch(`/site-candidates/${addTarget.id}/suggest`, { method: "POST" });
+      const s = await apiFetch(`/site-candidates/${addTarget.id}/suggest`, {
+        method: "POST",
+      });
       setForm((p) => ({
         ...p,
         name: (s.name as string) || p.name,
@@ -278,7 +313,10 @@ function CandidatesTab({ requireMaster }: { requireMaster: (action: string) => b
         <p className="text-sm text-[color:var(--admin-muted)]">
           검토 대기 {candidates.length}개
         </p>
-        <button onClick={load} className="text-xs text-blue-500 hover:underline">
+        <button
+          onClick={load}
+          className="text-xs text-blue-500 hover:underline"
+        >
           새로고침
         </button>
       </div>
@@ -297,11 +335,14 @@ function CandidatesTab({ requireMaster }: { requireMaster: (action: string) => b
       {/* 후보 카드 (도메인 + 언급 횟수 + 버튼) */}
       <div className="space-y-2">
         {candidates.map((c) => (
-          <div key={c.id} className="admin-card p-4 flex items-center justify-between gap-3">
+          <div
+            key={c.id}
+            className="admin-card p-4 flex items-center justify-between gap-3"
+          >
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <a
-                  href={c.url}
+                  href={c.domain ? `https://${c.domain}` : "#"}
                   target="_blank"
                   rel="noreferrer"
                   className="text-sm font-bold text-blue-600 hover:underline"
@@ -313,7 +354,7 @@ function CandidatesTab({ requireMaster }: { requireMaster: (action: string) => b
                 </span>
               </div>
               <a
-                href={c.url}
+                href={c.domain ? `https://${c.domain}` : "#"}
                 target="_blank"
                 rel="noreferrer"
                 className="text-[10px] text-[color:var(--admin-muted)] hover:underline block truncate mt-0.5"
@@ -396,15 +437,22 @@ function CandidatesTab({ requireMaster }: { requireMaster: (action: string) => b
               {/* 폼 */}
               <div className="flex-1 min-w-0">
                 <div className="grid grid-cols-2 gap-4">
-                  {(["name", "href", "category", "description", "icon"] as const).map((field) => (
-                    <div key={field} className={field === "description" ? "col-span-2" : ""}>
+                  {(
+                    ["name", "href", "category", "description", "icon"] as const
+                  ).map((field) => (
+                    <div
+                      key={field}
+                      className={field === "description" ? "col-span-2" : ""}
+                    >
                       <label className="admin-label capitalize">{field}</label>
                       {field === "category" ? (
                         // 승인 시 loa_sites에 그대로 저장되므로 CHECK 목록에서만 고른다
                         <select
                           value={form.category}
                           disabled={saving}
-                          onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}
+                          onChange={(e) =>
+                            setForm((p) => ({ ...p, category: e.target.value }))
+                          }
                           className="admin-select"
                         >
                           <option value="">선택 안 함</option>
@@ -419,19 +467,28 @@ function CandidatesTab({ requireMaster }: { requireMaster: (action: string) => b
                           type="text"
                           value={form[field]}
                           disabled={saving}
-                          onChange={(e) => setForm((p) => ({ ...p, [field]: e.target.value }))}
+                          onChange={(e) =>
+                            setForm((p) => ({ ...p, [field]: e.target.value }))
+                          }
                           className="admin-input"
                         />
                       )}
                       {field === "icon" && aiIcon && aiIcon !== fetchedIcon && (
                         <div className="mt-2 flex items-center gap-3">
-                          <span className="text-xs text-[color:var(--admin-text-muted)]">아이콘 선택</span>
-                          {[{ src: fetchedIcon, label: "기본" }, { src: aiIcon, label: "AI" }].map(({ src, label }) => (
+                          <span className="text-xs text-[color:var(--admin-text-muted)]">
+                            아이콘 선택
+                          </span>
+                          {[
+                            { src: fetchedIcon, label: "기본" },
+                            { src: aiIcon, label: "AI" },
+                          ].map(({ src, label }) =>
                             src ? (
                               <button
                                 key={label}
                                 type="button"
-                                onClick={() => setForm((p) => ({ ...p, icon: src }))}
+                                onClick={() =>
+                                  setForm((p) => ({ ...p, icon: src }))
+                                }
                                 className={`flex flex-col items-center gap-0.5 rounded border px-2 py-1 text-xs transition-colors ${
                                   form.icon === src
                                     ? "border-blue-400 bg-blue-50 text-blue-700"
@@ -439,17 +496,25 @@ function CandidatesTab({ requireMaster }: { requireMaster: (action: string) => b
                                 }`}
                               >
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={src} alt="" width={20} height={20} className="rounded-sm" />
+                                <img
+                                  src={src}
+                                  alt=""
+                                  width={20}
+                                  height={20}
+                                  className="rounded-sm"
+                                />
                                 {label}
                               </button>
-                            ) : null
-                          ))}
+                            ) : null,
+                          )}
                         </div>
                       )}
                     </div>
                   ))}
                 </div>
-                {formError && <p className="text-red-500 text-xs mt-2">{formError}</p>}
+                {formError && (
+                  <p className="text-red-500 text-xs mt-2">{formError}</p>
+                )}
                 <div className="flex gap-2 mt-5">
                   <button
                     onClick={submitAdd}
@@ -488,7 +553,10 @@ function CandidatesTab({ requireMaster }: { requireMaster: (action: string) => b
             confirmOverlayPressOnSelf.current = e.target === e.currentTarget;
           }}
           onClick={(e) => {
-            if (e.target === e.currentTarget && confirmOverlayPressOnSelf.current) {
+            if (
+              e.target === e.currentTarget &&
+              confirmOverlayPressOnSelf.current
+            ) {
               setConfirmTarget(null);
             }
             confirmOverlayPressOnSelf.current = false;
@@ -503,7 +571,8 @@ function CandidatesTab({ requireMaster }: { requireMaster: (action: string) => b
                 {confirmTarget.url}
               </p>
               <p className="text-xs text-[color:var(--admin-text-muted)] mt-1">
-                등록하면 추천 목록에서 사라지고, 다음 수집부터 다시 뜨지 않습니다.
+                등록하면 추천 목록에서 사라지고, 다음 수집부터 다시 뜨지
+                않습니다.
               </p>
             </div>
             <div className="flex gap-2 justify-end">
