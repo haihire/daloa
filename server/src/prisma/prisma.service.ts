@@ -16,11 +16,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     if (!connectionString) {
       throw new Error('DATABASE_URL is required for PrismaService');
     }
-    // PM2 cluster 2개 인스턴스 × max 6 = 총 12 커넥션.
-    // 부하테스트 실측(60 VU 부하 시 실사용 최대 12, 평균 6.77 — notes/적용/db-connection-pool-tuning.md)
-    // 대비 기존 기본값(인스턴스당 10, 총 20)이 과다 프로비저닝이라 축소.
+    // PM2 cluster 2개 인스턴스 × max 2 = 총 4 커넥션.
+    // 1차 축소(인스턴스당 6, 총 12) 실측 결과 DB active 쿼리가 항상 1~2개로 여유가 커
+    // 8/6 단계를 건너뛰고 최종 후보인 4까지 바로 축소 — notes/적용/db-connection-pool-tuning.md
     super({
-      adapter: new PrismaPg({ connectionString, max: 6 }, { schema }),
+      adapter: new PrismaPg({ connectionString, max: 2 }, { schema }),
     });
   }
   async onModuleInit() {
