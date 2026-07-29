@@ -15,6 +15,6 @@ describe('SiteSuggestService', () => {
 
   it('NVIDIA_API_KEY 없으면 호출 없이 예외', async () => {
     const svc = makeService({});
-    await expect(svc.suggest(input)).rejects.toThrow(/NVIDIA_API_KEY/);
+    await expect(svc.suggest(input)).rejects.toThrow(/설정되지 않았/);
   });
 });

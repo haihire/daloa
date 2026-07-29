@@ -60,13 +60,13 @@ export class SiteSuggestService {
     const baseURL =
       this.config.get<string>('NVIDIA_BASE_URL') ||
       'https://integrate.api.nvidia.com/v1';
-    // 모델은 .env(NVIDIA_MODEL)로 교체 가능 — 코드 수정 없이 바꾸기 위함
-    this.model =
-      this.config.get<string>('NVIDIA_MODEL') ||
-      'qwen/qwen3-next-80b-a3b-instruct';
-    this.client = apiKey ? new OpenAI({ apiKey, baseURL }) : null;
-    if (!apiKey) {
-      this.logger.warn('NVIDIA_API_KEY 미설정 — 사이트 AI 추천 비활성화');
+    // 모델은 .env(AI_MODEL)로 지정한다 — 코드에 모델명을 하드코딩하지 않음
+    this.model = this.config.get<string>('AI_MODEL') ?? '';
+    this.client = apiKey && this.model ? new OpenAI({ apiKey, baseURL }) : null;
+    if (!apiKey || !this.model) {
+      this.logger.warn(
+        'NVIDIA_API_KEY 또는 AI_MODEL 미설정 — 사이트 AI 추천 비활성화',
+      );
     }
 
     // axios가 실제로 연결할 IP를 lookup 단계에서 검사 → isSafeUrl 선검증과
@@ -111,7 +111,7 @@ export class SiteSuggestService {
   }): Promise<SiteSuggestion> {
     if (!this.client) {
       throw new ServiceUnavailableException(
-        'NVIDIA_API_KEY가 설정되지 않았습니다',
+        'AI 키 또는 모델(AI_MODEL)이 설정되지 않았습니다',
       );
     }
 
