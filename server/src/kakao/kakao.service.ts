@@ -1,8 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import * as fs from 'fs';
 import * as path from 'path';
+import type { Redis } from 'ioredis';
+import { acquireLock, releaseLock, runIfLockAcquired } from '../common/cron-lock.util';
+import { REDIS_CLIENT } from '../redis/redis.module';
 
 /**
  * 카카오톡 "나에게 보내기" 알림 서비스
@@ -34,7 +37,10 @@ export class KakaoService {
   private accessToken: string | null = null;
   private tokenExpiresAt = 0; // epoch ms
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+  ) {}
 
   /** 일반 텍스트 알림 전송 */
   async send(text: string): Promise<void> {
@@ -107,49 +113,63 @@ export class KakaoService {
       return this.accessToken;
     }
 
-    const refreshToken = this.config.get<string>('KAKAO_REFRESH_TOKEN');
-    const restApiKey = this.config.get<string>('KAKAO_REST_API_KEY');
-    const clientSecret = this.config.get<string>('KAKAO_CLIENT_SECRET');
-
-    if (!refreshToken || !restApiKey) {
-      this.logger.warn('KAKAO_REST_API_KEY 또는 KAKAO_REFRESH_TOKEN 미설정');
+    // PM2 cluster 다른 워커도 알림을 보내려다 동시에 여기 도달할 수 있음.
+    // 리프레시 토큰 만료 D-30 이내엔 카카오가 새 리프레시 토큰을 함께
+    // 내려주는데, 두 워커가 동시에 갱신 요청을 보내면 로테이션이 꼬여
+    // (한쪽이 방금 무효화된 토큰으로 재시도) 알림이 완전히 끊길 수 있음.
+    // 락을 못 잡으면 이번 알림 하나만 스킵 — 다음 시도 때 재시도하면 됨.
+    const locked = await acquireLock(this.redis, 'kakaoTokenRefresh', 15);
+    if (!locked) {
+      this.logger.debug('다른 워커가 이미 토큰 갱신 중 — 이번 알림 스킵');
       return null;
     }
+    try {
+      const refreshToken = this.config.get<string>('KAKAO_REFRESH_TOKEN');
+      const restApiKey = this.config.get<string>('KAKAO_REST_API_KEY');
+      const clientSecret = this.config.get<string>('KAKAO_CLIENT_SECRET');
 
-    const body = new URLSearchParams({
-      grant_type: 'refresh_token',
-      client_id: restApiKey,
-      refresh_token: refreshToken,
-    });
+      if (!refreshToken || !restApiKey) {
+        this.logger.warn('KAKAO_REST_API_KEY 또는 KAKAO_REFRESH_TOKEN 미설정');
+        return null;
+      }
 
-    // 클라이언트 시크릿 활성화 시 필수
-    if (clientSecret) body.set('client_secret', clientSecret);
+      const body = new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: restApiKey,
+        refresh_token: refreshToken,
+      });
 
-    const res = await fetch('https://kauth.kakao.com/oauth/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
-    });
+      // 클라이언트 시크릿 활성화 시 필수
+      if (clientSecret) body.set('client_secret', clientSecret);
 
-    if (!res.ok) {
-      this.logger.error(`액세스 토큰 갱신 실패: ${res.status}`);
-      return null;
+      const res = await fetch('https://kauth.kakao.com/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+      });
+
+      if (!res.ok) {
+        this.logger.error(`액세스 토큰 갱신 실패: ${res.status}`);
+        return null;
+      }
+
+      const data = (await res.json()) as {
+        access_token: string;
+        expires_in: number;
+        refresh_token?: string;
+      };
+
+      this.accessToken = data.access_token;
+      this.tokenExpiresAt = Date.now() + data.expires_in * 1000;
+
+      if (data.refresh_token) {
+        await this.updateRefreshToken(data.refresh_token);
+      }
+
+      return this.accessToken;
+    } finally {
+      await releaseLock(this.redis, 'kakaoTokenRefresh').catch(() => {});
     }
-
-    const data = (await res.json()) as {
-      access_token: string;
-      expires_in: number;
-      refresh_token?: string;
-    };
-
-    this.accessToken = data.access_token;
-    this.tokenExpiresAt = Date.now() + data.expires_in * 1000;
-
-    if (data.refresh_token) {
-      await this.updateRefreshToken(data.refresh_token);
-    }
-
-    return this.accessToken;
   }
 
   /**
@@ -158,6 +178,14 @@ export class KakaoService {
    */
   @Cron('0 0 9 * * *')
   async checkRefreshTokenExpiry(): Promise<void> {
+    // PM2 cluster 두 워커가 동시에 리프레시 토큰을 갱신하면 토큰 로테이션이
+    // 꼬여(한쪽이 방금 무효화된 토큰으로 재시도) 카톡 알림이 완전히 끊길 수 있음 — 락으로 차단.
+    await runIfLockAcquired(this.redis, 'kakaoRefreshTokenCheck', () =>
+      this.checkRefreshTokenExpiryJob(),
+    );
+  }
+
+  private async checkRefreshTokenExpiryJob(): Promise<void> {
     const issuedAtStr =
       process.env['KAKAO_REFRESH_TOKEN_ISSUED_AT'] ??
       this.config.get<string>('KAKAO_REFRESH_TOKEN_ISSUED_AT');

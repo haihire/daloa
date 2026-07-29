@@ -1,4 +1,5 @@
 import { execFile } from 'child_process';
+import type { Redis } from 'ioredis';
 import { DockerStatsService } from './docker-stats.service';
 import type { MonitoringRepository } from './monitoring.repository';
 
@@ -15,8 +16,10 @@ function createService() {
     findDockerMetricSeries,
     deleteDockerMetricsOlderThan,
   } as unknown as MonitoringRepository;
+  // 크론 분산 락(runIfLockAcquired)이 항상 락을 잡은 것처럼 동작하도록 set은 'OK' 반환.
+  const redis = { set: jest.fn().mockResolvedValue('OK') } as unknown as Redis;
   return {
-    service: new DockerStatsService(repo),
+    service: new DockerStatsService(repo, redis),
     saveDockerMetric,
     findDockerMetricSeries,
   };

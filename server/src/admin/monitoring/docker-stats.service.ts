@@ -1,8 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { execFile } from 'child_process';
 import { readFile } from 'fs/promises';
 import { promisify } from 'util';
+import type { Redis } from 'ioredis';
+import { runIfLockAcquired } from '../../common/cron-lock.util';
+import { REDIS_CLIENT } from '../../redis/redis.module';
 import {
   MonitoringRepository,
   ContainerName,
@@ -97,7 +100,10 @@ function toMb(bytes: number): number {
 export class DockerStatsService {
   private readonly logger = new Logger(DockerStatsService.name);
 
-  constructor(private readonly monitoringRepo: MonitoringRepository) {}
+  constructor(
+    private readonly monitoringRepo: MonitoringRepository,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+  ) {}
 
   async getContainerStats(): Promise<ContainerStat[]> {
     try {
@@ -207,36 +213,43 @@ export class DockerStatsService {
 
   @Cron('0 */5 * * * *')
   async saveContainerStats(): Promise<void> {
-    try {
-      const stats = await this.getContainerStats();
-      for (const stat of stats) {
-        const container = stat.label as ContainerName;
-        if (!VALID_CONTAINERS.includes(container)) continue;
-        await this.monitoringRepo.saveDockerMetric(container, {
-          cpuPercent: stat.cpuPercent,
-          memUsedMb: stat.memUsedMb,
-          memTotalMb: stat.memTotalMb,
-          memPercent: stat.memPercent,
-        });
+    await runIfLockAcquired(this.redis, 'saveContainerStats', async () => {
+      try {
+        const stats = await this.getContainerStats();
+        for (const stat of stats) {
+          const container = stat.label as ContainerName;
+          if (!VALID_CONTAINERS.includes(container)) continue;
+          await this.monitoringRepo.saveDockerMetric(container, {
+            cpuPercent: stat.cpuPercent,
+            memUsedMb: stat.memUsedMb,
+            memTotalMb: stat.memTotalMb,
+            memPercent: stat.memPercent,
+          });
+        }
+      } catch (err: unknown) {
+        this.logger.warn(
+          `docker stats save failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
-    } catch (err: unknown) {
-      this.logger.warn(
-        `docker stats save failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
+    });
   }
 
   @Cron('0 30 3 * * *')
   async cleanupContainerMetrics(): Promise<void> {
-    try {
-      for (const container of VALID_CONTAINERS) {
-        await this.monitoringRepo.deleteDockerMetricsOlderThan(container, 9);
+    await runIfLockAcquired(this.redis, 'cleanupContainerMetrics', async () => {
+      try {
+        for (const container of VALID_CONTAINERS) {
+          await this.monitoringRepo.deleteDockerMetricsOlderThan(
+            container,
+            9,
+          );
+        }
+      } catch (err: unknown) {
+        this.logger.warn(
+          `docker metrics cleanup failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
-    } catch (err: unknown) {
-      this.logger.warn(
-        `docker metrics cleanup failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
+    });
   }
 
   async getHostStats(): Promise<HostStats | null> {
