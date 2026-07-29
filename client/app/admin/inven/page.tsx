@@ -127,10 +127,6 @@ function CandidatesTab({ requireMaster }: { requireMaster: (action: string) => b
   // AI 추천 생성 후 모달을 채웠는지 표시 (안내 문구용)
   const [aiFilled, setAiFilled] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
-  // AI가 추천한 아이콘 (og:image 자동 fetch와 별도 보관 → 선택 UI)
-  const [aiIcon, setAiIcon] = useState<string>("");
-  // 자동 fetch로 가져온 기본 아이콘 (AI 선택 후에도 복구 가능하도록 보관)
-  const [fetchedIcon, setFetchedIcon] = useState<string>("");
   // 경쟁 상태 방지: 현재 열린 후보 ID와 응답 대상 ID가 다르면 폼 갱신 무시.
   // 값은 setter의 함수형 업데이트(cur) 안에서만 읽으므로 값 바인딩은 생략.
   const [, setActiveFetchId] = useState<number | null>(null);
@@ -176,14 +172,18 @@ function CandidatesTab({ requireMaster }: { requireMaster: (action: string) => b
     });
     setFormError("");
     setActiveFetchId(c.id);
-    // 모달 열리자마자 og:image 자동 fetch (Gemini 없이)
+    // 모달 열리자마자 name·icon 자동 fetch (AI 없이, 결정론적: 제목 앞부분 / favicon)
     apiFetch(`/site-candidates/${c.id}/icon`)
       .then((res) => {
         setActiveFetchId((cur) => {
-          if (cur === c.id && res.icon) {
-            const iconUrl = res.icon as string;
-            setForm((p) => ({ ...p, icon: iconUrl }));
-            setFetchedIcon(iconUrl);
+          if (cur === c.id) {
+            const name = res.name as string | undefined;
+            const iconUrl = res.icon as string | undefined;
+            setForm((p) => ({
+              ...p,
+              ...(name ? { name } : {}),
+              ...(iconUrl ? { icon: iconUrl } : {}),
+            }));
           }
           return cur;
         });
@@ -198,13 +198,12 @@ function CandidatesTab({ requireMaster }: { requireMaster: (action: string) => b
     setFormError("");
     try {
       const s = await apiFetch(`/site-candidates/${addTarget.id}/suggest`, { method: "POST" });
+      // AI는 카테고리·설명만 채운다 (이름·아이콘은 모달 열 때 결정론적으로 채움)
       setForm((p) => ({
         ...p,
-        name: (s.name as string) || p.name,
         category: (s.category as string) || p.category,
         description: (s.description as string) || p.description,
       }));
-      if (s.icon) setAiIcon(s.icon as string);
       setAiFilled(true);
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "AI 추천 실패");
@@ -219,8 +218,6 @@ function CandidatesTab({ requireMaster }: { requireMaster: (action: string) => b
     setFormError("");
     setAiFilled(false);
     setSuggesting(false);
-    setAiIcon("");
-    setFetchedIcon("");
     setActiveFetchId(null);
   };
 
@@ -374,7 +371,7 @@ function CandidatesTab({ requireMaster }: { requireMaster: (action: string) => b
                   onClick={runAiSuggest}
                   disabled={saving || suggesting}
                   className="admin-btn admin-btn-secondary text-xs px-3 py-1 whitespace-nowrap"
-                  title="Gemini로 이름·카테고리·설명·아이콘을 추천받아 폼을 채웁니다"
+                  title="AI로 카테고리·설명을 추천받아 채웁니다 (이름·아이콘은 자동)"
                 >
                   {suggesting ? "AI 추천 중..." : "✨ AI 추천"}
                 </button>
@@ -422,29 +419,6 @@ function CandidatesTab({ requireMaster }: { requireMaster: (action: string) => b
                           onChange={(e) => setForm((p) => ({ ...p, [field]: e.target.value }))}
                           className="admin-input"
                         />
-                      )}
-                      {field === "icon" && aiIcon && aiIcon !== fetchedIcon && (
-                        <div className="mt-2 flex items-center gap-3">
-                          <span className="text-xs text-[color:var(--admin-text-muted)]">아이콘 선택</span>
-                          {[{ src: fetchedIcon, label: "기본" }, { src: aiIcon, label: "AI" }].map(({ src, label }) => (
-                            src ? (
-                              <button
-                                key={label}
-                                type="button"
-                                onClick={() => setForm((p) => ({ ...p, icon: src }))}
-                                className={`flex flex-col items-center gap-0.5 rounded border px-2 py-1 text-xs transition-colors ${
-                                  form.icon === src
-                                    ? "border-blue-400 bg-blue-50 text-blue-700"
-                                    : "border-[color:var(--admin-border)] text-[color:var(--admin-text-muted)] hover:border-blue-300"
-                                }`}
-                              >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={src} alt="" width={20} height={20} className="rounded-sm" />
-                                {label}
-                              </button>
-                            ) : null
-                          ))}
-                        </div>
                       )}
                     </div>
                   ))}

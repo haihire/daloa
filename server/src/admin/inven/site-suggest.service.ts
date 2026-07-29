@@ -37,14 +37,14 @@ const CATEGORIES = [
 interface SiteMeta {
   title: string;
   description: string;
-  ogImage: string;
+  favicon: string;
 }
 
 /**
- * 추천 후보(사이트)에 대해 NVIDIA NIM(OpenAI 호환)으로
- * name/category/description/icon을 생성한다.
+ * 추천 후보(사이트)의 category·description을 AI로 생성한다.
+ * name(페이지 제목 앞부분)·icon(favicon)은 AI 없이 결정론적으로 뽑는다.
  * 자동 실행 없음 — 관리자가 모달에서 버튼을 누를 때만 호출되므로 토큰은 그때만 소모된다.
- * (NVIDIA_API_KEY가 없으면 비활성.)
+ * (키/모델 미설정 시 비활성.)
  */
 @Injectable()
 export class SiteSuggestService {
@@ -89,8 +89,14 @@ export class SiteSuggestService {
         if (resolved.some((r) => this.isPrivateIp(r.address))) {
           return callback(new Error('사설 IP 접근이 차단되었습니다'), '', 4);
         }
-        const first = resolved[0];
-        callback(null, first.address, first.family);
+        // Node가 all:true로 호출하면(모던 Node의 autoSelectFamily/happy-eyeballs)
+        // 주소 '배열'을 기대한다. dnsLookup이 준 형태를 보존하지 않으면
+        // ERR_INVALID_IP_ADDRESS로 외부 fetch가 전부 실패한다.
+        if (Array.isArray(address)) {
+          callback(null, address);
+        } else {
+          callback(null, address, family);
+        }
       });
     };
     this.httpAgent = new http.Agent({ keepAlive: false, lookup: secureLookup });
@@ -100,13 +106,23 @@ export class SiteSuggestService {
     });
   }
 
-  /** og:image 또는 파비콘 URL만 반환한다 (AI 호출 없음). */
-  async fetchIcon(input: { url: string; domain: string }): Promise<string> {
+  /**
+   * 모달 열 때 자동 채울 name·icon을 한 번의 fetch로 반환한다 (AI 호출 없음).
+   * name = 페이지 제목 앞부분, icon = favicon(없으면 google favicon).
+   */
+  async fetchNameAndIcon(input: {
+    url: string;
+    domain: string;
+  }): Promise<{ name: string; icon: string }> {
     const meta = await this.fetchMeta(input.url);
-    return (
-      meta.ogImage ||
-      `https://www.google.com/s2/favicons?domain=${input.domain}&sz=64`
-    );
+    return {
+      name: nameFromTitle(meta.title, input.domain),
+      icon: meta.favicon || this.googleFavicon(input.domain),
+    };
+  }
+
+  private googleFavicon(domain: string): string {
+    return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
   }
 
   /** 사이트 메타를 fetch해 NVIDIA NIM으로 추천 필드를 생성한다. */
@@ -124,18 +140,15 @@ export class SiteSuggestService {
 
     const prompt = [
       '너는 로스트아크(게임) 관련 웹사이트를 분류하는 도우미야.',
-      '아래 사이트 정보를 보고 한국어로 추천해서 JSON 객체만 출력해.',
-      '- name: 사이트의 간결한 이름 (한국어 또는 영문)',
+      '아래 사이트 정보를 보고 한국어로 category와 description을 정해서 JSON 객체만 출력해.',
       `- category: 반드시 다음 중 하나 — ${CATEGORIES.join(', ')}`,
       '- description: 어떤 사이트인지 30자 이내 한 문장',
-      '- icon: 사이트 대표 로고/og:image의 절대 URL. 확실하지 않으면 빈 문자열 ""',
-      'JSON 키는 name, category, description, icon 네 개만.',
+      'JSON 키는 category, description 두 개만.',
       '',
       `도메인: ${input.domain}`,
       `URL: ${input.url}`,
       meta.title ? `페이지 제목: ${meta.title}` : '',
       meta.description ? `메타 설명: ${meta.description}` : '',
-      meta.ogImage ? `og:image: ${meta.ogImage}` : '',
     ]
       .filter(Boolean)
       .join('\n');
@@ -171,11 +184,6 @@ export class SiteSuggestService {
     }
 
     const parsed = this.parse(raw);
-    // icon fallback: AI → og:image → google favicon
-    const icon =
-      parsed.icon?.trim() ||
-      meta.ogImage ||
-      `https://www.google.com/s2/favicons?domain=${input.domain}&sz=64`;
 
     // enum을 강제하지만, 모델이 범위 밖 값을 내도 '기타'로 방어
     const category =
@@ -184,11 +192,12 @@ export class SiteSuggestService {
         ? parsed.category.trim()
         : '기타';
 
+    // name·icon은 AI가 아니라 결정론적으로 (제목 앞부분 / favicon)
     return {
-      name: parsed.name?.trim() || input.domain,
+      name: nameFromTitle(meta.title, input.domain),
       category,
       description: parsed.description?.trim() || '',
-      icon,
+      icon: meta.favicon || this.googleFavicon(input.domain),
     };
   }
 
@@ -207,12 +216,12 @@ export class SiteSuggestService {
     }
   }
 
-  /** 사이트 메타(title/description/og:image) 추출. 실패/위험 URL이면 빈 값 반환(추천은 진행). */
+  /** 사이트 메타(title/description/favicon) 추출. 실패/위험 URL이면 빈 값 반환(추천은 진행). */
   private async fetchMeta(url: string): Promise<SiteMeta> {
     // SSRF 방어: 크롤된 미검증 URL이므로 내부망/메타데이터 요청 차단
     if (!(await this.isSafeUrl(url))) {
       this.logger.warn(`안전하지 않은 URL — 메타 fetch 스킵: ${url}`);
-      return { title: '', description: '', ogImage: '' };
+      return { title: '', description: '', favicon: '' };
     }
     try {
       const res = await axios.get<string>(url, {
@@ -236,20 +245,23 @@ export class SiteSuggestService {
         $('meta[name="description"]').attr('content')?.trim() ||
         $('meta[property="og:description"]').attr('content')?.trim() ||
         '';
-      let ogImage =
-        $('meta[property="og:image"]').attr('content')?.trim() || '';
-      // 상대 경로(/logo.png 등)는 대상 사이트 기준 절대 URL로 변환
-      if (ogImage) {
+      // favicon: <link rel="icon">(shortcut icon 포함) → apple-touch-icon 순
+      let favicon =
+        $('link[rel~="icon"]').attr('href')?.trim() ||
+        $('link[rel="apple-touch-icon"]').attr('href')?.trim() ||
+        '';
+      // 상대 경로(favicon.png, /favicon.ico 등)는 대상 사이트 기준 절대 URL로 변환
+      if (favicon) {
         try {
-          ogImage = new URL(ogImage, url).href;
+          favicon = new URL(favicon, url).href;
         } catch {
-          ogImage = '';
+          favicon = '';
         }
       }
-      return { title, description, ogImage };
+      return { title, description, favicon };
     } catch {
       this.logger.debug(`사이트 메타 추출 실패 — 도메인만으로 추천: ${url}`);
-      return { title: '', description: '', ogImage: '' };
+      return { title: '', description: '', favicon: '' };
     }
   }
 
@@ -303,4 +315,16 @@ export class SiteSuggestService {
       return true;
     return false;
   }
+}
+
+/**
+ * 페이지 <title>의 앞부분(사이트 이름)만 뽑는다. AI 없이 결정론적.
+ * "벨로아 - 로스트아크 매물 알리미" → "벨로아", "로펙 | ..." → "로펙".
+ * 구분자(-, |, », – 등)가 없으면 제목 전체, 제목이 없으면 도메인.
+ */
+function nameFromTitle(title: string, domain: string): string {
+  const t = title.trim();
+  if (!t) return domain;
+  const first = t.split(/\s*[|»–—]\s*|\s+-\s+/)[0]?.trim();
+  return first || t || domain;
 }
