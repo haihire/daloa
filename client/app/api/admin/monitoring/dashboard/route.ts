@@ -7,10 +7,8 @@ const NEST_API = process.env.NEST_API_URL ?? "http://localhost:3001";
 export async function GET(req: NextRequest) {
   const store = await cookies();
   const token = store.get("admin_token")?.value ?? "";
-  const days = req.nextUrl.searchParams.get("days");
   const pvDays = req.nextUrl.searchParams.get("pvDays");
   const params = new URLSearchParams();
-  if (days) params.set("days", days);
   if (pvDays) params.set("pvDays", pvDays);
   const query = params.size > 0 ? `?${params.toString()}` : "";
   try {

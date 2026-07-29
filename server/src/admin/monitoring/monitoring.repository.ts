@@ -15,12 +15,6 @@ export interface SummaryRow {
   bot_visits: bigint | number;
 }
 
-export interface TimedGroupRow {
-  bucket: string;
-  label: string;
-  avg_duration_ms: number | null;
-  count: bigint | number;
-}
 
 export interface VisitRow {
   path: string;
@@ -538,59 +532,6 @@ export class MonitoringRepository {
        AND c.created_at < (d.day + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
       GROUP BY d.day
       ORDER BY d.day ASC
-    `;
-  }
-
-  async findSectionSeries(bucketHours: number, rangeDays: number) {
-    // 1일 보기(시간 버킷)만 시각 표시, 그 외(일 버킷)는 날짜만 표시
-    const labelFormat = bucketHours < 24 ? 'MM-DD HH24:MI' : 'MM-DD';
-    // 빈 시간 버킷도 채우기:
-    //   buckets(시간축) × labels(api_key) 조합을 만들고 실제 데이터를 LEFT JOIN.
-    //   데이터 없는 버킷은 count=0, avg_duration_ms=NULL(서비스에서 0 처리).
-    //   버킷 경계는 epoch floor 방식으로 통일해 데이터 버킷과 정확히 매칭.
-    return this.prisma.$queryRaw<TimedGroupRow[]>`
-      WITH targets(path, api_key) AS (
-        VALUES
-          ('/api/sites', 'sites'),
-          ('/api/characters/stat-builds', 'stat-builds'),
-          ('/api/streamers/popular', 'youtube')
-      ),
-      probe_buckets AS (
-        SELECT
-          TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM r.created_at) / (${bucketHours} * 3600)) * (${bucketHours} * 3600)) AS bucket_start,
-          t.api_key,
-          r.duration_ms
-        FROM apm_request_timings r
-        JOIN targets t ON t.path = r.name
-        WHERE r.scope = 'route'
-          AND r.created_at >= NOW() - (${rangeDays}::int * INTERVAL '1 day')
-      ),
-      labels AS (
-        SELECT api_key FROM targets
-      ),
-      buckets AS (
-        SELECT TO_TIMESTAMP(
-                 FLOOR(EXTRACT(EPOCH FROM g) / (${bucketHours} * 3600)) * (${bucketHours} * 3600)
-               ) AS bucket_start
-        FROM generate_series(
-               NOW() - (${rangeDays}::int * INTERVAL '1 day'),
-               NOW(),
-               (${bucketHours} * INTERVAL '1 hour')
-             ) AS g
-      ),
-      grid AS (
-        SELECT DISTINCT b.bucket_start, l.api_key
-        FROM buckets b CROSS JOIN labels l
-      )
-      SELECT TO_CHAR(grid.bucket_start, ${labelFormat}) AS bucket,
-             grid.api_key AS label,
-             ROUND(AVG(pb.duration_ms))::int AS avg_duration_ms,
-             COUNT(pb.duration_ms) AS count
-      FROM grid
-      LEFT JOIN probe_buckets pb
-        ON pb.bucket_start = grid.bucket_start AND pb.api_key = grid.api_key
-      GROUP BY grid.bucket_start, grid.api_key
-      ORDER BY grid.bucket_start ASC
     `;
   }
 

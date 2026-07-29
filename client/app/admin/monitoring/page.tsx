@@ -51,12 +51,6 @@ type Dashboard = {
   };
   siteClickSeries: { minute: string; count: number }[];
   youtubeClickSeries: { minute: string; count: number }[];
-  sectionSeries: {
-    minute: string;
-    label: string;
-    avgDurationMs: number;
-    count: number;
-  }[];
   pageVisits: { path: string; device_type: string; count: number }[];
   countryVisits: { countryCode: string; count: number }[];
   osVisits: { osName: string; count: number }[];
@@ -80,7 +74,6 @@ const EMPTY_DASHBOARD: Dashboard = {
   },
   siteClickSeries: [],
   youtubeClickSeries: [],
-  sectionSeries: [],
   pageVisits: [],
   countryVisits: [],
   osVisits: [],
@@ -128,9 +121,6 @@ export default function MonitoringPage() {
   const [deviceTab, setDeviceTab] = useState<"device" | "browser">("device");
   const [activeChart, setActiveChart] = useState<string | null>(null);
   const [pageVisitDays, setPageVisitDays] = useState<7 | 30>(7);
-  const [sectionTab, setSectionTab] = useState<
-    "sites" | "stat-builds" | "youtube"
-  >("sites");
   const [pageLoadFrom, setPageLoadFrom] = useState<string>(kstToday);
   const [pageLoadTo, setPageLoadTo] = useState<string>(kstToday);
   const [pageLoadMinDate, setPageLoadMinDate] = useState<string>("");
@@ -145,7 +135,7 @@ export default function MonitoringPage() {
       if (initial && monitoringCache === null) setLoading(true);
       try {
         const dashboardRes = await fetch(
-          "/api/admin/monitoring/dashboard?days=7",
+          "/api/admin/monitoring/dashboard",
           { cache: "no-store" },
         );
         if (!alive) return;
@@ -168,7 +158,6 @@ export default function MonitoringPage() {
 
           return {
             ...base,
-            sectionSeries: prev.sectionSeries,
             pageVisitSeries: prev.pageVisitSeries ?? base.pageVisitSeries,
           };
         });
@@ -190,17 +179,16 @@ export default function MonitoringPage() {
 
   useEffect(() => {
     let alive = true;
-    async function loadSectionOnly() {
+    async function loadPageVisitSeries() {
       try {
         const res = await fetch(
-          `/api/admin/monitoring/dashboard?days=7&pvDays=${pageVisitDays}`,
+          `/api/admin/monitoring/dashboard?pvDays=${pageVisitDays}`,
           { cache: "no-store" },
         );
         if (!alive || !res.ok) return;
         const dashboard = (await res.json()) as Dashboard;
         setData((prev) => ({
           ...prev,
-          sectionSeries: dashboard.sectionSeries ?? prev.sectionSeries,
           pageVisitSeries: dashboard.pageVisitSeries ?? prev.pageVisitSeries,
           youtubeClickTotal:
             dashboard.youtubeClickTotal ?? prev.youtubeClickTotal,
@@ -209,7 +197,7 @@ export default function MonitoringPage() {
         // Keep existing data if fetch fails.
       }
     }
-    void loadSectionOnly();
+    void loadPageVisitSeries();
     return () => {
       alive = false;
     };
@@ -666,101 +654,6 @@ export default function MonitoringPage() {
                 </ResponsiveContainer>
               )}
             </div>
-          </div>
-
-          <div className="admin-card p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-sm font-semibold">
-                기능별 응답 추이 (1시간 자동점검)
-              </p>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-[color:var(--admin-text-muted)]">
-                  최근 7일
-                </span>
-                <div className="flex gap-1">
-                  {(["sites", "stat-builds", "youtube"] as const).map(
-                    (name) => (
-                      <button
-                        key={name}
-                        type="button"
-                        onClick={() => setSectionTab(name)}
-                        className={`admin-btn admin-btn-sm ${sectionTab === name ? "admin-btn-primary" : "admin-btn-secondary"}`}
-                      >
-                        {name}
-                      </button>
-                    ),
-                  )}
-                </div>
-              </div>
-            </div>
-            {(() => {
-              const series = data.sectionSeries.filter(
-                (item) => item.label === sectionTab,
-              );
-              const latest =
-                series.length > 0 ? series[series.length - 1] : null;
-              const totalCount = series.reduce(
-                (sum, item) => sum + item.count,
-                0,
-              );
-              return (
-                <>
-                  <div className="mb-1 flex justify-end">
-                    <span className="text-[11px] text-[color:var(--admin-text-muted)]">
-                      {latest
-                        ? `${latest.avgDurationMs}ms · ${totalCount}회`
-                        : "데이터 없음"}
-                    </span>
-                  </div>
-                  <div className="h-28">
-                    {series.length === 0 ? (
-                      <div className="grid h-full place-items-center text-[11px] text-[color:var(--admin-text-muted)]">
-                        데이터 없음
-                      </div>
-                    ) : (
-                      <ResponsiveContainer
-                        width="100%"
-                        height="100%"
-                        minWidth={120}
-                        minHeight={80}
-                      >
-                        <AreaChart
-                          data={series}
-                          onMouseEnter={() =>
-                            setActiveChart(`section-${sectionTab}`)
-                          }
-                          onMouseLeave={() => setActiveChart(null)}
-                        >
-                          <CartesianGrid
-                            strokeDasharray="3 3"
-                            stroke="#e5e7eb"
-                          />
-                          <XAxis
-                            dataKey="minute"
-                            tick={{ fontSize: 10, fill: "#6b7280" }}
-                          />
-                          <YAxis
-                            tick={{ fontSize: 10, fill: "#6b7280" }}
-                            unit="ms"
-                          />
-                          <Tooltip
-                            active={activeChart === `section-${sectionTab}`}
-                            wrapperStyle={{ pointerEvents: "none" }}
-                          />
-                          <Area
-                            type="linear"
-                            dataKey="avgDurationMs"
-                            stroke="#2563eb"
-                            fill="#dbeafe"
-                            name="평균 응답"
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-                </>
-              );
-            })()}
           </div>
         </div>
 
