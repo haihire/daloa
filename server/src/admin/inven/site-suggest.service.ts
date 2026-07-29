@@ -62,7 +62,12 @@ export class SiteSuggestService {
       'https://integrate.api.nvidia.com/v1';
     // 모델은 .env(AI_MODEL)로 지정한다 — 코드에 모델명을 하드코딩하지 않음
     this.model = this.config.get<string>('AI_MODEL') ?? '';
-    this.client = apiKey && this.model ? new OpenAI({ apiKey, baseURL }) : null;
+    // 타임아웃 미설정 시 SDK 기본값이 10분 → 모델이 느리면 "AI 추천 중..."이 무한대기.
+    // 45초로 제한해 느리면 빠르게 실패(503)시킨다.
+    this.client =
+      apiKey && this.model
+        ? new OpenAI({ apiKey, baseURL, timeout: 45000, maxRetries: 1 })
+        : null;
     if (!apiKey || !this.model) {
       this.logger.warn(
         'NVIDIA_API_KEY 또는 AI_MODEL 미설정 — 사이트 AI 추천 비활성화',
