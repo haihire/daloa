@@ -4,6 +4,7 @@ import { Cron } from '@nestjs/schedule';
 import { google } from 'googleapis';
 import Redis, { type Redis as RedisClient } from 'ioredis';
 import { isLocalQuotaApisDisabled } from '../common/local-dev-flags';
+import { runIfLockAcquired } from '../common/cron-lock.util';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { StreamersRepository } from './streamers.repository';
 import { ChzzkClient, type ChzzkLiveItem } from './chzzk.client';
@@ -210,6 +211,13 @@ export class StreamersService implements OnModuleInit {
   /** 3시간마다 갱신 */
   @Cron('0 */3 * * *')
   async refresh() {
+    // PM2 cluster 워커 간 중복 실행 방지 — YouTube API quota를 이중 소모하지 않도록.
+    await runIfLockAcquired(this.redis, 'streamersRefresh', () =>
+      this.refreshJob(),
+    );
+  }
+
+  private async refreshJob() {
     if (this.youtubeRedisReadOnly) {
       this.logger.log(
         'YOUTUBE_REDIS_READONLY 활성화 — 스케줄 YouTube 갱신 스킵',
@@ -716,9 +724,13 @@ export class StreamersService implements OnModuleInit {
   /** 1분마다 Chzzk 라이브 갱신 (워커0만) */
   @Cron('0 */1 * * * *')
   async refreshChzzkLives(): Promise<void> {
-    const inst = process.env.NODE_APP_INSTANCE;
-    if (inst !== undefined && inst !== '0') return;
-    await this.updateChzzkLives();
+    // 1분 주기라 TTL 10초 — 다음 틱(1분 후) 전까지 여유 있게 락이 풀리게.
+    await runIfLockAcquired(
+      this.redis,
+      'refreshChzzkLives',
+      () => this.updateChzzkLives(),
+      10,
+    );
   }
 
   /** YouTube 라이브 조회 및 캐시 저장 (키 할당량 초과 시 다음 키로 회전) */
@@ -880,9 +892,13 @@ export class StreamersService implements OnModuleInit {
    *  키 회전(updateYoutubeLives)과 합쳐 쿼터 소진 방지. */
   @Cron('0 */20 * * * *') // 운영: 20분 / 로컬: 2시간 (02:xx, 04:xx 등)
   async refreshYoutubeLives(): Promise<void> {
-    const inst = process.env.NODE_APP_INSTANCE;
-    if (inst !== undefined && inst !== '0') return;
+    // 20분 주기라 기본 TTL(60초)로 충분 — 다음 틱 전까지 여유 있게 풀림.
+    await runIfLockAcquired(this.redis, 'refreshYoutubeLives', () =>
+      this.refreshYoutubeLivesJob(),
+    );
+  }
 
+  private async refreshYoutubeLivesJob(): Promise<void> {
     // 로컬 환경: 2시간마다만 실행 (매 2시간 정각: 00:xx, 02:xx, 04:xx, ...)
     if (process.env.NODE_ENV === 'development') {
       const now = new Date();

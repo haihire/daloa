@@ -1,12 +1,20 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { join } from 'path';
+import type { Redis } from 'ioredis';
+import { acquireLock, releaseLock } from '../../common/cron-lock.util';
+import { REDIS_CLIENT } from '../../redis/redis.module';
 import { AdminInvenRepository } from './admin-inven.repository';
 import {
   SiteExtractorService,
   type CrawledPost,
 } from './site-extractor.service';
+
+// PM2 cluster 다른 워커에서 실행 중인 파이프라인과 겹치지 않게 거는 락의 TTL.
+// 크론 주기(2시간)보다 여유 있게 짧게 잡아, 워커가 죽어 releaseLock을 못 불러도
+// 다음 크론 틱 전에는 자동으로 풀린다(최종 일관성).
+const PIPELINE_LOCK_TTL_SEC = 60 * 90;
 
 const execFileAsync = promisify(execFile);
 
@@ -54,6 +62,7 @@ export class AdminInvenPipelineService {
   constructor(
     private readonly invenRepo: AdminInvenRepository,
     private readonly extractor: SiteExtractorService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
   private state: PipelineStatus = {
@@ -73,10 +82,30 @@ export class AdminInvenPipelineService {
     return { ...this.state };
   }
 
-  /** 파이프라인을 비동기로 시작한다(백그라운드). 이미 실행 중이면 무시. */
-  run(targetDate?: string): { started: boolean; reason?: string } {
+  /**
+   * 파이프라인을 비동기로 시작한다(백그라운드). 이미 실행 중이면 무시.
+   *
+   * 크론(admin-inven-cron.service.ts)과 관리자의 수동 "지금 실행" 버튼이
+   * 이 메서드를 공유한다 — this.state.running은 같은 프로세스 내 중복만 막으므로,
+   * PM2 cluster 다른 워커에서 이미 실행 중인 경우까지 막으려면 Redis 락이 필요하다.
+   */
+  async run(
+    targetDate?: string,
+  ): Promise<{ started: boolean; reason?: string }> {
     if (this.state.running) {
       return { started: false, reason: '이미 실행 중입니다' };
+    }
+
+    const locked = await acquireLock(
+      this.redis,
+      'invenPipeline',
+      PIPELINE_LOCK_TTL_SEC,
+    );
+    if (!locked) {
+      return {
+        started: false,
+        reason: '다른 서버 인스턴스에서 이미 실행 중입니다',
+      };
     }
 
     // targetDate 지정 → 날짜 백필(수동), 없으면 → 증분(post_id 기준) 모드(스케줄)
@@ -97,10 +126,14 @@ export class AdminInvenPipelineService {
       targetDate: date,
     };
 
-    // 백그라운드 실행 (await 하지 않음)
-    this.runPipeline(date).catch((e) => {
-      this.logger.error('파이프라인 오류:', e);
-    });
+    // 백그라운드 실행 (await 하지 않음) — 성공/실패 무관하게 끝나면 락 반납.
+    this.runPipeline(date)
+      .catch((e) => {
+        this.logger.error('파이프라인 오류:', e);
+      })
+      .finally(() => {
+        releaseLock(this.redis, 'invenPipeline').catch(() => {});
+      });
 
     return { started: true };
   }

@@ -68,8 +68,6 @@ client/
 └── AGENTS.md                   # 코파일럿 에이전트 규칙
 ```
 
-> `components/youtube/`(YoutubeSection·YoutubeList)는 **폐기된 인기 영상 섹션** 코드로, 현재 홈에서 렌더되지 않음.
-
 ---
 
 ## 데이터 흐름

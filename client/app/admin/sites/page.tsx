@@ -521,44 +521,52 @@ export default function AdminSitesPage() {
               {/* 폼 */}
               <div className="flex-1 min-w-0">
                 <div className="grid grid-cols-2 gap-4">
-                  {(
-                    ["name", "href", "category", "description"] as const
-                  ).map((field) => (
-                    <div
-                      key={field}
-                      className={field === "description" ? "col-span-2" : ""}
-                    >
-                      <label className="admin-label capitalize">{field}</label>
-                      {field === "category" ? (
-                        // 자유 입력이면 카테고리가 다시 난립하므로 고정 목록에서만 고른다
-                        <select
-                          value={form.category}
-                          disabled={isProcessing}
-                          onChange={(e) =>
-                            setForm((p) => ({ ...p, category: e.target.value }))
-                          }
-                          className="admin-select"
-                        >
-                          <option value="">선택 안 함</option>
-                          {SITE_CATEGORIES.map((c) => (
-                            <option key={c} value={c}>
-                              {c}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input
-                          type="text"
-                          value={form[field]}
-                          disabled={isProcessing}
-                          onChange={(e) =>
-                            setForm((p) => ({ ...p, [field]: e.target.value }))
-                          }
-                          className="admin-input"
-                        />
-                      )}
-                    </div>
-                  ))}
+                  {(["name", "href", "category", "description"] as const).map(
+                    (field) => (
+                      <div
+                        key={field}
+                        className={field === "description" ? "col-span-2" : ""}
+                      >
+                        <label className="admin-label capitalize">
+                          {field}
+                        </label>
+                        {field === "category" ? (
+                          // 자유 입력이면 카테고리가 다시 난립하므로 고정 목록에서만 고른다
+                          <select
+                            value={form.category}
+                            disabled={isProcessing}
+                            onChange={(e) =>
+                              setForm((p) => ({
+                                ...p,
+                                category: e.target.value,
+                              }))
+                            }
+                            className="admin-select"
+                          >
+                            <option value="">선택 안 함</option>
+                            {SITE_CATEGORIES.map((c) => (
+                              <option key={c} value={c}>
+                                {c}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={form[field]}
+                            disabled={isProcessing}
+                            onChange={(e) =>
+                              setForm((p) => ({
+                                ...p,
+                                [field]: e.target.value,
+                              }))
+                            }
+                            className="admin-input"
+                          />
+                        )}
+                      </div>
+                    ),
+                  )}
                 </div>
                 {formError && (
                   <p className="text-red-500 text-xs mt-2">{formError}</p>
@@ -606,212 +614,232 @@ export default function AdminSitesPage() {
         </div>
       ) : (
         <>
-        <div className="mb-4 shrink-0 max-w-xs">
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="사이트 이름 검색"
-            aria-label="사이트 이름 검색"
-            className="admin-input"
-          />
-        </div>
-        <div className="flex min-h-0 flex-1 items-stretch gap-4">
-        <div className="admin-card overflow-hidden flex-1 min-w-0 flex flex-col">
-          <div className="overflow-auto flex-1">
-            <table className="admin-table table-fixed w-full min-w-[860px]">
-              <colgroup>
-                <col style={{ width: "15%" }} />
-                <col style={{ width: "21%" }} />
-                <col style={{ width: "23%" }} />
-                <col style={{ width: "13%" }} />
-                <col style={{ width: "7%" }} />
-                <col style={{ width: "14%" }} />
-                <col style={{ width: "7%" }} />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th className="text-center">이름</th>
-                  <th className="text-center">URL</th>
-                  <th className="text-center">설명</th>
-                  <th className="text-center">카테고리</th>
-                  <th className="text-center">활성</th>
-                  <th className="text-center">액션</th>
-                  <th className="text-center">인기도</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleSites.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="py-8 text-center text-sm text-[color:var(--admin-text-muted)]"
-                    >
-                      {normalizedQuery
-                        ? `'${query.trim()}'에 해당하는 사이트가 없어요.`
-                        : "사이트가 없습니다."}
-                    </td>
-                  </tr>
-                )}
-                {visibleSites.map((site) => (
-                  <tr
-                    key={site.seq}
-                    onClick={() => selectSite(site)}
-                    className={`cursor-pointer ${
-                      selectedSite?.seq === site.seq
-                        ? "bg-blue-50/70"
-                        : ""
-                    }`}
-                  >
-                    <td className="text-center font-medium truncate">{site.name}</td>
-                    <td className="text-center">
-                      <a
-                        href={site.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="block truncate text-center text-blue-600 hover:text-blue-700 hover:underline"
-                        title={site.href}
-                      >
-                        {site.href}
-                      </a>
-                    </td>
-                    <td
-                      className="text-center text-[color:var(--admin-text-muted)] truncate"
-                      title={site.description ?? ""}
-                    >
-                      {site.description ?? "-"}
-                    </td>
-                    <td className="text-center">
-                      {site.category ? (
-                        <span
-                          className={`admin-badge ${getCategoryTone(site.category)}`}
+          <div className="mb-4 shrink-0 max-w-xs">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="사이트 이름 검색"
+              aria-label="사이트 이름 검색"
+              className="admin-input"
+            />
+          </div>
+          <div className="flex min-h-0 flex-1 items-stretch gap-4">
+            <div className="admin-card overflow-hidden flex-1 min-w-0 flex flex-col">
+              <div className="overflow-auto flex-1">
+                <table className="admin-table table-fixed w-full min-w-[860px]">
+                  <colgroup>
+                    <col style={{ width: "15%" }} />
+                    <col style={{ width: "21%" }} />
+                    <col style={{ width: "23%" }} />
+                    <col style={{ width: "13%" }} />
+                    <col style={{ width: "7%" }} />
+                    <col style={{ width: "14%" }} />
+                    <col style={{ width: "7%" }} />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th className="text-center">이름</th>
+                      <th className="text-center">URL</th>
+                      <th className="text-center">설명</th>
+                      <th className="text-center">카테고리</th>
+                      <th className="text-center">활성</th>
+                      <th className="text-center">액션</th>
+                      <th className="text-center">인기도</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleSites.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={7}
+                          className="py-8 text-center text-sm text-[color:var(--admin-text-muted)]"
                         >
-                          {site.category}
-                        </span>
-                      ) : (
-                        <span className="text-[color:var(--admin-text-subtle)]">
-                          -
-                        </span>
-                      )}
-                    </td>
-                    <td className="text-center">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleActive(site);
-                        }}
-                        disabled={isProcessing}
-                        className={`admin-badge ${
-                          site.is_active
-                            ? "admin-badge-success cursor-pointer"
-                            : "admin-badge-neutral cursor-pointer"
+                          {normalizedQuery
+                            ? `'${query.trim()}'에 해당하는 사이트가 없어요.`
+                            : "사이트가 없습니다."}
+                        </td>
+                      </tr>
+                    )}
+                    {visibleSites.map((site) => (
+                      <tr
+                        key={site.seq}
+                        onClick={() => selectSite(site)}
+                        className={`cursor-pointer ${
+                          selectedSite?.seq === site.seq ? "bg-blue-50/70" : ""
                         }`}
                       >
-                        {site.is_active ? "활성" : "비활성"}
-                      </button>
-                    </td>
-                    <td className="text-center" style={{ paddingLeft: 6, paddingRight: 6 }}>
-                      <div className="flex justify-center gap-1 flex-nowrap">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            startEdit(site);
-                          }}
-                          disabled={isProcessing}
-                          className="admin-btn admin-btn-sm admin-btn-secondary whitespace-nowrap"
+                        <td className="text-center font-medium truncate">
+                          {site.name}
+                        </td>
+                        <td className="text-center">
+                          <a
+                            href={site.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="block truncate text-center text-blue-600 hover:text-blue-700 hover:underline"
+                            title={site.href}
+                          >
+                            {site.href}
+                          </a>
+                        </td>
+                        <td
+                          className="text-center text-[color:var(--admin-text-muted)] truncate"
+                          title={site.description ?? ""}
                         >
-                          수정
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(site.seq);
-                          }}
-                          disabled={isProcessing}
-                          className="admin-btn admin-btn-sm admin-btn-danger whitespace-nowrap"
+                          {site.description ?? "-"}
+                        </td>
+                        <td className="text-center">
+                          {site.category ? (
+                            <span
+                              className={`admin-badge ${getCategoryTone(site.category)}`}
+                            >
+                              {site.category}
+                            </span>
+                          ) : (
+                            <span className="text-[color:var(--admin-text-subtle)]">
+                              -
+                            </span>
+                          )}
+                        </td>
+                        <td className="text-center">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleActive(site);
+                            }}
+                            disabled={isProcessing}
+                            className={`admin-badge ${
+                              site.is_active
+                                ? "admin-badge-success cursor-pointer"
+                                : "admin-badge-neutral cursor-pointer"
+                            }`}
+                          >
+                            {site.is_active ? "활성" : "비활성"}
+                          </button>
+                        </td>
+                        <td
+                          className="text-center"
+                          style={{ paddingLeft: 6, paddingRight: 6 }}
                         >
-                          삭제
-                        </button>
-                      </div>
-                    </td>
-                    <td className="text-center tabular-nums font-semibold text-blue-600">
-                      {site.click_count.toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* 우측: 선택 사이트 7일 클릭 추이 */}
-        <div className="admin-card w-80 shrink-0 self-start p-4 hidden lg:block">
-          {!selectedSite ? (
-            <p className="text-sm text-[color:var(--admin-text-muted)] text-center py-10">
-              사이트를 클릭하면
-              <br />
-              최근 7일 클릭 추이를 볼 수 있어요.
-            </p>
-          ) : (
-            <div>
-              {/* 이름(왼쪽) + 총 클릭수(오른쪽 끝) */}
-              <div className="flex items-baseline justify-between gap-2 mb-3">
-                <p className="text-sm font-semibold truncate">
-                  {selectedSite.name}
-                </p>
-                <span className="shrink-0">
-                  <span className="text-lg font-bold text-blue-600 tabular-nums">
-                    {selectedSite.click_count.toLocaleString()}
-                  </span>
-                  <span className="text-xs text-[color:var(--admin-text-muted)] ml-1">
-                    클릭
-                  </span>
-                </span>
+                          <div className="flex justify-center gap-1 flex-nowrap">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startEdit(site);
+                              }}
+                              disabled={isProcessing}
+                              className="admin-btn admin-btn-sm admin-btn-secondary whitespace-nowrap"
+                            >
+                              수정
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(site.seq);
+                              }}
+                              disabled={isProcessing}
+                              className="admin-btn admin-btn-sm admin-btn-danger whitespace-nowrap"
+                            >
+                              삭제
+                            </button>
+                          </div>
+                        </td>
+                        <td className="text-center tabular-nums font-semibold text-blue-600">
+                          {site.click_count.toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              {seriesLoading ? (
-                <p className="text-xs text-[color:var(--admin-text-muted)] py-10 text-center">
-                  불러오는 중...
+            </div>
+
+            {/* 우측: 선택 사이트 7일 클릭 추이 */}
+            <div className="admin-card w-80 shrink-0 self-start p-4 hidden lg:block">
+              {!selectedSite ? (
+                <p className="text-sm text-[color:var(--admin-text-muted)] text-center py-10">
+                  사이트를 클릭하면
+                  <br />
+                  최근 7일 클릭 추이를 볼 수 있어요.
                 </p>
               ) : (
-                <div style={{ width: "100%", height: 180 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={clickSeries}>
-                      <defs>
-                        <linearGradient id="siteClickFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />
-                          <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis
-                        dataKey="bucket"
-                        interval={0}
-                        tick={{ fontSize: 9, fill: "#6b7280" }}
-                      />
-                      <YAxis
-                        allowDecimals={false}
-                        width={28}
-                        domain={[0, Math.max(clickYMax, 1)]}
-                        tick={{ fontSize: 10, fill: "#6b7280" }}
-                      />
-                      <Tooltip />
-                      <Area
-                        type="monotone"
-                        dataKey="count"
-                        stroke="#3b82f6"
-                        strokeWidth={2}
-                        fill="url(#siteClickFill)"
-                        dot={{ r: 3, fill: "#3b82f6" }}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                <div>
+                  {/* 이름(왼쪽) + 총 클릭수(오른쪽 끝) */}
+                  <div className="flex items-baseline justify-between gap-2 mb-3">
+                    <p className="text-sm font-semibold truncate">
+                      {selectedSite.name}
+                    </p>
+                    <span className="shrink-0">
+                      <span className="text-lg font-bold text-blue-600 tabular-nums">
+                        {selectedSite.click_count.toLocaleString()}
+                      </span>
+                      <span className="text-xs text-[color:var(--admin-text-muted)] ml-1">
+                        클릭
+                      </span>
+                    </span>
+                  </div>
+                  {seriesLoading ? (
+                    <p className="text-xs text-[color:var(--admin-text-muted)] py-10 text-center">
+                      불러오는 중...
+                    </p>
+                  ) : (
+                    <div style={{ width: "100%", height: 180 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={clickSeries}>
+                          <defs>
+                            <linearGradient
+                              id="siteClickFill"
+                              x1="0"
+                              y1="0"
+                              x2="0"
+                              y2="1"
+                            >
+                              <stop
+                                offset="0%"
+                                stopColor="#3b82f6"
+                                stopOpacity={0.3}
+                              />
+                              <stop
+                                offset="100%"
+                                stopColor="#3b82f6"
+                                stopOpacity={0}
+                              />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke="#f1f5f9"
+                          />
+                          <XAxis
+                            dataKey="bucket"
+                            interval={0}
+                            tick={{ fontSize: 9, fill: "#6b7280" }}
+                          />
+                          <YAxis
+                            allowDecimals={false}
+                            width={28}
+                            domain={[0, Math.max(clickYMax, 1)]}
+                            tick={{ fontSize: 10, fill: "#6b7280" }}
+                          />
+                          <Tooltip />
+                          <Area
+                            type="monotone"
+                            dataKey="count"
+                            stroke="#3b82f6"
+                            strokeWidth={2}
+                            fill="url(#siteClickFill)"
+                            dot={{ r: 3, fill: "#3b82f6" }}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-        </div>
-        </div>
+          </div>
         </>
       )}
 

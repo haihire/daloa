@@ -12,7 +12,6 @@ import { AdminWriteGuard } from '../auth/admin.guard';
 
 const CACHE_KEYS: Record<string, string> = {
   sites: 'sites:all',
-  characters: 'characters:stat-builds',
   youtube: 'youtube:popular:first',
 };
 

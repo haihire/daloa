@@ -34,16 +34,12 @@ export class AdminMonitoringController {
 
   @UseGuards(AdminGuard)
   @Get('admin/monitoring/dashboard')
-  dashboard(@Query('days') days?: string, @Query('pvDays') pvDays?: string) {
-    const parsed = Number(days);
-    const rangeDays = Number.isFinite(parsed)
-      ? Math.max(1, Math.min(30, Math.trunc(parsed)))
-      : 7;
+  dashboard(@Query('pvDays') pvDays?: string) {
     const parsedPv = Number(pvDays);
     const pageVisitDays = Number.isFinite(parsedPv)
       ? Math.max(1, Math.min(30, Math.trunc(parsedPv)))
       : 14;
-    return this.monitoring.getDashboard(rangeDays, pageVisitDays);
+    return this.monitoring.getDashboard(pageVisitDays);
   }
 
   @UseGuards(AdminGuard)
