@@ -37,14 +37,14 @@ const CATEGORIES = [
 interface SiteMeta {
   title: string;
   description: string;
-  ogImage: string;
+  favicon: string;
 }
 
 /**
- * 추천 후보(사이트)에 대해 NVIDIA NIM(OpenAI 호환)으로
- * name/category/description/icon을 생성한다.
+ * 추천 후보(사이트)의 category·description을 AI로 생성한다.
+ * name(페이지 제목 앞부분)·icon(favicon)은 AI 없이 결정론적으로 뽑는다.
  * 자동 실행 없음 — 관리자가 모달에서 버튼을 누를 때만 호출되므로 토큰은 그때만 소모된다.
- * (NVIDIA_API_KEY가 없으면 비활성.)
+ * (키/모델 미설정 시 비활성.)
  */
 @Injectable()
 export class SiteSuggestService {
@@ -60,13 +60,18 @@ export class SiteSuggestService {
     const baseURL =
       this.config.get<string>('NVIDIA_BASE_URL') ||
       'https://integrate.api.nvidia.com/v1';
-    // 모델은 .env(NVIDIA_MODEL)로 교체 가능 — 코드 수정 없이 바꾸기 위함
-    this.model =
-      this.config.get<string>('NVIDIA_MODEL') ||
-      'qwen/qwen3-next-80b-a3b-instruct';
-    this.client = apiKey ? new OpenAI({ apiKey, baseURL }) : null;
-    if (!apiKey) {
-      this.logger.warn('NVIDIA_API_KEY 미설정 — 사이트 AI 추천 비활성화');
+    // 모델은 .env(AI_MODEL)로 지정한다 — 코드에 모델명을 하드코딩하지 않음
+    this.model = this.config.get<string>('AI_MODEL') ?? '';
+    // 타임아웃 미설정 시 SDK 기본값이 10분 → 모델이 느리면 "AI 추천 중..."이 무한대기.
+    // 45초로 제한해 느리면 빠르게 실패(503)시킨다.
+    this.client =
+      apiKey && this.model
+        ? new OpenAI({ apiKey, baseURL, timeout: 45000, maxRetries: 1 })
+        : null;
+    if (!apiKey || !this.model) {
+      this.logger.warn(
+        'NVIDIA_API_KEY 또는 AI_MODEL 미설정 — 사이트 AI 추천 비활성화',
+      );
     }
 
     // axios가 실제로 연결할 IP를 lookup 단계에서 검사 → isSafeUrl 선검증과
@@ -84,8 +89,14 @@ export class SiteSuggestService {
         if (resolved.some((r) => this.isPrivateIp(r.address))) {
           return callback(new Error('사설 IP 접근이 차단되었습니다'), '', 4);
         }
-        const first = resolved[0];
-        callback(null, first.address, first.family);
+        // Node가 all:true로 호출하면(모던 Node의 autoSelectFamily/happy-eyeballs)
+        // 주소 '배열'을 기대한다. dnsLookup이 준 형태를 보존하지 않으면
+        // ERR_INVALID_IP_ADDRESS로 외부 fetch가 전부 실패한다.
+        if (Array.isArray(address)) {
+          callback(null, address);
+        } else {
+          callback(null, address, family);
+        }
       });
     };
     this.httpAgent = new http.Agent({ keepAlive: false, lookup: secureLookup });
@@ -95,13 +106,23 @@ export class SiteSuggestService {
     });
   }
 
-  /** og:image 또는 파비콘 URL만 반환한다 (AI 호출 없음). */
-  async fetchIcon(input: { url: string; domain: string }): Promise<string> {
+  /**
+   * 모달 열 때 자동 채울 name·icon을 한 번의 fetch로 반환한다 (AI 호출 없음).
+   * name = 페이지 제목 앞부분, icon = favicon(없으면 google favicon).
+   */
+  async fetchNameAndIcon(input: {
+    url: string;
+    domain: string;
+  }): Promise<{ name: string; icon: string }> {
     const meta = await this.fetchMeta(input.url);
-    return (
-      meta.ogImage ||
-      `https://www.google.com/s2/favicons?domain=${input.domain}&sz=64`
-    );
+    return {
+      name: nameFromTitle(meta.title, input.domain),
+      icon: meta.favicon || this.googleFavicon(input.domain),
+    };
+  }
+
+  private googleFavicon(domain: string): string {
+    return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
   }
 
   /** 사이트 메타를 fetch해 NVIDIA NIM으로 추천 필드를 생성한다. */
@@ -111,7 +132,7 @@ export class SiteSuggestService {
   }): Promise<SiteSuggestion> {
     if (!this.client) {
       throw new ServiceUnavailableException(
-        'NVIDIA_API_KEY가 설정되지 않았습니다',
+        'AI 키 또는 모델(AI_MODEL)이 설정되지 않았습니다',
       );
     }
 
@@ -119,18 +140,16 @@ export class SiteSuggestService {
 
     const prompt = [
       '너는 로스트아크(게임) 관련 웹사이트를 분류하는 도우미야.',
-      '아래 사이트 정보를 보고 한국어로 추천해서 JSON 객체만 출력해.',
-      '- name: 사이트의 간결한 이름 (한국어 또는 영문)',
+      '아래 사이트 정보를 보고 한국어로 category와 description을 정해서 JSON 객체만 출력해.',
       `- category: 반드시 다음 중 하나 — ${CATEGORIES.join(', ')}`,
-      '- description: 어떤 사이트인지 30자 이내 한 문장',
-      '- icon: 사이트 대표 로고/og:image의 절대 URL. 확실하지 않으면 빈 문자열 ""',
-      'JSON 키는 name, category, description, icon 네 개만.',
+      '- description: 사이트가 제공하는 걸 아주 짧게 한 줄로. 30자 이내(최대 32자), 절대 넘기지 마.',
+      "  좋은 예: '재련, 상급재련, 돌파고, 더보기 손익 등 각종 툴 제공'",
+      'JSON 키는 category, description 두 개만.',
       '',
       `도메인: ${input.domain}`,
       `URL: ${input.url}`,
       meta.title ? `페이지 제목: ${meta.title}` : '',
       meta.description ? `메타 설명: ${meta.description}` : '',
-      meta.ogImage ? `og:image: ${meta.ogImage}` : '',
     ]
       .filter(Boolean)
       .join('\n');
@@ -166,11 +185,6 @@ export class SiteSuggestService {
     }
 
     const parsed = this.parse(raw);
-    // icon fallback: AI → og:image → google favicon
-    const icon =
-      parsed.icon?.trim() ||
-      meta.ogImage ||
-      `https://www.google.com/s2/favicons?domain=${input.domain}&sz=64`;
 
     // enum을 강제하지만, 모델이 범위 밖 값을 내도 '기타'로 방어
     const category =
@@ -179,11 +193,12 @@ export class SiteSuggestService {
         ? parsed.category.trim()
         : '기타';
 
+    // name·icon은 AI가 아니라 결정론적으로 (제목 앞부분 / favicon)
     return {
-      name: parsed.name?.trim() || input.domain,
+      name: nameFromTitle(meta.title, input.domain),
       category,
-      description: parsed.description?.trim() || '',
-      icon,
+      description: clampDescription(parsed.description),
+      icon: meta.favicon || this.googleFavicon(input.domain),
     };
   }
 
@@ -202,12 +217,12 @@ export class SiteSuggestService {
     }
   }
 
-  /** 사이트 메타(title/description/og:image) 추출. 실패/위험 URL이면 빈 값 반환(추천은 진행). */
+  /** 사이트 메타(title/description/favicon) 추출. 실패/위험 URL이면 빈 값 반환(추천은 진행). */
   private async fetchMeta(url: string): Promise<SiteMeta> {
     // SSRF 방어: 크롤된 미검증 URL이므로 내부망/메타데이터 요청 차단
     if (!(await this.isSafeUrl(url))) {
       this.logger.warn(`안전하지 않은 URL — 메타 fetch 스킵: ${url}`);
-      return { title: '', description: '', ogImage: '' };
+      return { title: '', description: '', favicon: '' };
     }
     try {
       const res = await axios.get<string>(url, {
@@ -231,20 +246,23 @@ export class SiteSuggestService {
         $('meta[name="description"]').attr('content')?.trim() ||
         $('meta[property="og:description"]').attr('content')?.trim() ||
         '';
-      let ogImage =
-        $('meta[property="og:image"]').attr('content')?.trim() || '';
-      // 상대 경로(/logo.png 등)는 대상 사이트 기준 절대 URL로 변환
-      if (ogImage) {
+      // favicon: <link rel="icon">(shortcut icon 포함) → apple-touch-icon 순
+      let favicon =
+        $('link[rel~="icon"]').attr('href')?.trim() ||
+        $('link[rel="apple-touch-icon"]').attr('href')?.trim() ||
+        '';
+      // 상대 경로(favicon.png, /favicon.ico 등)는 대상 사이트 기준 절대 URL로 변환
+      if (favicon) {
         try {
-          ogImage = new URL(ogImage, url).href;
+          favicon = new URL(favicon, url).href;
         } catch {
-          ogImage = '';
+          favicon = '';
         }
       }
-      return { title, description, ogImage };
+      return { title, description, favicon };
     } catch {
       this.logger.debug(`사이트 메타 추출 실패 — 도메인만으로 추천: ${url}`);
-      return { title: '', description: '', ogImage: '' };
+      return { title: '', description: '', favicon: '' };
     }
   }
 
@@ -298,4 +316,45 @@ export class SiteSuggestService {
       return true;
     return false;
   }
+}
+
+/**
+ * 페이지 <title>의 앞부분(사이트 이름)만 뽑는다. AI 없이 결정론적.
+ * "벨로아 - 로스트아크 매물 알리미" → "벨로아", "로펙 | ..." → "로펙",
+ * "로츠고 : 로스트아크 숙제..." → "로츠고".
+ *
+ * 구분자 종류:
+ *  - 강한 구분자(앞뒤 공백 유무 무관): | ｜ » « – — ／ ： •
+ *  - 약한 구분자(공백으로 감싸인 경우만): - / ~ · ・  (a-b·URL·"계산기·툴" 합성어 보호)
+ *  - 콜론 ':' 은 뒤에 공백이 있을 때만 (12:30 시간 보호)
+ * 구분자가 없으면 제목 전체, 제목이 없으면 도메인.
+ */
+function nameFromTitle(title: string, domain: string): string {
+  const t = title.trim();
+  if (!t) return domain;
+  const first = t
+    .split(/\s*[|｜»«–—／：•]\s*|\s+[-/~·・]\s+|\s*:\s+/)[0]
+    ?.trim();
+  return first || t || domain;
+}
+
+// 설명 최대 길이(자) — 이 이하면 클라이언트 카드에서 1줄에 들어간다(사용자 예시 31자 기준).
+const MAX_DESC_LEN = 32;
+
+/** AI 설명이 길면 단어 경계에서 잘라 1줄에 맞춘다(단어 중간 절단 방지, 잘리면 '…'). */
+function clampDescription(raw?: string): string {
+  const d = (raw ?? '').trim();
+  if (d.length <= MAX_DESC_LEN) return d;
+  const limit = MAX_DESC_LEN - 1; // '…' 자리 확보
+  const cut = d.slice(0, limit);
+  // limit 이내 마지막 구분(공백·쉼표·가운뎃점)에서 자른다. 경계가 너무 앞이면 그냥 컷.
+  const brk = Math.max(
+    cut.lastIndexOf(' '),
+    cut.lastIndexOf(','),
+    cut.lastIndexOf('·'),
+  );
+  const base = (
+    brk >= Math.floor(limit * 0.6) ? cut.slice(0, brk) : cut
+  ).replace(/[\s,·]+$/, '');
+  return `${base}…`;
 }
