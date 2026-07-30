@@ -50,7 +50,7 @@ REDIS_DB=0
 # NVIDIA NIM (OpenAI 호환) — 관리자 AI 진단 + 사이트 추천 후보 생성
 NVIDIA_API_KEY=...
 # NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
-# NVIDIA_MODEL=qwen/qwen3-next-80b-a3b-instruct
+# AI_MODEL=meta/llama-3.3-70b-instruct
 
 # 카카오 알림 (사이트 변경 감지, 에러 알림)
 KAKAO_REST_API_KEY=...
