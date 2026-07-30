@@ -92,16 +92,15 @@ export class AdminInvenController {
     return { ok: true };
   }
 
-  /** 사이트 아이콘(og:image → 파비콘)만 반환한다. Gemini 호출 없음. */
+  /** 모달 열 때 자동 채울 사이트 name·icon 반환. AI 호출 없음. */
   @Get('site-candidates/:id/icon')
   async getCandidateIcon(@Param('id', ParseIntPipe) id: number) {
     const cand = await this.invenRepo.getSiteCandidateById(id);
     if (!cand) throw new NotFoundException('후보를 찾을 수 없습니다');
-    const icon = await this.suggestService.fetchIcon({
+    return this.suggestService.fetchNameAndIcon({
       url: cand.url,
       domain: cand.domain,
     });
-    return { icon };
   }
 
   /**

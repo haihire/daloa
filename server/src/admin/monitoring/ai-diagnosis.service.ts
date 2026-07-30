@@ -83,19 +83,24 @@ export class AiDiagnosisService {
     const baseURL =
       this.config.get<string>('NVIDIA_BASE_URL') ||
       'https://integrate.api.nvidia.com/v1';
-    this.model =
-      this.config.get<string>('NVIDIA_MODEL') ||
-      'qwen/qwen3-next-80b-a3b-instruct';
-    this.client = apiKey ? new OpenAI({ apiKey, baseURL }) : null;
-    if (!apiKey) {
-      this.logger.warn('NVIDIA_API_KEY 미설정 — AI 컨테이너 진단 비활성화');
+    this.model = this.config.get<string>('AI_MODEL') ?? '';
+    // 타임아웃 미설정 시 SDK 기본값이 10분 → 느린 모델이면 무한대기처럼 보인다.
+    // 45초로 제한해 느리면 빠르게 실패시킨다.
+    this.client =
+      apiKey && this.model
+        ? new OpenAI({ apiKey, baseURL, timeout: 45000, maxRetries: 1 })
+        : null;
+    if (!apiKey || !this.model) {
+      this.logger.warn(
+        'NVIDIA_API_KEY 또는 AI_MODEL 미설정 — AI 컨테이너 진단 비활성화',
+      );
     }
   }
 
   async diagnose(): Promise<AiDiagnosisResult> {
     if (!this.client) {
       throw new ServiceUnavailableException(
-        'NVIDIA_API_KEY가 설정되지 않았습니다',
+        'AI 키 또는 모델(AI_MODEL)이 설정되지 않았습니다',
       );
     }
 
@@ -237,7 +242,7 @@ export class AiDiagnosisService {
   ): Promise<{ reply: string; model: string }> {
     if (!this.client) {
       throw new ServiceUnavailableException(
-        'NVIDIA_API_KEY가 설정되지 않았습니다',
+        'AI 키 또는 모델(AI_MODEL)이 설정되지 않았습니다',
       );
     }
 
