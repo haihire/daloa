@@ -8,6 +8,7 @@ import { AdminAuthModule } from '../auth/admin-auth.module';
 import { RagRepository } from './rag/rag.repository';
 import { RagEmbeddingService } from './rag/rag-embedding.service';
 import { RagWriterService } from './rag/rag-writer.service';
+import { RagSnapshotCronService } from './rag/rag-snapshot-cron.service';
 
 @Module({
   imports: [AdminAuthModule],
@@ -20,6 +21,7 @@ import { RagWriterService } from './rag/rag-writer.service';
     RagRepository,
     RagEmbeddingService,
     RagWriterService,
+    RagSnapshotCronService,
   ],
   exports: [AdminMonitoringService],
 })
