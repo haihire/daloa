@@ -20,6 +20,7 @@ import {
   BURST_NOTE,
   APP_CONSTRAINTS,
   TRAFFIC_PROFILE,
+  SCHEDULED_JOBS_NOTE,
   DEFAULT_REGION,
   type InstanceSpec,
 } from './ec2-context.config';
@@ -30,6 +31,12 @@ const CONTAINERS: ContainerName[] = ['nest', 'nginx', 'redis', 'postgres'];
 const AGGREGATE_DAYS = 7;
 const IMDS_BASE = 'http://169.254.169.254';
 const HOURS_PER_MONTH = 730;
+/**
+ * 메모리 "압박/위험" 표현을 허용하는 사용률 하한.
+ * 예전엔 이 기준이 없어 77%를 "위험"이라 표현하는 등 LLM이 임의로 판단했다.
+ * 관리자가 명시한 기준(2026-07-31)을 그대로 코드 상수로 고정한다.
+ */
+const MEM_CRITICAL_PERCENT = 90;
 
 interface Ec2Info {
   instanceType: string | null;
@@ -94,27 +101,44 @@ const RAG_TOP_K = 4;
 const RAG_MAX_DISTANCE = 0.75;
 
 const SYSTEM_PROMPT = [
-  '너는 AWS EC2 + Docker 운영 비용/성능 분석가다.',
-  '아래 JSON 데이터(컨테이너 자원 사용량 집계, EC2 사양/가격표, 앱 제약, 트래픽 특성)를 보고',
-  '한국어로 분석해 **반드시 JSON 객체 하나만** 출력한다. 코드블록/설명 문장 금지.',
+  '너는 이 서비스의 AWS EC2 + Docker 운영 상태를 보고하는 운영 리포터다.',
+  '비용 절감 컨설턴트가 아니다 — 평소엔 현재 상태를 담백하게 보고하고,',
+  '비용 얘기는 정말 시급한 경우가 아니면 하지 않는다(관리자가 필요하면 채팅으로 따로 물어본다).',
+  '아래 JSON 데이터를 보고 한국어로 분석해 **반드시 JSON 객체 하나만** 출력한다. 코드블록/설명 문장 금지.',
   '',
   '출력 스키마:',
   '{',
-  '  "summary": "현재 자원 상태 2~3문장 요약",',
-  '  "anomalies": ["이상 징후(특정 시간대 CPU 스파이크, 메모리 압박, 과소/과대 프로비저닝 등). 없으면 빈 배열"],',
-  '  "costSuggestions": ["AWS 비용 절감 제안. 각 항목에 근거(현재 사용률 수치)와 트레이드오프 포함"]',
+  '  "summary": "현재 자원·트래픽 상태를 담백하게 보고하는 2~3문장 브리핑",',
+  '  "anomalies": ["이번에 특별히 짚어줄 만한 특이사항. \'이상 징후\' 전용이 아니다 — 진짜 이상 신호일',
+  '                수도 있고, 배포 이력·크레딧 상태·트래픽 변화처럼 그냥 알아두면 좋은 내용일 수도',
+  '                있다. 매번 같은 종류를 기계적으로 채우지 말고, 이번 데이터에서 실제로 눈에 띄는',
+  '                것만 그때그때 판단해서 담아라. 특별히 짚을 게 없으면 빈 배열."],',
+  '  "costSuggestions": ["정말 시급하고 명확한 절감 기회가 있을 때만. 없으면 빈 배열이 기본값이다."]',
   '}',
   '',
   '규칙:',
-  '- 제공된 pricingTable의 수치 외에 가격을 지어내지 마라. 절감액은 가격표로 계산 가능한 범위에서만 제시.',
+  '- anomalies에 항목을 담을지 말지, 뭘 담을지는 매 실행마다 데이터를 보고 새로 판단하라.',
+  '  이상 징후·배포 특이사항·크레딧 상태 변화·트래픽 급변 중 이번에 정말 눈에 띄는 것만 골라라.',
+  '  "일단 뭐라도 채워야 한다"는 압박으로 사소한 걸 억지로 만들어내지 마라.',
+  '- CPU 스파이크 등 패턴을 발견하면 scheduledJobsNote·recentEvents와 먼저 대조해 원인을 밝혀라.',
+  '  scheduledJobsNote로 설명되는 시간대면 "이상 징후"가 아니라 "알려진 패턴"이라고 쓰고,',
+  '  그 자체를 위험하다고 단정하지 마라. 단순히 "N시에 M%까지 급등했다"고 나열만 하지 마라 —',
+  '  왜 그런지, 우려할 일인지 아닌지까지 답하는 게 목적이다.',
+  `- host.live.memStatus가 "critical"(사용률 ${MEM_CRITICAL_PERCENT}% 이상)일 때만 메모리 압박/위험을`,
+  '  언급하라. 그 미만이면 위험이라 하지 말고 수치만 담백하게 보고하라.',
+  '- host.live의 수치는 지금 이 순간 읽은 값이지 기간 평균이 아니다.',
+  '  "평균"이라 부르지 말고 "현재"라고 표현하라. 진짜 기간 평균은 containers[].last7d 뿐이다.',
   '- 버스트(t3/t4g) 크레딧 과금 가능성을 고려하되, balanceStatus를 신뢰하라(이미 계산된 판정이다):',
   '  · "near_max" → 크레딧이 상한 근처로 여유가 충분하다. "크레딧 소진 위험" 같은 표현을 쓰지 마라.',
   '  · "declining" → 24시간 동안 뚜렷이 줄고 있다. 이때만 위험 가능성을 언급해도 된다.',
   '  · "stable" → 뚜렷한 증감 없이 유지 중이다. 위험을 단정하지 마라.',
-  '  어느 경우든 anomalies/costSuggestions에서 크레딧을 언급하려면 반드시 실제 수치',
+  '  어느 경우든 크레딧을 언급하려면 반드시 실제 수치',
   '  (creditBalance, creditBalanceMin24h~Max24h, creditUsagePerHour)를 인용하라.',
   '  수치를 인용하지 않고 "크레딧 소진 위험이 있다"처럼만 쓰는 것은 금지한다.',
   '  creditMetrics가 null이면 크레딧 데이터를 가져오지 못했다는 사실만 명시하고 소모량을 추측하지 마라.',
+  '- traffic이 있으면 방문 추이를 summary에 담백하게 보고하라(예: "최근 7일 방문 N건,',
+  '  이전 7일 대비 X% 증가/감소"). costSuggestions는 여기에 엮지 마라.',
+  '- 제공된 pricingTable의 수치 외에 가격을 지어내지 마라. 절감액은 가격표로 계산 가능한 범위에서만 제시.',
   '- 데이터가 부족하면(샘플 적음/EC2 정보 없음) 추측 대신 그 사실을 명시하라.',
   '- 각 배열 항목은 1~2문장의 간결한 한국어. 같은 내용을 다른 필드에서 반복하지 마라.',
 ].join('\n');
@@ -199,12 +223,15 @@ export class AiDiagnosisService {
 
   /** AI에 넘길 컨텍스트(동적 메트릭 + 정적 설정)를 조립한다. */
   private async buildContext() {
-    const [ec2, liveStats, host, recentEvents] = await Promise.all([
-      this.resolveEc2(),
-      this.dockerStats.getContainerStats(),
-      this.dockerStats.getHostStats(),
-      this.monitoringRepo.findRecentContainerEvents(14, 30),
-    ]);
+    const [ec2, liveStats, host, recentEvents, visitSeries] = await Promise.all(
+      [
+        this.resolveEc2(),
+        this.dockerStats.getContainerStats(),
+        this.dockerStats.getHostStats(),
+        this.monitoringRepo.findRecentContainerEvents(14, 30),
+        this.monitoringRepo.findPageVisitSeriesDays(14),
+      ],
+    );
     // instanceId가 있어야 조회 가능 — ec2 해석 이후에만 시도
     const creditMetrics = await this.fetchCpuCreditMetrics(
       ec2.instanceId,
@@ -282,12 +309,21 @@ export class AiDiagnosisService {
         note: s.note ?? null,
       })),
       trafficProfile: TRAFFIC_PROFILE,
+      // CPU 스파이크 원인 추측 대신 알려진 원인을 먼저 대조하게 하는 근거 데이터
+      scheduledJobsNote: SCHEDULED_JOBS_NOTE,
       host: host
         ? {
-            cpuPercent: host.cpuPercent,
-            memPercent: host.memPercent,
-            memUsedMb: host.memUsedMb,
-            memTotalMb: host.memTotalMb,
+            // containers[].live 와 같은 이름 규칙 — "지금 이 순간" 값이지 기간 평균이 아님을
+            // 필드 구조 자체로 드러낸다. 예전엔 host가 이 구분 없이 밋밋해서 AI가
+            // "전체 CPU 평균 4.2%"처럼 순간값을 평균이라 잘못 표현했다(2026-07-31).
+            live: {
+              cpuPercent: host.cpuPercent,
+              memPercent: host.memPercent,
+              memUsedMb: host.memUsedMb,
+              memTotalMb: host.memTotalMb,
+              // "위험/압박" 표현 허용 여부를 LLM 판단이 아니라 코드가 결정 (기준: MEM_CRITICAL_PERCENT)
+              memStatus: computeMemStatus(host.memPercent),
+            },
             diskPercent: host.diskPercent,
             diskUsedGb: host.diskUsedGb,
             diskTotalGb: host.diskTotalGb,
@@ -300,13 +336,20 @@ export class AiDiagnosisService {
         detail: e.detail,
         at: e.occurred_at,
       })),
+      // 방문 추이(최근 7일 vs 이전 7일) — 자원 얘기만이 아니라 실제 사용량 변화도 보고하기 위함
+      traffic: buildTrafficTrend(visitSeries),
       containers,
     };
   }
 
-  /** 운영 챗봇. 현재 컨텍스트를 system으로 주입하고 대화 내역을 이어 답한다. */
+  /**
+   * 운영 챗봇. 현재 컨텍스트를 system으로 주입하고 대화 내역을 이어 답한다.
+   * adminUsername은 로그(rag_chat_logs)에 "누가 물었는지" 남기는 용도 — 컨트롤러가
+   * 세션에서 뽑아 넘긴다.
+   */
   async chat(
     messages: ChatMessage[],
+    adminUsername: string,
   ): Promise<{ reply: string; model: string }> {
     if (!this.client) {
       throw new ServiceUnavailableException(
@@ -331,8 +374,9 @@ export class AiDiagnosisService {
       throw new BadRequestException('마지막 메시지는 사용자 메시지여야 합니다');
     }
 
+    const startedAt = Date.now();
     const question = safe[safe.length - 1].content;
-    const [context, ragContext] = await Promise.all([
+    const [context, rag] = await Promise.all([
       this.buildContext(),
       this.retrieveRagContext(question),
     ]);
@@ -344,8 +388,8 @@ export class AiDiagnosisService {
         content: `현재 운영 데이터(JSON):\n${JSON.stringify(context)}`,
       },
     ];
-    if (ragContext) {
-      systemMessages.push({ role: 'system' as const, content: ragContext });
+    if (rag.context) {
+      systemMessages.push({ role: 'system' as const, content: rag.context });
     }
 
     const completion = await this.client.chat.completions.create({
@@ -356,6 +400,23 @@ export class AiDiagnosisService {
     });
 
     const reply = completion.choices[0]?.message?.content?.trim() ?? '';
+
+    // Q&A 로그는 부가 기능 — 실패해도 챗봇 응답 자체는 그대로 나가야 한다.
+    this.ragRepo
+      .logChatExchange({
+        question,
+        answer: reply,
+        model: this.model,
+        adminUsername,
+        ragChunkCount: rag.chunkCount,
+        durationMs: Date.now() - startedAt,
+      })
+      .catch((e) => {
+        this.logger.warn(
+          `챗봇 Q&A 로그 저장 실패(응답에는 영향 없음): ${e instanceof Error ? e.message : e}`,
+        );
+      });
+
     return { reply, model: this.model };
   }
 
@@ -366,8 +427,10 @@ export class AiDiagnosisService {
    * 여기서 가져온 과거 문서가 그 공백을 메운다.
    * 검색은 부가 기능이므로 실패해도 챗봇 자체는 계속 동작해야 한다(조용히 생략).
    */
-  private async retrieveRagContext(question: string): Promise<string | null> {
-    if (!this.ragEmbedding.enabled) return null;
+  private async retrieveRagContext(
+    question: string,
+  ): Promise<{ context: string | null; chunkCount: number }> {
+    if (!this.ragEmbedding.enabled) return { context: null, chunkCount: 0 };
     try {
       const queryVec = await this.ragEmbedding.embedQuery(question);
       const rows = await this.ragRepo.searchChunks(
@@ -375,7 +438,7 @@ export class AiDiagnosisService {
         RAG_TOP_K,
         RAG_MAX_DISTANCE,
       );
-      if (rows.length === 0) return null;
+      if (rows.length === 0) return { context: null, chunkCount: 0 };
 
       const body = rows
         .map(
@@ -384,7 +447,7 @@ export class AiDiagnosisService {
         )
         .join('\n\n---\n\n');
 
-      return [
+      const context = [
         '참고: 아래는 벡터 검색으로 가져온 과거 운영 스냅샷 기록이다.',
         '유사도로 뽑았을 뿐이라 질문과 무관할 수 있다 — 무관하면 그냥 무시하고 언급하지 마라.',
         '인용할 때는 각 항목의 기간을 확인해 "언제의 기록인지" 반드시 밝혀라.',
@@ -392,11 +455,12 @@ export class AiDiagnosisService {
         '',
         body,
       ].join('\n');
+      return { context, chunkCount: rows.length };
     } catch (e) {
       this.logger.warn(
         `RAG 검색 실패 — 과거 기록 없이 답변합니다: ${e instanceof Error ? e.message : e}`,
       );
-      return null;
+      return { context: null, chunkCount: 0 };
     }
   }
 
@@ -575,9 +639,13 @@ function buildChatSystemPrompt(): string {
     '  "near_max"=여유 충분(위험 표현 금지), "declining"=이때만 위험 가능성 언급,',
     '  "stable"=위험 단정 금지. 언급할 땐 반드시 실제 수치를 인용하라.',
     '  null이면 크레딧 데이터를 가져오지 못했다고만 말하고 숫자를 추측하지 마라.',
+    `- host.live.memStatus가 "critical"(사용률 ${MEM_CRITICAL_PERCENT}% 이상)일 때만 메모리 위험/압박을`,
+    '  언급하라. 그 미만이면 위험이라 하지 말고 수치만 담백하게 답하라.',
+    '- host.live의 수치는 지금 이 순간 값이다. "평균"이라 하지 말고 "현재"라고 표현하라.',
     '- 간결한 한국어로 답하고, 필요하면 목록/표를 쓴다. 같은 문장을 반복하지 마라.',
     '- 운영/비용/성능 주제에 집중하고, 무관한 잡담은 정중히 거절한다.',
-    '- CPU 스파이크 등 이상을 설명할 때 최근 배포·재시작 이력과 연결해보라.',
+    '- CPU 스파이크 등 패턴을 설명할 때 scheduledJobsNote로 설명되면 그게 원인이라고 답하고,',
+    '  아니면 최근 배포·재시작 이력과 연결해보라. 원인 없이 그냥 "위험하다"고만 답하지 마라.',
     '',
     '보안(매우 중요):',
     '- 운영 데이터(자원/비용/배포 이력 등)는 모든 관리자에게 동일하게 답한다.',
@@ -610,6 +678,42 @@ export function computeBalanceStatus(
   if (netDecline > observedMax * DECLINE_RATIO) return 'declining';
 
   return 'stable';
+}
+
+/**
+ * 메모리 "압박/위험" 표현을 쓸 수 있는지 코드가 결정한다(관리자 지정 기준 90%).
+ * LLM에 판단을 맡기면 77% 같은 수치도 "위험"이라 부르는 경우가 실측으로 확인됐다(2026-07-31).
+ */
+export function computeMemStatus(
+  memPercent: number | null,
+): 'normal' | 'critical' | null {
+  if (memPercent === null) return null;
+  return memPercent >= MEM_CRITICAL_PERCENT ? 'critical' : 'normal';
+}
+
+/**
+ * 최근 7일 vs 이전 7일 방문 수 비교. findPageVisitSeriesDays(14)의 결과(오래된→최신 순,
+ * 정확히 14개)를 반으로 잘라 합산한다. 이전 7일 방문이 0이면 %증감은 분모가 0이라
+ * 의미가 없으므로 null로 두고(추측 금지 원칙과 동일) 절대 건수만 남긴다.
+ */
+export function buildTrafficTrend(
+  visitSeries: Array<{ bucket: string; count: bigint | number }>,
+): {
+  last7dVisits: number;
+  prior7dVisits: number;
+  changePercent: number | null;
+} | null {
+  if (visitSeries.length !== 14) return null;
+  const nums = visitSeries.map((r) => Number(r.count));
+  const prior7dVisits = nums.slice(0, 7).reduce((a, b) => a + b, 0);
+  const last7dVisits = nums.slice(7, 14).reduce((a, b) => a + b, 0);
+  const changePercent =
+    prior7dVisits > 0
+      ? Number(
+          (((last7dVisits - prior7dVisits) / prior7dVisits) * 100).toFixed(1),
+        )
+      : null;
+  return { last7dVisits, prior7dVisits, changePercent };
 }
 
 function fmtDay(d: Date | string): string {

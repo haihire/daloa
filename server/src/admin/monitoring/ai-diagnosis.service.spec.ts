@@ -1,4 +1,8 @@
-import { computeBalanceStatus } from './ai-diagnosis.service';
+import {
+  computeBalanceStatus,
+  computeMemStatus,
+  buildTrafficTrend,
+} from './ai-diagnosis.service';
 
 /**
  * 회귀 방지: 운영에서 실제로 관측된 케이스 —
@@ -37,5 +41,76 @@ describe('computeBalanceStatus', () => {
 
   it('데이터포인트가 1개뿐이면(oldest===latest) stable', () => {
     expect(computeBalanceStatus(150, [150], 250)).toBe('stable');
+  });
+});
+
+/**
+ * 회귀 방지: 관리자가 명시한 기준(2026-07-31) — "위험은 90% 이상일 때".
+ * 그 전엔 이 기준이 코드에 없어 77.6%도 AI가 "메모리 압박 위험"이라 표현했다.
+ */
+describe('computeMemStatus', () => {
+  it('null이면 null', () => {
+    expect(computeMemStatus(null)).toBeNull();
+  });
+
+  it('90% 미만은 normal (운영 실측 재현: 77.6%)', () => {
+    expect(computeMemStatus(77.6)).toBe('normal');
+    expect(computeMemStatus(89.9)).toBe('normal');
+  });
+
+  it('90% 이상은 critical', () => {
+    expect(computeMemStatus(90)).toBe('critical');
+    expect(computeMemStatus(95)).toBe('critical');
+  });
+});
+
+describe('buildTrafficTrend', () => {
+  it('14개가 아니면(초기 상태 등) null', () => {
+    expect(buildTrafficTrend([])).toBeNull();
+    expect(buildTrafficTrend([{ bucket: '07-01', count: 10 }])).toBeNull();
+  });
+
+  it('이전 7일 대비 증감률을 계산한다', () => {
+    const older = Array.from({ length: 7 }, (_, i) => ({
+      bucket: `07-0${i + 1}`,
+      count: 100,
+    }));
+    const newer = Array.from({ length: 7 }, (_, i) => ({
+      bucket: `07-1${i}`,
+      count: 150,
+    }));
+    const r = buildTrafficTrend([...older, ...newer]);
+    expect(r).toEqual({
+      prior7dVisits: 700,
+      last7dVisits: 1050,
+      changePercent: 50,
+    });
+  });
+
+  it('이전 7일 방문이 0이면 %증감은 추측하지 않고 null', () => {
+    const older = Array.from({ length: 7 }, (_, i) => ({
+      bucket: `07-0${i + 1}`,
+      count: 0,
+    }));
+    const newer = Array.from({ length: 7 }, (_, i) => ({
+      bucket: `07-1${i}`,
+      count: 5,
+    }));
+    const r = buildTrafficTrend([...older, ...newer]);
+    expect(r?.changePercent).toBeNull();
+    expect(r?.last7dVisits).toBe(35);
+  });
+
+  it('bigint 카운트도 처리한다(Prisma가 COUNT/SUM을 bigint로 반환)', () => {
+    const series = Array.from({ length: 14 }, (_, i) => ({
+      bucket: `07-${i}`,
+      count: BigInt(10),
+    }));
+    const r = buildTrafficTrend(series);
+    expect(r).toEqual({
+      prior7dVisits: 70,
+      last7dVisits: 70,
+      changePercent: 0,
+    });
   });
 });

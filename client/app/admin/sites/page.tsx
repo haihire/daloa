@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import { buildGuestNotice, useAdminRole } from "@/lib/admin-role";
+import { dateAxis } from "@/lib/chart-ticks";
 import { SITE_CATEGORIES } from "@/lib/site-categories";
 
 interface Site {
@@ -787,7 +788,10 @@ export default function AdminSitesPage() {
                   ) : (
                     <div style={{ width: "100%", height: 180 }}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={clickSeries}>
+                        <AreaChart
+                          data={clickSeries}
+                          margin={{ top: 5, right: 12, left: 0, bottom: 0 }}
+                        >
                           <defs>
                             <linearGradient
                               id="siteClickFill"
@@ -814,8 +818,8 @@ export default function AdminSitesPage() {
                           />
                           <XAxis
                             dataKey="bucket"
-                            interval={0}
                             tick={{ fontSize: 9, fill: "#6b7280" }}
+                            {...dateAxis(clickSeries, "bucket")}
                           />
                           <YAxis
                             allowDecimals={false}

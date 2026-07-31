@@ -116,6 +116,31 @@ export class RagRepository {
     `;
   }
 
+  /**
+   * 챗봇 Q&A 1건을 로그로 남긴다. rag_chat_logs는 벡터 컬럼이 없어 다른 메서드와 달리
+   * 일반 Prisma Client 호출로 다룬다(raw SQL 불필요).
+   * 로깅 실패가 챗봇 응답을 막으면 안 되므로 실패해도 조용히 넘어간다 — 호출부에서 처리.
+   */
+  async logChatExchange(input: {
+    question: string;
+    answer: string;
+    model: string;
+    adminUsername: string;
+    ragChunkCount: number;
+    durationMs: number;
+  }): Promise<void> {
+    await this.prisma.rag_chat_logs.create({
+      data: {
+        question: input.question,
+        answer: input.answer,
+        model: input.model,
+        admin_username: input.adminUsername,
+        rag_chunk_count: input.ragChunkCount,
+        duration_ms: input.durationMs,
+      },
+    });
+  }
+
   /** 같은 source·기간의 문서가 이미 있는지 (중복 스냅샷 방지). */
   async existsForPeriod(
     source: string,
