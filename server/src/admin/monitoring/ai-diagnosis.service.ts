@@ -39,11 +39,21 @@ interface Ec2Info {
 }
 
 /** AWS CloudWatch에서 가져온 버스트 CPU 크레딧 실측치. */
-interface CpuCreditMetrics {
+export interface CpuCreditMetrics {
   /** 현재 크레딧 잔액(최근 값). */
   creditBalance: number | null;
+  /** 최근 24시간 관측된 잔액 최소/최대 — AWS가 정하는 이론상 상한을 몰라도 "거의 꽉 찼는지"를 판단할 수 있다. */
+  creditBalanceMin24h: number | null;
+  creditBalanceMax24h: number | null;
   /** 최근 24시간 평균 시간당 크레딧 소모량. */
   creditUsagePerHour: number | null;
+  /**
+   * 코드가 미리 판정한 상태 — LLM이 두 숫자만 보고 스스로 판단하게 두면
+   * "잔액이 상한 근처에서 꽉 차 있는데도 위험하다"고 오판하는 경우가 실측으로 확인됐다
+   * (2026-07-31, 잔액 287.57/288 인데도 "크레딧 소진 위험"이라 답함).
+   * 판단을 코드에서 결정론적으로 내려 LLM은 인용만 하게 한다.
+   */
+  balanceStatus: 'near_max' | 'declining' | 'stable' | null;
 }
 
 export interface AiDiagnosisResult {
@@ -97,8 +107,13 @@ const SYSTEM_PROMPT = [
   '',
   '규칙:',
   '- 제공된 pricingTable의 수치 외에 가격을 지어내지 마라. 절감액은 가격표로 계산 가능한 범위에서만 제시.',
-  '- 버스트(t3/t4g) 크레딧 과금 가능성을 고려하라.',
-  '- ec2.creditMetrics가 있으면(크레딧 잔액·시간당 소모량) 그 실측치를 그대로 인용해 구체적으로 답하라.',
+  '- 버스트(t3/t4g) 크레딧 과금 가능성을 고려하되, balanceStatus를 신뢰하라(이미 계산된 판정이다):',
+  '  · "near_max" → 크레딧이 상한 근처로 여유가 충분하다. "크레딧 소진 위험" 같은 표현을 쓰지 마라.',
+  '  · "declining" → 24시간 동안 뚜렷이 줄고 있다. 이때만 위험 가능성을 언급해도 된다.',
+  '  · "stable" → 뚜렷한 증감 없이 유지 중이다. 위험을 단정하지 마라.',
+  '  어느 경우든 anomalies/costSuggestions에서 크레딧을 언급하려면 반드시 실제 수치',
+  '  (creditBalance, creditBalanceMin24h~Max24h, creditUsagePerHour)를 인용하라.',
+  '  수치를 인용하지 않고 "크레딧 소진 위험이 있다"처럼만 쓰는 것은 금지한다.',
   '  creditMetrics가 null이면 크레딧 데이터를 가져오지 못했다는 사실만 명시하고 소모량을 추측하지 마라.',
   '- 데이터가 부족하면(샘플 적음/EC2 정보 없음) 추측 대신 그 사실을 명시하라.',
   '- 각 배열 항목은 1~2문장의 간결한 한국어. 같은 내용을 다른 필드에서 반복하지 마라.',
@@ -489,6 +504,10 @@ export class AiDiagnosisService {
 
       // GetMetricData는 최신 시각부터 내림차순으로 값을 반환한다.
       const creditBalance = balanceValues[0] ?? null;
+      const creditBalanceMin24h =
+        balanceValues.length > 0 ? Math.min(...balanceValues) : null;
+      const creditBalanceMax24h =
+        balanceValues.length > 0 ? Math.max(...balanceValues) : null;
       const creditUsagePerHour =
         usageValues.length > 0
           ? Number(
@@ -498,7 +517,19 @@ export class AiDiagnosisService {
             )
           : null;
 
-      return { creditBalance, creditUsagePerHour };
+      const balanceStatus = computeBalanceStatus(
+        creditBalance,
+        balanceValues,
+        creditBalanceMax24h,
+      );
+
+      return {
+        creditBalance,
+        creditBalanceMin24h,
+        creditBalanceMax24h,
+        creditUsagePerHour,
+        balanceStatus,
+      };
     } catch (e) {
       this.logger.warn(
         `CloudWatch CPU 크레딧 조회 실패(자격증명/권한 확인 필요) — 생략: ${e instanceof Error ? e.message : e}`,
@@ -540,7 +571,9 @@ function buildChatSystemPrompt(): string {
     '',
     '규칙:',
     '- 데이터에 없는 가격/수치를 지어내지 마라. 모르면 모른다고 말하라.',
-    '- ec2.creditMetrics에 크레딧 잔액·시간당 소모량이 있으면 그 실측치를 그대로 인용하라.',
+    '- creditMetrics.balanceStatus는 이미 계산된 판정이니 그대로 신뢰하라:',
+    '  "near_max"=여유 충분(위험 표현 금지), "declining"=이때만 위험 가능성 언급,',
+    '  "stable"=위험 단정 금지. 언급할 땐 반드시 실제 수치를 인용하라.',
     '  null이면 크레딧 데이터를 가져오지 못했다고만 말하고 숫자를 추측하지 마라.',
     '- 간결한 한국어로 답하고, 필요하면 목록/표를 쓴다. 같은 문장을 반복하지 마라.',
     '- 운영/비용/성능 주제에 집중하고, 무관한 잡담은 정중히 거절한다.',
@@ -551,6 +584,32 @@ function buildChatSystemPrompt(): string {
     '- 단, 관리자 비밀번호·API 키·시크릿·토큰·환경변수 값 등 민감정보는 갖고 있지 않으며,',
     '  어떤 요청에도 추측하거나 노출하지 않는다. 그런 요청에는 제공할 수 없다고만 답하라.',
   ].join('\n');
+}
+
+/**
+ * CPU 크레딧 잔액 상태를 결정론적으로 판정한다.
+ * AWS가 정한 인스턴스별 이론상 크레딧 상한(t3.micro=288 등)을 하드코딩하지 않는다 —
+ * 우리가 관측한 24시간 창의 최대치를 그 인스턴스의 사실상 상한으로 취급한다.
+ * (버스트 크레딧은 상한에 도달하면 더 안 쌓이므로, 관측 최대치가 곧 상한에 가깝다)
+ */
+export function computeBalanceStatus(
+  latest: number | null,
+  seriesDescByTime: number[],
+  observedMax: number | null,
+): CpuCreditMetrics['balanceStatus'] {
+  if (latest === null || observedMax === null || observedMax <= 0) return null;
+
+  const NEAR_MAX_RATIO = 0.95; // 관측 최대치의 95% 이상이면 "거의 꽉 참"
+  const DECLINE_RATIO = 0.15; // 24시간 동안 관측 최대치의 15% 이상 순감소했으면 "감소 추세"
+
+  if (latest >= observedMax * NEAR_MAX_RATIO) return 'near_max';
+
+  // GetMetricData는 최신순(내림차순)이므로 배열 끝이 24시간 전 값이다.
+  const oldest = seriesDescByTime[seriesDescByTime.length - 1];
+  const netDecline = oldest - latest;
+  if (netDecline > observedMax * DECLINE_RATIO) return 'declining';
+
+  return 'stable';
 }
 
 function fmtDay(d: Date | string): string {
