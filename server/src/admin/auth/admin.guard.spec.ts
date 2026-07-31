@@ -1,3 +1,7 @@
+/* eslint-disable @typescript-eslint/unbound-method --
+   Reflector는 핸들러 '함수 객체'에서 메타데이터를 읽으므로 메서드 참조를 그대로 넘겨야 한다.
+   bind하면 새 함수가 되어 메타데이터가 사라져 테스트 자체가 성립하지 않는다.
+   여기서는 참조만 하고 호출하지 않으므로 this 유실 위험도 없다. */
 import { Reflector } from '@nestjs/core';
 import { ForbiddenException } from '@nestjs/common';
 import { AdminGuard, RequireOwner, REQUIRE_OWNER } from './admin.guard';

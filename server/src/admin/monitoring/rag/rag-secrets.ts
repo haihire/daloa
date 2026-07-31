@@ -51,7 +51,8 @@ export const SECRET_ENV_KEYS: readonly string[] = [
  * 나중에 새 시크릿 env가 추가돼도 이 파일을 고치는 걸 잊어서 새는 일을 막는다.
  * (YOUTUBE_API_KEY_2 처럼 접미사가 붙는 것도 여기서 걸린다.)
  */
-const SECRET_NAME_PATTERN = /(KEY|SECRET|TOKEN|PASSWORD|PASS|CREDENTIAL)S?(_\d+)?$/i;
+const SECRET_NAME_PATTERN =
+  /(KEY|SECRET|TOKEN|PASSWORD|PASS|CREDENTIAL)S?(_\d+)?$/i;
 
 /** env 값이 이 길이 미만이면 우연히 문서에 포함될 수 있어 값 비교 대상에서 제외한다. */
 const MIN_SECRET_VALUE_LEN = 8;

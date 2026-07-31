@@ -1,4 +1,8 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { DockerStatsService } from '../docker-stats.service';
@@ -68,9 +72,13 @@ export class RagWriterService {
    * 최근 WINDOW_DAYS 구간의 운영 스냅샷 문서를 만들어 저장한다.
    * force=false면 같은 기간 문서가 이미 있을 때 건너뛴다(중복 생성 방지).
    */
-  async generateWeeklySnapshot(
-    force = false,
-  ): Promise<{ created: boolean; documentId?: string; title: string; chunks: number; reason?: string }> {
+  async generateWeeklySnapshot(force = false): Promise<{
+    created: boolean;
+    documentId?: string;
+    title: string;
+    chunks: number;
+    reason?: string;
+  }> {
     if (!this.client) {
       throw new ServiceUnavailableException(
         'AI 키 또는 모델이 설정되지 않아 문서를 생성할 수 없습니다',
@@ -96,7 +104,12 @@ export class RagWriterService {
         periodEnd,
       ))
     ) {
-      return { created: false, title, chunks: 0, reason: '같은 기간 문서가 이미 존재합니다' };
+      return {
+        created: false,
+        title,
+        chunks: 0,
+        reason: '같은 기간 문서가 이미 존재합니다',
+      };
     }
 
     const context = await this.buildWriterContext();
@@ -126,7 +139,10 @@ export class RagWriterService {
       periodStart,
       periodEnd,
       contentMd: markdown,
-      chunks: chunks.map((content, i) => ({ content, embedding: embeddings[i] })),
+      chunks: chunks.map((content, i) => ({
+        content,
+        embedding: embeddings[i],
+      })),
     });
 
     this.logger.log(`RAG 문서 저장: ${title} (청크 ${chunks.length}개)`);

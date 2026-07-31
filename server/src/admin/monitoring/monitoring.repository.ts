@@ -15,7 +15,6 @@ export interface SummaryRow {
   bot_visits: bigint | number;
 }
 
-
 export interface VisitRow {
   path: string;
   device_type: DeviceType;
