@@ -4,7 +4,11 @@ import { Cron } from '@nestjs/schedule';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Redis } from 'ioredis';
-import { acquireLock, releaseLock, runIfLockAcquired } from '../common/cron-lock.util';
+import {
+  acquireLock,
+  releaseLock,
+  runIfLockAcquired,
+} from '../common/cron-lock.util';
 import { REDIS_CLIENT } from '../redis/redis.module';
 
 /**

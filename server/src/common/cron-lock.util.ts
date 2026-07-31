@@ -41,6 +41,9 @@ export async function acquireLock(
   return acquired === 'OK';
 }
 
-export async function releaseLock(redis: Redis, jobName: string): Promise<void> {
+export async function releaseLock(
+  redis: Redis,
+  jobName: string,
+): Promise<void> {
   await redis.del(`cron:lock:${jobName}`);
 }

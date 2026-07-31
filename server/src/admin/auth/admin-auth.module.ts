@@ -6,7 +6,12 @@ import { AdminGuard, AdminWriteGuard } from './admin.guard';
 
 @Module({
   controllers: [AdminAuthController],
-  providers: [AdminAuthService, AdminAuthRepository, AdminGuard, AdminWriteGuard],
+  providers: [
+    AdminAuthService,
+    AdminAuthRepository,
+    AdminGuard,
+    AdminWriteGuard,
+  ],
   exports: [AdminAuthService, AdminGuard, AdminWriteGuard],
 })
 export class AdminAuthModule {}

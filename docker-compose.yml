@@ -2,7 +2,8 @@ name: lomoa
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector 확장이 미리 빌드된 이미지 (postgres:16 기반, RAG 임베딩 저장용)
+    image: pgvector/pgvector:pg16
     container_name: lomoa-postgres
     restart: unless-stopped
     environment:

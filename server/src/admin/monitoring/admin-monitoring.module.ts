@@ -5,6 +5,9 @@ import { DockerStatsService } from './docker-stats.service';
 import { AiDiagnosisService } from './ai-diagnosis.service';
 import { MonitoringRepository } from './monitoring.repository';
 import { AdminAuthModule } from '../auth/admin-auth.module';
+import { RagRepository } from './rag/rag.repository';
+import { RagEmbeddingService } from './rag/rag-embedding.service';
+import { RagWriterService } from './rag/rag-writer.service';
 
 @Module({
   imports: [AdminAuthModule],
@@ -14,6 +17,9 @@ import { AdminAuthModule } from '../auth/admin-auth.module';
     DockerStatsService,
     AiDiagnosisService,
     MonitoringRepository,
+    RagRepository,
+    RagEmbeddingService,
+    RagWriterService,
   ],
   exports: [AdminMonitoringService],
 })

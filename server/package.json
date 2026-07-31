@@ -24,6 +24,7 @@
     "test:integration": "node ./scripts/run-jest.cjs --config ./test/jest-integration.json --runInBand"
   },
   "dependencies": {
+    "@aws-sdk/client-cloudwatch": "^3.1100.0",
     "@google/generative-ai": "^0.24.1",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.3",

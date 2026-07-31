@@ -2,6 +2,7 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
+  SetMetadata,
   UnauthorizedException,
   ForbiddenException,
 } from '@nestjs/common';
@@ -15,10 +16,15 @@ import {
 
 export const REQUIRE_OWNER = 'requireOwner';
 
-/** @RequireOwner() — owner 전용 엔드포인트에 붙이는 데코레이터 */
-export const RequireOwner = () =>
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-  (Reflect as any).metadata(REQUIRE_OWNER, true);
+/**
+ * @RequireOwner() — owner(master) 전용 엔드포인트에 붙이는 데코레이터.
+ *
+ * 반드시 SetMetadata를 쓸 것. Reflect.metadata()는 메타데이터를
+ * (프로토타입, 메서드명) 쌍에 붙이는데 아래 가드의 reflector.get(KEY, getHandler())는
+ * 핸들러 '함수 객체'에서 읽으므로 항상 undefined가 되어 권한 검사가 통째로 무력화된다.
+ * (2026-07-31 실제로 guest가 owner 전용 엔드포인트를 통과해 발견 — 회귀 방지용 spec 있음)
+ */
+export const RequireOwner = () => SetMetadata(REQUIRE_OWNER, true);
 
 @Injectable()
 export class AdminGuard implements CanActivate {

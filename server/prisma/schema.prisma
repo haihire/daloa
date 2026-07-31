@@ -206,3 +206,31 @@ model youtube_view_snapshots {
   @@index([published_at], map: "idx_16605_idx_published_at")
   @@index([recorded_date], map: "idx_16605_idx_recorded_date")
 }
+
+/// RAG 지식베이스 문서. append-only 스냅샷 — 생성 후 내용을 수정하지 않는다.
+model rag_documents {
+  id           BigInt     @id @default(autoincrement())
+  title        String
+  source       String
+  period_start DateTime   @db.Date
+  period_end   DateTime   @db.Date
+  content_md   String
+  created_at   DateTime   @default(now()) @db.Timestamptz(6)
+  rag_chunks   rag_chunks[]
+
+  @@index([source, period_start(sort: Desc)], map: "rag_documents_source_period_idx")
+}
+
+/// rag_documents를 청크 단위로 쪼개 임베딩한 벡터.
+/// embedding은 Prisma가 vector 타입을 지원하지 않아 Unsupported — 읽기/쓰기는 $queryRaw로만.
+model rag_chunks {
+  id            BigInt        @id @default(autoincrement())
+  document_id   BigInt
+  chunk_index   Int
+  content       String
+  embedding     Unsupported("vector(1024)")
+  created_at    DateTime      @default(now()) @db.Timestamptz(6)
+  rag_documents rag_documents @relation(fields: [document_id], references: [id], onDelete: Cascade)
+
+  @@unique([document_id, chunk_index])
+}
