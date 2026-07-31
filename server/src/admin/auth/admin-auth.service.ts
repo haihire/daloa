@@ -10,10 +10,7 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import type Redis from 'ioredis';
 import { REDIS_CLIENT } from '../../redis/redis.module';
-import {
-  AdminAuthRepository,
-  type AdminRole,
-} from './admin-auth.repository';
+import { AdminAuthRepository, type AdminRole } from './admin-auth.repository';
 
 export type { AdminRole };
 

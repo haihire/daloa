@@ -239,10 +239,7 @@ export class DockerStatsService {
     await runIfLockAcquired(this.redis, 'cleanupContainerMetrics', async () => {
       try {
         for (const container of VALID_CONTAINERS) {
-          await this.monitoringRepo.deleteDockerMetricsOlderThan(
-            container,
-            9,
-          );
+          await this.monitoringRepo.deleteDockerMetricsOlderThan(container, 9);
         }
       } catch (err: unknown) {
         this.logger.warn(

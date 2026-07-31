@@ -23,6 +23,18 @@ export const INSTANCE_PRICING: Record<string, InstanceSpec> = {
   't3.micro': { vcpu: 2, ramGb: 1, usdPerHour: 0.013 },
   't3.small': { vcpu: 2, ramGb: 2, usdPerHour: 0.026 },
   't3.medium': { vcpu: 2, ramGb: 4, usdPerHour: 0.052 },
+  't4g.nano': {
+    vcpu: 2,
+    ramGb: 0.5,
+    usdPerHour: 0.0052,
+    note: 'ARM(Graviton). x86 대비 ~20% 저렴하나 컨테이너 이미지를 arm64로 재빌드해야 함',
+  },
+  't4g.micro': {
+    vcpu: 2,
+    ramGb: 1,
+    usdPerHour: 0.0104,
+    note: 'ARM(Graviton). x86 대비 ~20% 저렴하나 컨테이너 이미지를 arm64로 재빌드해야 함',
+  },
   't4g.small': {
     vcpu: 2,
     ramGb: 2,

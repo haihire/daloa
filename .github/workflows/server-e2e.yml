@@ -12,7 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        # schema.prisma가 vector 타입(RAG 임베딩)을 참조하므로 pgvector 포함 이미지 필요.
+        # 순정 postgres면 prisma db push가 'type "vector" does not exist'로 실패한다.
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_DB: lost_ark
           POSTGRES_USER: testuser
@@ -66,6 +68,12 @@ jobs:
       - name: Install server dependencies
         working-directory: server
         run: pnpm install --frozen-lockfile
+
+      # 이미지에 pgvector가 들어있어도 확장은 DB마다 따로 활성화해야 vector 타입이 생긴다.
+      - name: Enable pgvector extension
+        env:
+          PGPASSWORD: testpass
+        run: psql -h 127.0.0.1 -U testuser -d lost_ark -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
       - name: Setup database schema
         working-directory: server

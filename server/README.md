@@ -50,7 +50,10 @@ REDIS_DB=0
 # NVIDIA NIM (OpenAI 호환) — 관리자 AI 진단 + 사이트 추천 후보 생성
 NVIDIA_API_KEY=...
 # NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
-# AI_MODEL=meta/llama-3.3-70b-instruct
+# AI_MODEL=meta/llama-3.1-8b-instruct           # 사이트 AI 추천(site-suggest) 전용, 가벼운 분류라 8B로 충분
+# CHATBOT_AI_MODEL=openai/gpt-oss-120b          # 운영 챗봇(ai-diagnosis) 전용, MoE라 120B급인데 4~7초로 빠름
+# RAG_EMBED_MODEL=nvidia/nv-embedqa-e5-v5       # RAG 임베딩 1024차원, 저장=passage/검색=query 로 비대칭 호출
+# RAG_WRITER_AI_MODEL=                          # RAG 문서 작성 모델(선택). 미지정 시 CHATBOT_AI_MODEL 사용
 
 # 카카오 알림 (사이트 변경 감지, 에러 알림)
 KAKAO_REST_API_KEY=...

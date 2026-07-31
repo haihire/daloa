@@ -13,10 +13,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { AdminGuard } from '../auth/admin.guard';
+import { AdminGuard, RequireOwner } from '../auth/admin.guard';
 import { AdminMonitoringService } from './admin-monitoring.service';
 import { DockerStatsService } from './docker-stats.service';
 import { AiDiagnosisService, type ChatMessage } from './ai-diagnosis.service';
+import { RagWriterService } from './rag/rag-writer.service';
+import { RagRepository } from './rag/rag.repository';
 
 @Controller('api')
 export class AdminMonitoringController {
@@ -30,6 +32,8 @@ export class AdminMonitoringController {
     private readonly monitoring: AdminMonitoringService,
     private readonly dockerStats: DockerStatsService,
     private readonly aiDiagnosis: AiDiagnosisService,
+    private readonly ragWriter: RagWriterService,
+    private readonly ragRepo: RagRepository,
   ) {}
 
   @UseGuards(AdminGuard)
@@ -95,6 +99,22 @@ export class AdminMonitoringController {
   @Post('admin/monitoring/ai-chat')
   aiChat(@Body() body: { messages?: ChatMessage[] }) {
     return this.aiDiagnosis.chat(body?.messages ?? []);
+  }
+
+  // RAG 지식베이스 문서 목록. 챗봇이 어떤 과거 기록을 참고할 수 있는지 확인용.
+  @UseGuards(AdminGuard)
+  @Get('admin/monitoring/rag/documents')
+  ragDocuments() {
+    return this.ragRepo.listDocuments(50);
+  }
+
+  // 운영 스냅샷 문서 생성(AI 호출 + 임베딩 = 비용 발생). owner 전용, 버튼 클릭 시 1회.
+  // force=true면 같은 기간 문서가 있어도 새로 만든다.
+  @UseGuards(AdminGuard)
+  @RequireOwner()
+  @Post('admin/monitoring/rag/snapshot')
+  ragSnapshot(@Body() body: { force?: boolean }) {
+    return this.ragWriter.generateWeeklySnapshot(body?.force === true);
   }
 
   @UseGuards(AdminGuard)
