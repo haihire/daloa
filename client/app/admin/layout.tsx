@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -43,7 +44,7 @@ export default function AdminLayout({
   return (
     <div className="admin-shell h-screen flex overflow-hidden">
       <aside className="admin-sidebar w-56 flex flex-col shrink-0">
-        <div className="px-5 py-6 border-b border-[color:var(--admin-sidebar-border)]">
+        <div className="px-5 py-6 border-b border-[color:var(--admin-sidebar-border)] flex items-center justify-between">
           <span className="admin-sidebar-brand text-base font-bold">
             관리자
           </span>
@@ -51,9 +52,10 @@ export default function AdminLayout({
             href="/"
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-2 flex items-center gap-1 text-xs font-medium px-2 py-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors w-fit"
+            title="메인 사이트로 이동"
+            className="rounded-lg bg-white p-1.5 leading-none transition-opacity hover:opacity-70"
           >
-            ↗ 메인 사이트 바로가기
+            <Image src="/icon.png" alt="lomoa" width={32} height={32} />
           </Link>
         </div>
         <nav className="flex-1 py-4 px-3 space-y-1">

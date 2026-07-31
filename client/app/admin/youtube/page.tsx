@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import type { YoutubeVideo } from "@/types";
 import { buildGuestNotice, useAdminRole } from "@/lib/admin-role";
+import { dateAxis } from "@/lib/chart-ticks";
 
 // ===== 유틸 =====
 
@@ -535,7 +536,7 @@ export default function AdminYoutubePage() {
                   <ResponsiveContainer width="100%" height={140}>
                     <AreaChart
                       data={historyData}
-                      margin={{ top: 4, right: 4, bottom: 0, left: 0 }}
+                      margin={{ top: 4, right: 12, bottom: 0, left: 0 }}
                     >
                       <defs>
                         <linearGradient
@@ -562,7 +563,7 @@ export default function AdminYoutubePage() {
                         tick={{ fill: "#9ca3af", fontSize: 10 }}
                         axisLine={false}
                         tickLine={false}
-                        interval="preserveStartEnd"
+                        {...dateAxis(historyData, "date")}
                       />
                       <YAxis hide />
                       <ReTooltip

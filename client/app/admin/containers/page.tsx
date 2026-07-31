@@ -10,6 +10,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { dateAxis } from "@/lib/chart-ticks";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface ContainerStat {
   name: string;
@@ -90,8 +93,8 @@ const QUICK_PROMPTS: { label: string; prompt?: string; diagnosis?: boolean }[] =
       prompt: "컨테이너별 메모리 사용 상태와 여유가 충분한지 알려줘.",
     },
     {
-      label: "현재 월 예상 요금",
-      prompt: "현재 인스턴스 기준 월 예상 요금과 그 내역을 알려줘.",
+      label: "정확한 현재 예상 요금",
+      prompt: "지금 인스턴스 기준 정확한 현재 예상 요금과 그 산출 내역을 알려줘.",
     },
     {
       label: "비용 절감 방법",
@@ -102,24 +105,111 @@ const QUICK_PROMPTS: { label: string; prompt?: string; diagnosis?: boolean }[] =
       prompt:
         "특정 시간대에 CPU가 튀는 구간이 있는지, 있다면 최근 배포/재시작 이력과 연결해 원인과 대응을 알려줘.",
     },
+    {
+      label: "크레딧 상태",
+      prompt: "지금 CPU 크레딧 잔액과 시간당 소모량을 알려주고, 여유가 있는지 판단해줘.",
+    },
+    {
+      label: "방문자 추이",
+      prompt: "최근 7일 방문자 수와 이전 7일 대비 증감을 알려줘.",
+    },
   ];
 
+// 마침표/느낌표/물음표 뒤에 공백이 와야 문장 끝으로 본다.
+// "4.2%", "t3.micro", "$9.49"처럼 점 뒤에 공백 없이 문자가 오는 경우는 쪼개지 않는다.
+// split은 매칭 여부와 무관하게 전체 문자열을 보존하므로(마지막 조각 포함),
+// 종결부호가 하나도 없거나 마지막 문장에 부호가 없어도 텍스트가 유실되지 않는다.
+function splitSentences(text: string): string[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  return trimmed
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 function formatDiagnosis(d: AiDiagnosis): string {
-  const blocks = [`📋 현황 요약\n${d.summary || "—"}`];
+  // ### 로 마크다운 헤딩을 만든다 — 답변이 이제 ReactMarkdown으로 렌더링되므로
+  // 그냥 텍스트 라벨보다 실제 소제목으로 보이게 한다.
+  const summarySentences = splitSentences(d.summary || "");
+  const summaryBlock =
+    summarySentences.length > 0
+      ? summarySentences.map((s) => `- ${s}`).join("\n")
+      : "- —";
+  const blocks = [`### 현황 요약\n\n${summaryBlock}`];
   if (d.anomalies.length > 0) {
-    blocks.push(`⚠️ 이상 징후\n${d.anomalies.map((a) => `• ${a}`).join("\n")}`);
+    // "이상 징후"가 아니라 "특이사항"으로 표기 — AI가 이상 신호뿐 아니라 배포·크레딧·
+    // 트래픽 등 그때그때 다른 주목할 내용도 담게 돼서 "이상"이라는 라벨이 안 맞을 수 있다.
+    blocks.push(
+      `### 특이사항\n\n${d.anomalies.map((a) => `- ${a}`).join("\n")}`,
+    );
   }
   if (d.costSuggestions.length > 0) {
     blocks.push(
-      `💰 비용 절감 제안\n${d.costSuggestions.map((s) => `• ${s}`).join("\n")}`,
+      `### 비용 절감 제안\n\n${d.costSuggestions.map((s) => `- ${s}`).join("\n")}`,
     );
   }
-  const where = d.ec2.instanceType
-    ? `${d.ec2.instanceType} · ${d.ec2.region}`
-    : "EC2 정보 없음";
-  blocks.push(`— ${where}`);
   return blocks.join("\n\n");
 }
+
+// AI 답변(마크다운)을 채팅 말풍선 크기에 맞게 렌더링하기 위한 컴포넌트 매핑.
+// react-markdown은 dangerouslySetInnerHTML을 쓰지 않고 React 엘리먼트로 직접
+// 변환하므로, AI가 생성한 텍스트를 그대로 렌더링해도 XSS 위험이 없다.
+const markdownComponents: Components = {
+  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+  ul: ({ children }) => (
+    <ul className="mb-2 list-disc space-y-0.5 pl-4 last:mb-0">{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="mb-2 list-decimal space-y-0.5 pl-4 last:mb-0">
+      {children}
+    </ol>
+  ),
+  li: ({ children }) => <li className="leading-snug">{children}</li>,
+  // <em>은 기본적으로 이탤릭 스타일이 붙는데, 내용은 살리고 기울임만 없앤다.
+  em: ({ children }) => <span>{children}</span>,
+  h1: ({ children }) => (
+    <h3 className="mb-1 mt-2 text-sm font-semibold first:mt-0">{children}</h3>
+  ),
+  h2: ({ children }) => (
+    <h3 className="mb-1 mt-2 text-sm font-semibold first:mt-0">{children}</h3>
+  ),
+  h3: ({ children }) => (
+    <h3 className="mb-1 mt-2 text-sm font-semibold first:mt-0">{children}</h3>
+  ),
+  strong: ({ children }) => (
+    <strong className="font-semibold">{children}</strong>
+  ),
+  code: ({ children }) => (
+    <code className="rounded bg-slate-200 px-1 py-0.5 font-mono text-[12px]">
+      {children}
+    </code>
+  ),
+  a: ({ children, href }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="text-blue-600 underline"
+    >
+      {children}
+    </a>
+  ),
+  table: ({ children }) => (
+    <div className="my-2 overflow-x-auto">
+      <table className="w-full border-collapse text-xs">{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => <thead className="bg-slate-200">{children}</thead>,
+  th: ({ children }) => (
+    <th className="border border-slate-300 px-2 py-1 text-left font-medium">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td className="border border-slate-300 px-2 py-1">{children}</td>
+  ),
+};
 
 // 카드 정렬 순서 (서비스 의존도 순)
 const LABEL_ORDER = ["nest", "nginx", "redis", "postgres"];
@@ -203,13 +293,41 @@ export default function ContainersPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState("");
   const [chatError, setChatError] = useState("");
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  // RAG 지식베이스: 챗봇이 참고하는 과거 운영 스냅샷 문서
+  /**
+   * 서버가 실제로 지금 뭘 하는지 실시간으로 알려주는 게 아니라(단일 응답 REST 호출이라
+   * 중간 진행 상황을 보낼 방법이 없다), 그동안 관측된 소요 시간(임베딩·RAG 검색은
+   * 1초 내외, 나머지는 대부분 LLM 응답 대기)에 맞춰 타이밍만 흉내낸 단계 표시다.
+   * 반환값을 finally에서 호출해 남은 타이머를 정리한다.
+   */
+  function startStagedLoading(stages: [delayMs: number, text: string][]) {
+    setLoadingStage(stages[0]?.[1] ?? "");
+    const timers = stages
+      .slice(1)
+      .map(([delay, text]) => setTimeout(() => setLoadingStage(text), delay));
+    return () => timers.forEach(clearTimeout);
+  }
+
+  async function copyMessage(index: number, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIndex(index);
+      setTimeout(() => {
+        setCopiedIndex((cur) => (cur === index ? null : cur));
+      }, 1500);
+    } catch {
+      // 클립보드 권한 거부/미지원 — 드래그 선택으로도 복사 가능하니 조용히 무시
+    }
+  }
+
+  // RAG 지식베이스: 챗봇이 참고하는 과거 운영 스냅샷 문서.
+  // 생성은 매주 월요일 04:00(KST) 크론이 자동으로 한다(RagSnapshotCronService) —
+  // 여기선 뭐가 쌓였는지 조회만 한다.
   const [ragDocs, setRagDocs] = useState<RagDocument[]>([]);
-  const [ragLoading, setRagLoading] = useState(false);
-  const [ragMessage, setRagMessage] = useState("");
 
   const loadRagDocs = useCallback(async () => {
     try {
@@ -226,41 +344,6 @@ export default function ContainersPage() {
     void loadRagDocs();
   }, [loadRagDocs]);
 
-  // 문서 생성은 AI 호출 + 임베딩이라 비용이 든다 → 버튼 클릭 시 1회만.
-  async function createSnapshot() {
-    if (ragLoading) return;
-    setRagLoading(true);
-    setRagMessage("");
-    try {
-      const res = await fetch("/api/admin/monitoring/rag/snapshot", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        created?: boolean;
-        title?: string;
-        chunks?: number;
-        reason?: string;
-        message?: string;
-      };
-      if (!res.ok) {
-        setRagMessage(data.message ?? "문서 생성에 실패했습니다.");
-        return;
-      }
-      setRagMessage(
-        data.created
-          ? `생성 완료: ${data.title} (청크 ${data.chunks}개)`
-          : (data.reason ?? "생성하지 않았습니다."),
-      );
-      await loadRagDocs();
-    } catch {
-      setRagMessage("요청 중 오류가 발생했습니다.");
-    } finally {
-      setRagLoading(false);
-    }
-  }
-
   useEffect(() => {
     // 메시지가 있을 때만 스크롤 (마운트 시 페이지가 챗봇으로 끌려가는 것 방지)
     if (messages.length === 0) return;
@@ -275,6 +358,11 @@ export default function ContainersPage() {
     setChatInput("");
     setChatLoading(true);
     setChatError("");
+    const stopStaging = startStagedLoading([
+      [0, "질문을 이해하는 중..."],
+      [800, "관련 기록 검색 중..."],
+      [2200, "AI가 답변 작성 중..."],
+    ]);
     try {
       const res = await fetch("/api/admin/monitoring/ai-chat", {
         method: "POST",
@@ -296,6 +384,8 @@ export default function ContainersPage() {
     } catch {
       setChatError("요청 중 오류가 발생했습니다.");
     } finally {
+      stopStaging();
+      setLoadingStage("");
       setChatLoading(false);
     }
   }
@@ -306,6 +396,10 @@ export default function ContainersPage() {
     setMessages((m) => [...m, { role: "user", content: "종합 AI 진단" }]);
     setChatLoading(true);
     setChatError("");
+    const stopStaging = startStagedLoading([
+      [0, "운영 데이터 수집 중..."],
+      [1200, "AI가 진단 작성 중..."],
+    ]);
     try {
       const res = await fetch("/api/admin/monitoring/ai-diagnosis", {
         cache: "no-store",
@@ -326,6 +420,8 @@ export default function ContainersPage() {
     } catch {
       setChatError("AI 진단 요청 중 오류가 발생했습니다.");
     } finally {
+      stopStaging();
+      setLoadingStage("");
       setChatLoading(false);
     }
   }
@@ -608,13 +704,19 @@ export default function ContainersPage() {
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart
                         data={containerHistory}
+                        margin={{ top: 5, right: 14, left: 0, bottom: 0 }}
                         onMouseEnter={() => setActiveChart("container-cpu")}
                         onMouseLeave={() => setActiveChart(null)}
                       >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="#e5e7eb"
+                          vertical={false}
+                        />
                         <XAxis
                           dataKey="bucket"
                           tick={{ fontSize: 9, fill: "#6b7280" }}
+                          {...dateAxis(containerHistory, "bucket")}
                         />
                         <YAxis
                           tick={{ fontSize: 10, fill: "#6b7280" }}
@@ -654,13 +756,19 @@ export default function ContainersPage() {
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart
                         data={containerHistory}
+                        margin={{ top: 5, right: 14, left: 0, bottom: 0 }}
                         onMouseEnter={() => setActiveChart("container-mem")}
                         onMouseLeave={() => setActiveChart(null)}
                       >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="#e5e7eb"
+                          vertical={false}
+                        />
                         <XAxis
                           dataKey="bucket"
                           tick={{ fontSize: 9, fill: "#6b7280" }}
+                          {...dateAxis(containerHistory, "bucket")}
                         />
                         <YAxis
                           tick={{ fontSize: 10, fill: "#6b7280" }}
@@ -707,22 +815,82 @@ export default function ContainersPage() {
                     key={i}
                     className={m.role === "user" ? "text-right" : "text-left"}
                   >
-                    <span
-                      className={`inline-block max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-left text-sm ${
-                        m.role === "user"
-                          ? "bg-blue-600 text-white"
-                          : "bg-slate-100 text-[color:var(--admin-text)]"
-                      }`}
-                    >
-                      {m.content}
-                    </span>
+                    {m.role === "assistant" ? (
+                      <div className="relative inline-block max-w-[85%] text-left">
+                        <div className="select-text overflow-x-auto rounded-lg bg-slate-100 py-2 pl-3 pr-9 text-sm text-[color:var(--admin-text)]">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={markdownComponents}
+                          >
+                            {m.content}
+                          </ReactMarkdown>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => copyMessage(i, m.content)}
+                          aria-label="답변 복사"
+                          title="복사"
+                          className="absolute right-1.5 top-1.5 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border border-slate-300 bg-white text-[color:var(--admin-text-muted)] shadow-sm transition-colors hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600"
+                        >
+                          {copiedIndex === i ? (
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              className="h-3.5 w-3.5"
+                            >
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          ) : (
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              className="h-3.5 w-3.5"
+                            >
+                              <rect x="9" y="9" width="13" height="13" rx="2" />
+                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="inline-block max-w-[85%] select-text whitespace-pre-wrap rounded-lg bg-blue-600 px-3 py-2 text-left text-sm text-white">
+                        {m.content}
+                      </span>
+                    )}
                   </div>
                 ))
               )}
               {chatLoading && (
-                <p className="text-xs text-[color:var(--admin-text-muted)]">
-                  답변 생성 중...
-                </p>
+                <div className="flex items-center gap-1.5 text-[11px] text-[color:var(--admin-text-muted)]">
+                  <svg
+                    className="h-3 w-3 shrink-0 animate-spin"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    />
+                  </svg>
+                  {loadingStage || "답변 생성 중..."}
+                </div>
               )}
               <div ref={messagesEndRef} />
             </div>
@@ -772,35 +940,20 @@ export default function ContainersPage() {
             </form>
           </div>
 
-          {/* RAG 지식베이스 — 챗봇이 참고하는 과거 운영 기록 */}
+          {/* RAG 지식베이스 — 챗봇이 참고하는 과거 운영 기록. 생성은 매주 월요일
+              04:00(KST) 크론이 자동으로 한다(RagSnapshotCronService) — 여기선 조회만. */}
           <div className="admin-card p-4">
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold">운영 지식베이스 (RAG)</p>
-                <p className="mt-0.5 text-[11px] text-[color:var(--admin-text-muted)]">
-                  주기적으로 쌓는 운영 스냅샷입니다. 챗봇은 최근 7일치만 실시간으로
-                  보므로, 그보다 오래된 일은 여기 기록에서 찾아 답합니다.
-                </p>
-              </div>
-              <button
-                type="button"
-                disabled={ragLoading}
-                onClick={createSnapshot}
-                className="admin-btn admin-btn-sm admin-btn-secondary shrink-0"
-              >
-                {ragLoading ? "생성 중..." : "이번 주 스냅샷 생성"}
-              </button>
-            </div>
-
-            {ragMessage && (
-              <p className="mb-2 text-xs text-[color:var(--admin-text-muted)]">
-                {ragMessage}
+            <div className="mb-3">
+              <p className="text-sm font-semibold">운영 지식베이스 (RAG)</p>
+              <p className="mt-0.5 text-[11px] text-[color:var(--admin-text-muted)]">
+                매주 월요일 새벽 자동으로 쌓는 운영 스냅샷입니다. 챗봇은 최근 7일치만
+                실시간으로 보므로, 그보다 오래된 일은 여기 기록에서 찾아 답합니다.
               </p>
-            )}
+            </div>
 
             {ragDocs.length === 0 ? (
               <p className="text-sm text-[color:var(--admin-text-muted)]">
-                저장된 문서가 없습니다. 스냅샷을 생성하면 챗봇이 참고합니다.
+                아직 저장된 문서가 없습니다. 다음 월요일 새벽에 첫 스냅샷이 자동 생성됩니다.
               </p>
             ) : (
               <ul className="space-y-1.5">
