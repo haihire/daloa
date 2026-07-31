@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -63,6 +63,17 @@ interface AiDiagnosis {
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+}
+
+/** 챗봇이 벡터 검색으로 참고하는 과거 운영 스냅샷 문서 */
+interface RagDocument {
+  id: string;
+  title: string;
+  source: string;
+  period_start: string;
+  period_end: string;
+  created_at: string;
+  chunk_count: string;
 }
 
 // 채팅 시작용 예시 버튼. diagnosis=true 는 구조화 진단 엔드포인트 호출.
@@ -194,6 +205,61 @@ export default function ContainersPage() {
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState("");
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  // RAG 지식베이스: 챗봇이 참고하는 과거 운영 스냅샷 문서
+  const [ragDocs, setRagDocs] = useState<RagDocument[]>([]);
+  const [ragLoading, setRagLoading] = useState(false);
+  const [ragMessage, setRagMessage] = useState("");
+
+  const loadRagDocs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/monitoring/rag/documents");
+      if (!res.ok) return;
+      const data: unknown = await res.json();
+      if (Array.isArray(data)) setRagDocs(data as RagDocument[]);
+    } catch {
+      // 지식베이스는 부가 기능 — 조회 실패해도 페이지는 그대로 동작
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadRagDocs();
+  }, [loadRagDocs]);
+
+  // 문서 생성은 AI 호출 + 임베딩이라 비용이 든다 → 버튼 클릭 시 1회만.
+  async function createSnapshot() {
+    if (ragLoading) return;
+    setRagLoading(true);
+    setRagMessage("");
+    try {
+      const res = await fetch("/api/admin/monitoring/rag/snapshot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        created?: boolean;
+        title?: string;
+        chunks?: number;
+        reason?: string;
+        message?: string;
+      };
+      if (!res.ok) {
+        setRagMessage(data.message ?? "문서 생성에 실패했습니다.");
+        return;
+      }
+      setRagMessage(
+        data.created
+          ? `생성 완료: ${data.title} (청크 ${data.chunks}개)`
+          : (data.reason ?? "생성하지 않았습니다."),
+      );
+      await loadRagDocs();
+    } catch {
+      setRagMessage("요청 중 오류가 발생했습니다.");
+    } finally {
+      setRagLoading(false);
+    }
+  }
 
   useEffect(() => {
     // 메시지가 있을 때만 스크롤 (마운트 시 페이지가 챗봇으로 끌려가는 것 방지)
@@ -704,6 +770,53 @@ export default function ContainersPage() {
                 전송
               </button>
             </form>
+          </div>
+
+          {/* RAG 지식베이스 — 챗봇이 참고하는 과거 운영 기록 */}
+          <div className="admin-card p-4">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">운영 지식베이스 (RAG)</p>
+                <p className="mt-0.5 text-[11px] text-[color:var(--admin-text-muted)]">
+                  주기적으로 쌓는 운영 스냅샷입니다. 챗봇은 최근 7일치만 실시간으로
+                  보므로, 그보다 오래된 일은 여기 기록에서 찾아 답합니다.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={ragLoading}
+                onClick={createSnapshot}
+                className="admin-btn admin-btn-sm admin-btn-secondary shrink-0"
+              >
+                {ragLoading ? "생성 중..." : "이번 주 스냅샷 생성"}
+              </button>
+            </div>
+
+            {ragMessage && (
+              <p className="mb-2 text-xs text-[color:var(--admin-text-muted)]">
+                {ragMessage}
+              </p>
+            )}
+
+            {ragDocs.length === 0 ? (
+              <p className="text-sm text-[color:var(--admin-text-muted)]">
+                저장된 문서가 없습니다. 스냅샷을 생성하면 챗봇이 참고합니다.
+              </p>
+            ) : (
+              <ul className="space-y-1.5">
+                {ragDocs.map((d) => (
+                  <li
+                    key={d.id}
+                    className="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <span className="truncate">{d.title}</span>
+                    <span className="shrink-0 text-[11px] text-[color:var(--admin-text-muted)]">
+                      청크 {d.chunk_count}개
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       )}
