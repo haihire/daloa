@@ -97,8 +97,14 @@ export class AdminMonitoringController {
   // 민감정보(계정/시크릿/토큰/env)는 애초에 컨텍스트에 없어 누구도 못 봄.
   @UseGuards(AdminGuard)
   @Post('admin/monitoring/ai-chat')
-  aiChat(@Body() body: { messages?: ChatMessage[] }) {
-    return this.aiDiagnosis.chat(body?.messages ?? []);
+  aiChat(@Body() body: { messages?: ChatMessage[] }, @Req() req: Request) {
+    // AdminGuard가 심어둔 세션 정보 — 누가 물었는지 로그(rag_chat_logs)에 남기기 위함
+    const admin = (req as Request & { adminUser?: { username: string } })
+      .adminUser;
+    return this.aiDiagnosis.chat(
+      body?.messages ?? [],
+      admin?.username ?? '알수없음',
+    );
   }
 
   // RAG 지식베이스 문서 목록. 챗봇이 어떤 과거 기록을 참고할 수 있는지 확인용.

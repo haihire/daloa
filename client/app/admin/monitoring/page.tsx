@@ -13,6 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { dateAxis } from "@/lib/chart-ticks";
 import AdminDatePicker from "@/components/admin/AdminDatePicker";
 
 interface PageLoadPoint {
@@ -439,6 +440,7 @@ export default function MonitoringPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart
                   data={pageLoadSeries}
+                  margin={{ top: 5, right: 12, left: 0, bottom: 0 }}
                   onMouseEnter={() => setActiveChart("page-load")}
                   onMouseLeave={() => setActiveChart(null)}
                   onClick={(state) => {
@@ -462,6 +464,7 @@ export default function MonitoringPage() {
                   <XAxis
                     dataKey="bucket"
                     tick={{ fontSize: 9, fill: "#6b7280" }}
+                    {...dateAxis(pageLoadSeries, "bucket")}
                   />
                   <YAxis tick={{ fontSize: 10, fill: "#6b7280" }} unit="ms" />
                   <Tooltip
@@ -514,6 +517,7 @@ export default function MonitoringPage() {
                 >
                   <AreaChart
                     data={data.siteClickSeries}
+                    margin={{ top: 5, right: 12, left: 0, bottom: 0 }}
                     onMouseEnter={() => setActiveChart("site-click")}
                     onMouseLeave={() => setActiveChart(null)}
                   >
@@ -521,6 +525,7 @@ export default function MonitoringPage() {
                     <XAxis
                       dataKey="minute"
                       tick={{ fontSize: 10, fill: "#6b7280" }}
+                      {...dateAxis(data.siteClickSeries, "minute")}
                     />
                     <YAxis tick={{ fontSize: 10, fill: "#6b7280" }} />
                     <Tooltip
@@ -565,6 +570,7 @@ export default function MonitoringPage() {
                 >
                   <AreaChart
                     data={data.youtubeClickSeries}
+                    margin={{ top: 5, right: 12, left: 0, bottom: 0 }}
                     onMouseEnter={() => setActiveChart("youtube-click")}
                     onMouseLeave={() => setActiveChart(null)}
                   >
@@ -572,6 +578,7 @@ export default function MonitoringPage() {
                     <XAxis
                       dataKey="minute"
                       tick={{ fontSize: 10, fill: "#6b7280" }}
+                      {...dateAxis(data.youtubeClickSeries, "minute")}
                     />
                     <YAxis tick={{ fontSize: 10, fill: "#6b7280" }} />
                     <Tooltip
@@ -612,7 +619,7 @@ export default function MonitoringPage() {
                 ))}
               </div>
             </div>
-            <div className="h-20">
+            <div className="h-32">
               {loading ? (
                 <div className="grid h-full place-items-center text-sm text-[color:var(--admin-text-muted)]">
                   불러오는 중...
@@ -630,6 +637,7 @@ export default function MonitoringPage() {
                 >
                   <AreaChart
                     data={data.pageVisitSeries}
+                    margin={{ top: 5, right: 12, left: 0, bottom: 0 }}
                     onMouseEnter={() => setActiveChart("page-visit")}
                     onMouseLeave={() => setActiveChart(null)}
                   >
@@ -637,6 +645,7 @@ export default function MonitoringPage() {
                     <XAxis
                       dataKey="day"
                       tick={{ fontSize: 10, fill: "#6b7280" }}
+                      {...dateAxis(data.pageVisitSeries ?? [], "day")}
                     />
                     <YAxis tick={{ fontSize: 10, fill: "#6b7280" }} />
                     <Tooltip
