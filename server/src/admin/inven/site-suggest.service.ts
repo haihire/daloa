@@ -20,7 +20,7 @@ export interface SiteSuggestion {
 }
 
 // 사이트 관리에서 쓰는 카테고리와 동일한 고정 목록.
-// db/migrations/008_loa_sites_category_enum.sql 의 CHECK 목록 및
+// db-migrations/008_loa_sites_category_enum.sql 의 CHECK 목록 및
 // client/app/admin/sites/page.tsx 의 SITE_CATEGORIES 와 반드시 같이 바꿀 것.
 const CATEGORIES = [
   '계산기·툴',

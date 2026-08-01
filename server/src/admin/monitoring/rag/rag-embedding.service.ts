@@ -17,7 +17,7 @@ import OpenAI from 'openai';
  * 모델을 바꾸면 차원이 달라져 전체 재임베딩 + 마이그레이션이 필요하다.
  */
 
-/** db/migrations/009_rag_pgvector.sql 의 vector(1024)와 반드시 같아야 함. */
+/** db-migrations/009_rag_pgvector.sql 의 vector(1024)와 반드시 같아야 함. */
 export const RAG_EMBED_DIM = 1024;
 
 const DEFAULT_EMBED_MODEL = 'nvidia/nv-embedqa-e5-v5';

@@ -1,5 +1,5 @@
 -- pgvector 확장 + RAG(운영 챗봇 지식베이스) 문서/청크 테이블
--- 실행: gh workflow run db-migrate.yml -f sql_file=db/migrations/009_rag_pgvector.sql
+-- 실행: gh workflow run db-migrate.yml -f sql_file=db-migrations/009_rag_pgvector.sql
 --
 -- 배경: 관리자 AI 운영 챗봇은 지금 최근 7~14일 집계만 본다(ai-diagnosis.service.ts
 --       AGGREGATE_DAYS/findRecentContainerEvents). 그보다 오래된 이상징후·인시던트를

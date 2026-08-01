@@ -91,10 +91,10 @@ main 머지
 | 경로 | 전달 방식 | 내용 |
 | ---- | --------- | ---- |
 | 서버 코드(nest) | ECR 이미지 pull | `dist/`, `generated/`, prod 의존성 (Dockerfile 기준) |
-| 인프라/설정 | `git pull origin main` | `docker-compose.yml`, `nginx/`, `site-finder/`, `db/` |
+| 인프라/설정 | `git pull origin main` | `docker-compose.yml`, `nginx/`, `site-finder/`, `db-migrations/` |
 | 시크릿 | SSM이 `.env`에 주입 | 이미지 태그, 토큰류 |
 
-> EC2의 `git pull`은 레포 전체를 체크아웃하므로, 불필요한 파일(README/docs/client/server 소스 등)을 빼려면 EC2에서 **sparse-checkout**으로 `docker-compose.yml`,`nginx/`,`site-finder/`,`db/`만 남기면 된다. (`server/`는 ECR 이미지를 쓰므로 불필요)
+> EC2의 `git pull`은 레포 전체를 체크아웃하므로, 불필요한 파일(README/docs/client/server 소스 등)을 빼려면 EC2에서 **sparse-checkout**으로 `docker-compose.yml`,`nginx/`,`site-finder/`,`db-migrations/`만 남기면 된다. (`server/`는 ECR 이미지를 쓰므로 불필요)
 
 ### 4-2. 프론트 — Vercel (next)
 - Vercel **Git 연동**이 `main` 변경을 감지해 자동 배포 (이 레포 워크플로우 아님).
@@ -108,7 +108,7 @@ main 머지
 
 | 작업 | 워크플로우 | 실행 |
 | ---- | ---------- | ---- |
-| DB 마이그레이션 | [db-migrate.yml](workflows/db-migrate.yml) | `gh workflow run db-migrate.yml -f sql_file=db/migrations/xxx.sql` |
+| DB 마이그레이션 | [db-migrate.yml](workflows/db-migrate.yml) | `gh workflow run db-migrate.yml -f sql_file=db-migrations/xxx.sql` |
 | NestJS 상태·로그 진단 | [diag-nest.yml](workflows/diag-nest.yml) | Actions 탭 > Run workflow |
 | E2E 단독 재현 | [server-e2e.yml](workflows/server-e2e.yml) | Actions 탭 > Run workflow |
 

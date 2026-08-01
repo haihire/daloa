@@ -1,5 +1,5 @@
 -- 폐기 기능 잔재 테이블 + 참조되지 않는 고아 enum 정리 (멱등)
--- 실행: gh workflow run db-migrate.yml -f sql_file=db/migrations/005_cleanup_dead_objects.sql
+-- 실행: gh workflow run db-migrate.yml -f sql_file=db-migrations/005_cleanup_dead_objects.sql
 --
 -- 배경:
 --   1) loa_class_summaries: "AI 직업 한줄평" 기능 폐기(커밋 57c1150에서 Prisma 모델 제거). 테이블만 잔존.

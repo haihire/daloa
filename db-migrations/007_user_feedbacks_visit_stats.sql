@@ -1,5 +1,5 @@
 -- 피드백에 작성자의 방문 이력 요약을 덧붙인다 (멱등)
--- 실행: gh workflow run db-migrate.yml -f sql_file=db/migrations/007_user_feedbacks_visit_stats.sql
+-- 실행: gh workflow run db-migrate.yml -f sql_file=db-migrations/007_user_feedbacks_visit_stats.sql
 --
 -- 배경: 어드민이 피드백을 읽을 때 "뜨내기 의견인지 단골 의견인지" 맥락이 필요하다.
 -- 익명 원칙 유지: 방문자 식별자(ID/IP/UA)는 저장하지 않는다. 브라우저가 자기 방문
