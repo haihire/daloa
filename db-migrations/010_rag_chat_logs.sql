@@ -1,5 +1,5 @@
 -- 운영 챗봇 Q&A 로그
--- 실행: gh workflow run db-migrate.yml -f sql_file=db/migrations/010_rag_chat_logs.sql
+-- 실행: gh workflow run db-migrate.yml -f sql_file=db-migrations/010_rag_chat_logs.sql
 --
 -- 배경: 관리자가 챗봇에 어떤 질문을 했고 AI가 뭐라 답했는지 남겨둔다.
 --       나중에 RAG/프롬프트 품질을 점검하거나(예: RAG가 실제로 얼마나 쓰이는지),

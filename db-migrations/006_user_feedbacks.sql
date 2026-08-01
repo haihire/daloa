@@ -1,5 +1,5 @@
 -- 사용자 익명 피드백(코멘트) 저장 테이블 (멱등)
--- 실행: gh workflow run db-migrate.yml -f sql_file=db/migrations/006_user_feedbacks.sql
+-- 실행: gh workflow run db-migrate.yml -f sql_file=db-migrations/006_user_feedbacks.sql
 --
 -- 배경: 메인 페이지 사이트 모음 섹션에서 방문자가 익명으로 의견을 남기고,
 --       어드민 "사용자 피드백" 페이지에서 조회·삭제한다.

@@ -2,7 +2,7 @@
 -- 배경: 테이블은 lost_ark로 옮겼으나 enum 타입은 public에 남아,
 --       search_path=lost_ark 연결에서 enum 캐스팅이 42704(type does not exist)로 실패.
 -- ALTER TYPE ... SET SCHEMA는 enum을 참조하는 컬럼을 자동으로 새 스키마 타입에 연결한다.
--- 실행: gh workflow run db-migrate.yml -f sql_file=db/migrations/001_move_enums_to_lost_ark.sql
+-- 실행: gh workflow run db-migrate.yml -f sql_file=db-migrations/001_move_enums_to_lost_ark.sql
 
 DO $$
 DECLARE

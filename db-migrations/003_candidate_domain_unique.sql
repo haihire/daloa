@@ -2,7 +2,7 @@
 -- 기존: url이 UNIQUE → 같은 도메인이 다른 경로(loalogol.kr/ vs loalogol.kr/package)로
 --       각각 행이 쌓여 추천 목록에 중복 노출.
 -- 변경: domain을 UNIQUE로 → 도메인당 1행. 기존 중복은 병합(언급수 합산, 최단 url 대표).
--- 실행: gh workflow run db-migrate.yml -f sql_file=db/migrations/003_candidate_domain_unique.sql
+-- 실행: gh workflow run db-migrate.yml -f sql_file=db-migrations/003_candidate_domain_unique.sql
 
 SET search_path TO lost_ark, public;
 

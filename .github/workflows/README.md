@@ -66,7 +66,7 @@
 ### db-migrate.yml — DB 마이그레이션 (수동)
 - **트리거**: 수동. 입력 `sql_file`(레포 루트 기준 경로), `restart_nest`(기본 true)
 - **동작**: SSM으로 EC2에서 `git pull` 후 해당 SQL을 `lomoa-postgres` 컨테이너에 주입. 옵션 시 nest 재시작.
-- **사용 예**: `gh workflow run db-migrate.yml -f sql_file=db/migrations/004_xxx.sql`
+- **사용 예**: `gh workflow run db-migrate.yml -f sql_file=db-migrations/004_xxx.sql`
 
 ### diag-nest.yml — NestJS 진단 (수동)
 - **트리거**: 수동. 입력 `tail`(로그 라인 수, 기본 100)

@@ -2,7 +2,7 @@
 -- 기존: (path,device,country,os,browser) 조합당 행 1개 + 누적 visits → 재방문 시 last_seen_at만 갱신되어
 --       일별 추이가 부정확(과거 방문이 최신일로 몰림).
 -- 변경: visit_day(방문 날짜)를 unique 키에 포함 → 날짜별로 행이 나뉘어 일별 방문수 정확.
--- 실행: gh workflow run db-migrate.yml -f sql_file=db/migrations/002_page_visits_daily.sql
+-- 실행: gh workflow run db-migrate.yml -f sql_file=db-migrations/002_page_visits_daily.sql
 
 SET search_path TO lost_ark, public;
 

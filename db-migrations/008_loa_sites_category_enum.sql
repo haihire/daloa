@@ -1,5 +1,5 @@
 -- loa_sites.category 정형화: 자유 텍스트 18종 → 고정 9종 + CHECK 제약 (멱등)
--- 실행: gh workflow run db-migrate.yml -f sql_file=db/migrations/008_loa_sites_category_enum.sql
+-- 실행: gh workflow run db-migrate.yml -f sql_file=db-migrations/008_loa_sites_category_enum.sql
 --
 -- 배경:
 --   사이트 27개에 카테고리가 18종으로 난립. 분류가 아니라 부제목처럼 쓰이고 있었음.
