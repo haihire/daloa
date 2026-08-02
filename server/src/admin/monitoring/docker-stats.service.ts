@@ -63,11 +63,14 @@ export interface ResourceBreakdown {
     label: string;
     cpuPercent: number;
     memUsedMb: number;
+    diskUsedMb: number;
   }>;
   dockerOverheadCpuPercent: number;
   dockerOverheadMemMb: number;
+  dockerOverheadDiskMb: number;
   osOtherCpuPercent: number;
   osOtherMemMb: number;
+  osOtherDiskMb: number;
 }
 
 export interface ResourceBreakdownHistoryPoint {
@@ -494,7 +497,7 @@ export class DockerStatsService {
 
       const idleDelta = sysB.idle - sysA.idle;
       const hostCpuPercent = Number(
-        (100 * (1 - idleDelta / totalDelta)).toFixed(1),
+        (100 * (1 - idleDelta / totalDelta)).toFixed(2),
       );
 
       let daemonTicksDelta = 0;
@@ -503,11 +506,74 @@ export class DockerStatsService {
         if (delta > 0) daemonTicksDelta += delta;
       }
       const daemonCpuPercent = Number(
-        ((daemonTicksDelta / totalDelta) * 100).toFixed(1),
+        ((daemonTicksDelta / totalDelta) * 100).toFixed(2),
       );
 
       return { hostCpuPercent, daemonCpuPercent };
     } catch {
+      return null;
+    }
+  }
+
+  /**
+   * `docker system df -v`로 컨테이너별 디스크 사용량(쓰기 레이어 + 그 컨테이너가 마운트한
+   * 네임드 볼륨)과 도커 이미지·빌드캐시 총량을 구한다. postgres처럼 실데이터가 네임드
+   * 볼륨에 있는 경우 쓰기 레이어만 보면 몇 KB로 보여 오해를 주므로 볼륨을 반드시 더한다.
+   */
+  private async computeDiskUsage(): Promise<{
+    containers: Array<{ label: string; diskUsedMb: number }>;
+    dockerMb: number;
+  } | null> {
+    try {
+      const { stdout } = await execFileAsync(
+        'docker',
+        ['system', 'df', '-v', '--format', '{{json .}}'],
+        { timeout: 15000 },
+      );
+      const parsed = JSON.parse(stdout) as {
+        Images?: Array<{ Size?: string }>;
+        Containers?: Array<{ Names?: string; Size?: string; Mounts?: string }>;
+        Volumes?: Array<{ Name?: string; Size?: string }>;
+        BuildCache?: Array<{ Size?: string }>;
+      };
+
+      const volumeMb = new Map<string, number>();
+      for (const v of parsed.Volumes ?? []) {
+        if (v.Name) volumeMb.set(v.Name, toMb(parseBytes(v.Size ?? '0B')));
+      }
+
+      const containers: Array<{ label: string; diskUsedMb: number }> = [];
+      for (const c of parsed.Containers ?? []) {
+        const name = (c.Names ?? '').replace(/^\//, '');
+        const label = CONTAINER_LABELS[name];
+        if (!label) continue;
+        let diskMb = toMb(parseBytes(c.Size ?? '0B'));
+        for (const mountName of (c.Mounts ?? '')
+          .split(',')
+          .map((s) => s.trim())) {
+          const vol = volumeMb.get(mountName);
+          if (vol) diskMb += vol;
+        }
+        containers.push({ label, diskUsedMb: Number(diskMb.toFixed(1)) });
+      }
+
+      const imagesMb = (parsed.Images ?? []).reduce(
+        (sum, img) => sum + toMb(parseBytes(img.Size ?? '0B')),
+        0,
+      );
+      const buildCacheMb = (parsed.BuildCache ?? []).reduce(
+        (sum, b) => sum + toMb(parseBytes(b.Size ?? '0B')),
+        0,
+      );
+
+      return {
+        containers,
+        dockerMb: Number((imagesMb + buildCacheMb).toFixed(1)),
+      };
+    } catch (err: unknown) {
+      this.logger.warn(
+        `disk usage breakdown failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
       return null;
     }
   }
@@ -521,19 +587,25 @@ export class DockerStatsService {
   ): Promise<ResourceBreakdown | null> {
     try {
       const daemonPids = await this.listDockerDaemonPids();
-      const [cpu, mem, daemonMemMb] = await Promise.all([
+      const [cpu, mem, daemonMemMb, disk, hostDisk] = await Promise.all([
         this.sampleHostAndDaemonCpu(daemonPids),
         this.readHostMemory(),
         this.readProcessGroupRssMb(daemonPids),
+        this.computeDiskUsage(),
+        this.readDiskUsage(),
       ]);
       if (!cpu || !mem) return null;
 
       // docker stats의 CPU%는 코어 1개 기준(최대 100*코어수)이라, 호스트 전체 대비 비율로 맞추려면 코어 수로 나눠야 한다.
       const numCpus = Math.max(1, cpus().length);
+      const diskByLabel = new Map(
+        (disk?.containers ?? []).map((c) => [c.label, c.diskUsedMb]),
+      );
       const normalizedContainers = containers.map((c) => ({
         label: c.label,
-        cpuPercent: Number((c.cpuPercent / numCpus).toFixed(1)),
+        cpuPercent: Number((c.cpuPercent / numCpus).toFixed(2)),
         memUsedMb: c.memUsedMb,
+        diskUsedMb: diskByLabel.get(c.label) ?? 0,
       }));
       const containerCpuSum = normalizedContainers.reduce(
         (sum, c) => sum + c.cpuPercent,
@@ -543,12 +615,16 @@ export class DockerStatsService {
         (sum, c) => sum + c.memUsedMb,
         0,
       );
+      const containerDiskSum = normalizedContainers.reduce(
+        (sum, c) => sum + c.diskUsedMb,
+        0,
+      );
 
       const osOtherCpuPercent = Math.max(
         0,
         Number(
           (cpu.hostCpuPercent - containerCpuSum - cpu.daemonCpuPercent).toFixed(
-            1,
+            2,
           ),
         ),
       );
@@ -556,6 +632,17 @@ export class DockerStatsService {
         0,
         Math.round(mem.usedMb - containerMemSum - daemonMemMb),
       );
+      // df(1)의 GB는 실제로 1024진 GiB — 도커 쪽 크기(1000진 decimal MB)와 완전히 같은
+      // 잣대는 아니지만, 이 정도 근사는 대시보드 표시용으로는 충분하다.
+      const dockerOverheadDiskMb = disk?.dockerMb ?? 0;
+      const osOtherDiskMb = hostDisk
+        ? Math.max(
+            0,
+            Math.round(
+              hostDisk.usedGb * 1024 - containerDiskSum - dockerOverheadDiskMb,
+            ),
+          )
+        : 0;
 
       return {
         hostCpuPercent: cpu.hostCpuPercent,
@@ -564,8 +651,10 @@ export class DockerStatsService {
         containers: normalizedContainers,
         dockerOverheadCpuPercent: cpu.daemonCpuPercent,
         dockerOverheadMemMb: daemonMemMb,
+        dockerOverheadDiskMb,
         osOtherCpuPercent,
         osOtherMemMb,
+        osOtherDiskMb,
       };
     } catch (err: unknown) {
       this.logger.warn(
