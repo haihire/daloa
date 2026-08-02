@@ -80,11 +80,15 @@ export class AdminMonitoringController {
     return this.dockerStats.getContainerHistory(container ?? 'nest');
   }
 
-  // 컨테이너 4개 밖의 몫(도커 데몬 자체 + OS/기타)의 7일 추세.
+  // 자원 현황 상세의 추세. days=1|7(기본 7, 보관기간 9일까지) 또는 from/to=YYYY-MM-DD 구간.
   @UseGuards(AdminGuard)
   @Get('admin/monitoring/resource-breakdown-history')
-  resourceBreakdownHistory() {
-    return this.dockerStats.getResourceBreakdownHistory();
+  resourceBreakdownHistory(
+    @Query('days') days?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.dockerStats.getResourceBreakdownHistory({ days, from, to });
   }
 
   // 최근 배포/재시작 이력 (컨테이너 현황 페이지의 업데이트 내역 드롭다운용).

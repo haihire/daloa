@@ -88,6 +88,8 @@ export interface ResourceBreakdownHistoryPoint {
   osOtherCpu: number;
   osOtherMemMb: number;
   hostCpu: number;
+  hostMemMb: number;
+  hostMemTotalMb: number;
 }
 
 // comm은 커널이 15자로 자르므로(예: containerd-shim-runc-v2 → containerd-shim) 자른 후 형태로 매칭.
@@ -591,9 +593,9 @@ export class DockerStatsService {
    * 잡히고, 안 그래도 잘 안 바뀌는 디스크 크기를 불필요하게 자주 재계산하는 낭비도 있어
    * 60초 캐시한다.
    */
-  private async getDiskUsageCached(): Promise<Awaited<
-    ReturnType<DockerStatsService['computeDiskUsage']>
-  >> {
+  private async getDiskUsageCached(): Promise<
+    Awaited<ReturnType<DockerStatsService['computeDiskUsage']>>
+  > {
     const now = Date.now();
     if (this.diskUsageCache && this.diskUsageCache.expiresAt > now) {
       return this.diskUsageCache.data;
@@ -699,8 +701,87 @@ export class DockerStatsService {
     return this.computeResourceBreakdown(containers);
   }
 
-  async getResourceBreakdownHistory(): Promise<ResourceBreakdownHistoryPoint[]> {
-    const rows = await this.monitoringRepo.findResourceBreakdownSeries(7);
+  /**
+   * 자원 추세 조회 구간을 정한다.
+   *  - from/to=YYYY-MM-DD → 그 기간(KST 기준, to는 그 날 끝까지 포함)
+   *  - 그 외              → 최근 N일(days, 기본 7, 보관기간인 9일까지)
+   * 하루 이하 구간은 10분 버킷 + 'HH24:MI' 라벨. 'MM-DD HH24:MI'는 날짜가 바뀌는
+   * 지점에만 라벨이 붙는 규칙이라 하루짜리 구간에서는 X축 눈금이 거의 안 보인다.
+   */
+  private resolveHistoryRange(opts?: {
+    days?: string;
+    from?: string;
+    to?: string;
+  }): {
+    from: Date;
+    to: Date;
+    bucketSeconds: number;
+    labelFormat: string;
+  } {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const kstDay = (v: string | undefined): Date | null => {
+      if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+      const d = new Date(`${v}T00:00:00+09:00`);
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
+
+    const fromDay = kstDay(opts?.from);
+    const toDay = kstDay(opts?.to);
+    if (fromDay && toDay) {
+      // 순서가 뒤집혀 와도 그대로 쓰면 빈 구간이 되므로 정렬한다.
+      const start = fromDay <= toDay ? fromDay : toDay;
+      const endDay = fromDay <= toDay ? toDay : fromDay;
+      const end = new Date(endDay.getTime() + dayMs); // to 당일 끝까지 포함
+      const spanDays = (end.getTime() - start.getTime()) / dayMs;
+      return {
+        from: start,
+        to: end,
+        bucketSeconds: spanDays <= 1 ? 600 : 3600,
+        labelFormat: spanDays <= 1 ? 'HH24:MI' : 'MM-DD HH24:MI',
+      };
+    }
+
+    const parsed = Number(opts?.days);
+    const days = Number.isFinite(parsed)
+      ? Math.max(1, Math.min(9, Math.trunc(parsed)))
+      : 7;
+    const to = new Date();
+    if (days <= 1) {
+      // "24시간"은 말 그대로 지금부터 거슬러 24시간(롤링).
+      return {
+        from: new Date(to.getTime() - dayMs),
+        to,
+        bucketSeconds: 600,
+        labelFormat: 'HH24:MI',
+      };
+    }
+    // "N일"은 오늘 포함 N개 날짜 — KST 자정에 맞춰 자른다. 그래야 하루 경계가 버킷
+    // 경계와 딱 맞아 X축에 날짜가 하루에 하나씩 찍힌다(지금 시각 기준으로 자르면
+    // 첫 날이 반토막 나고 경계가 어긋난다).
+    const kstNow = new Date(to.getTime() + 9 * 3600 * 1000);
+    const kstMidnightUtcMs =
+      Date.UTC(
+        kstNow.getUTCFullYear(),
+        kstNow.getUTCMonth(),
+        kstNow.getUTCDate(),
+      ) -
+      9 * 3600 * 1000;
+    return {
+      from: new Date(kstMidnightUtcMs - (days - 1) * dayMs),
+      to,
+      bucketSeconds: 3600,
+      labelFormat: 'MM-DD HH24:MI',
+    };
+  }
+
+  async getResourceBreakdownHistory(opts?: {
+    days?: string;
+    from?: string;
+    to?: string;
+  }): Promise<ResourceBreakdownHistoryPoint[]> {
+    const rows = await this.monitoringRepo.findResourceBreakdownSeries(
+      this.resolveHistoryRange(opts),
+    );
     return rows.map((row: ResourceBreakdownHistoryRow) => ({
       bucket: row.bucket,
       nestCpu: Number(row.avg_nest_cpu),
@@ -716,6 +797,8 @@ export class DockerStatsService {
       osOtherCpu: Number(row.avg_os_other_cpu),
       osOtherMemMb: Number(row.avg_os_other_mem_mb),
       hostCpu: Number(row.avg_host_cpu),
+      hostMemMb: Number(row.avg_host_mem_mb),
+      hostMemTotalMb: Number(row.avg_host_mem_total_mb),
     }));
   }
 

@@ -110,6 +110,8 @@ export interface ResourceBreakdownHistoryRow {
   avg_os_other_cpu: number;
   avg_os_other_mem_mb: number;
   avg_host_cpu: number;
+  avg_host_mem_mb: number;
+  avg_host_mem_total_mb: number;
 }
 
 @Injectable()
@@ -711,7 +713,10 @@ export class MonitoringRepository {
   }
 
   async saveResourceBreakdown(input: {
-    containers: Record<ContainerName, { cpuPercent: number; memUsedMb: number }>;
+    containers: Record<
+      ContainerName,
+      { cpuPercent: number; memUsedMb: number }
+    >;
     dockerOverheadCpuPercent: number;
     dockerOverheadMemMb: number;
     osOtherCpuPercent: number;
@@ -744,11 +749,24 @@ export class MonitoringRepository {
     `;
   }
 
-  async findResourceBreakdownSeries(
-    days: number,
-  ): Promise<ResourceBreakdownHistoryRow[]> {
-    return this.prisma.$queryRaw<ResourceBreakdownHistoryRow[]>`
-      SELECT TO_CHAR(DATE_TRUNC('hour', created_at AT TIME ZONE 'Asia/Seoul'), 'MM-DD HH24:MI') AS bucket,
+  /**
+   * 기간(from~to)을 bucketSeconds 단위로 묶은 자원 분해 추세.
+   * KST(+09:00)는 분 단위 오프셋이 없어 epoch를 잘라도 시/10분 경계가 그대로 맞으므로,
+   * 버킷은 epoch 기준으로 나누고 라벨만 KST로 변환한다.
+   * bucketSeconds/labelFormat은 서비스가 정하는 고정값(사용자 입력이 아님)이라 인라인한다.
+   */
+  async findResourceBreakdownSeries(range: {
+    from: Date;
+    to: Date;
+    bucketSeconds: number;
+    labelFormat: string;
+  }): Promise<ResourceBreakdownHistoryRow[]> {
+    const sec = Math.trunc(range.bucketSeconds);
+    const slot = `floor(extract(epoch from created_at) / ${sec})`;
+    const label = range.labelFormat.replace(/'/g, '');
+    return this.prisma.$queryRawUnsafe<ResourceBreakdownHistoryRow[]>(
+      `
+      SELECT TO_CHAR(to_timestamp(${slot} * ${sec}) AT TIME ZONE 'Asia/Seoul', '${label}') AS bucket,
              ROUND(AVG(nest_cpu_percent)::numeric, 2)::float AS avg_nest_cpu,
              ROUND(AVG(nest_mem_used_mb))::int AS avg_nest_mem_mb,
              ROUND(AVG(nginx_cpu_percent)::numeric, 2)::float AS avg_nginx_cpu,
@@ -761,12 +779,17 @@ export class MonitoringRepository {
              ROUND(AVG(docker_overhead_mem_mb))::int AS avg_docker_overhead_mem_mb,
              ROUND(AVG(os_other_cpu_percent)::numeric, 2)::float AS avg_os_other_cpu,
              ROUND(AVG(os_other_mem_mb))::int AS avg_os_other_mem_mb,
-             ROUND(AVG(host_cpu_percent)::numeric, 2)::float AS avg_host_cpu
+             ROUND(AVG(host_cpu_percent)::numeric, 2)::float AS avg_host_cpu,
+             ROUND(AVG(host_mem_used_mb))::int AS avg_host_mem_mb,
+             ROUND(AVG(host_mem_total_mb))::int AS avg_host_mem_total_mb
       FROM host_resource_breakdown
-      WHERE created_at >= NOW() - (${days}::int * INTERVAL '1 day')
-      GROUP BY DATE_TRUNC('hour', created_at AT TIME ZONE 'Asia/Seoul')
-      ORDER BY DATE_TRUNC('hour', created_at AT TIME ZONE 'Asia/Seoul') ASC
-    `;
+      WHERE created_at >= $1 AND created_at < $2
+      GROUP BY ${slot}
+      ORDER BY ${slot} ASC
+    `,
+      range.from,
+      range.to,
+    );
   }
 
   async deleteResourceBreakdownOlderThan(retentionDays: number): Promise<void> {
