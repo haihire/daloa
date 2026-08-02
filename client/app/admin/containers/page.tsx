@@ -48,6 +48,13 @@ interface ContainerHistoryPoint {
   avgMemUsedMb: number;
 }
 
+interface DeployEvent {
+  service: string;
+  eventType: string;
+  detail: string | null;
+  occurredAt: string;
+}
+
 // 호스트 전체를 "4개 컨테이너 / 도커 자체 / 기타(OS 등)"로 쪼갠 값. cpuPercent는 모두
 // 호스트 전체 용량 기준 0~100 스케일로 정규화돼 있어 그대로 적층해서 보여줄 수 있다.
 interface ResourceBreakdown {
@@ -254,7 +261,7 @@ const SERIES_META = {
   redis: { label: "redis", color: "#1baf7a" },
   postgres: { label: "postgres", color: "#eda100" },
   dockerOverhead: { label: "도커 자체", color: "#e87ba4" },
-  osOther: { label: "기타", color: "#008300" },
+  osOther: { label: "OS", color: "#008300" },
 } as const;
 
 const CPU_HISTORY_SERIES: Array<{
@@ -382,6 +389,12 @@ export default function ContainersPage() {
   const [loading, setLoading] = useState(containersCache === null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
+  const [deployEvents, setDeployEvents] = useState<DeployEvent[]>([]);
+  const [deployEventsLoaded, setDeployEventsLoaded] = useState(false);
+  const [deployEventsLoading, setDeployEventsLoading] = useState(false);
+  const [deployEventsOpen, setDeployEventsOpen] = useState(false);
+  const deployEventsRef = useRef<HTMLDivElement | null>(null);
+
   const [historyTab, setHistoryTab] =
     useState<(typeof HISTORY_TABS)[number]>("전체");
   const [containerHistory, setContainerHistory] = useState<
@@ -446,6 +459,46 @@ export default function ContainersPage() {
   useEffect(() => {
     void loadRagDocs();
   }, [loadRagDocs]);
+
+  // 배포/재시작 이력 — "업데이트 HH:MM"은 그냥 브라우저가 마지막으로 폴링에 성공한
+  // 시각일 뿐 DB 기록이 아니라서, 실제 DB에 남는 이력(container_events)은 드롭다운으로
+  // 따로 보여준다. 처음 열 때 1회만 불러온다(그 뒤엔 캐시된 목록 재사용).
+  const loadDeployEvents = useCallback(async () => {
+    setDeployEventsLoading(true);
+    try {
+      const res = await fetch("/api/admin/monitoring/deploy-events", {
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const data = (await res.json()) as DeployEvent[];
+        setDeployEvents(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      // 부가 정보 — 조회 실패해도 페이지는 그대로 동작
+    } finally {
+      setDeployEventsLoading(false);
+      setDeployEventsLoaded(true);
+    }
+  }, []);
+
+  function toggleDeployEvents() {
+    setDeployEventsOpen((open) => {
+      const next = !open;
+      if (next && !deployEventsLoaded) void loadDeployEvents();
+      return next;
+    });
+  }
+
+  useEffect(() => {
+    if (!deployEventsOpen) return;
+    function onClickOutside(e: MouseEvent) {
+      if (!deployEventsRef.current?.contains(e.target as Node)) {
+        setDeployEventsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [deployEventsOpen]);
 
   useEffect(() => {
     // 메시지가 있을 때만 스크롤 (마운트 시 페이지가 챗봇으로 끌려가는 것 방지)
@@ -733,9 +786,78 @@ export default function ContainersPage() {
             </span>
           )}
           {updatedAt && (
-            <span>
-              업데이트 {updatedAt.toLocaleTimeString("ko-KR", { hour12: false })}
-            </span>
+            <div className="relative" ref={deployEventsRef}>
+              <button
+                type="button"
+                onClick={toggleDeployEvents}
+                className="flex cursor-pointer items-center gap-1 hover:text-[color:var(--admin-text)]"
+              >
+                <span>
+                  업데이트{" "}
+                  {updatedAt.toLocaleTimeString("ko-KR", {
+                    hour12: false,
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={`h-3 w-3 shrink-0 transition-transform ${deployEventsOpen ? "rotate-180" : ""}`}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+              {deployEventsOpen && (
+                <div className="absolute right-0 top-full z-10 mt-1 w-72 rounded-lg border border-[color:var(--admin-border)] bg-white p-2 text-left shadow-lg">
+                  <p className="mb-1.5 px-1 text-[11px] font-semibold text-[color:var(--admin-text)]">
+                    최근 배포·재시작 이력
+                  </p>
+                  {deployEventsLoading ? (
+                    <p className="px-1 py-2 text-[11px] text-[color:var(--admin-text-muted)]">
+                      불러오는 중...
+                    </p>
+                  ) : deployEvents.length === 0 ? (
+                    <p className="px-1 py-2 text-[11px] text-[color:var(--admin-text-muted)]">
+                      기록된 이력이 없습니다.
+                    </p>
+                  ) : (
+                    <ul className="max-h-64 space-y-1 overflow-y-auto">
+                      {deployEvents.map((e, i) => (
+                        <li
+                          key={i}
+                          className="rounded-md px-1.5 py-1 text-[11px]"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium text-[color:var(--admin-text)]">
+                              {e.service} · {e.eventType}
+                            </span>
+                            <span className="shrink-0 text-[color:var(--admin-text-muted)] tabular-nums">
+                              {new Date(e.occurredAt).toLocaleString("ko-KR", {
+                                month: "2-digit",
+                                day: "2-digit",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                hour12: false,
+                              })}
+                            </span>
+                          </div>
+                          {e.detail && (
+                            <div className="truncate text-[color:var(--admin-text-muted)]">
+                              {e.detail}
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>

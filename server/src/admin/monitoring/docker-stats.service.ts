@@ -469,7 +469,12 @@ export class DockerStatsService {
     return Math.round(totalKb / 1024);
   }
 
-  /** 같은 200ms 샘플링 구간에서 호스트 전체 CPU%와 도커 데몬 프로세스 CPU%를 함께 측정(비교 기준 일치). */
+  /**
+   * 같은 샘플링 구간에서 호스트 전체 CPU%와 도커 데몬 프로세스 CPU%를 함께 측정(비교 기준 일치).
+   * `docker stats`는 자체적으로 약 1초 창으로 컨테이너 CPU%를 계산하는데, 여기를 200ms로 너무 짧게
+   * 잡으면 유휴 상태에서 컨테이너 쪽에 잠깐 튄 값이 이 호스트 총합보다 커 보여서(측정 창이 서로
+   * 달라 생기는 노이즈) "기타(OS)"가 뺄셈에서 항상 음수→0으로 눌리는 문제가 있었다. 1초로 맞춘다.
+   */
   private async sampleHostAndDaemonCpu(
     daemonPids: number[],
   ): Promise<{ hostCpuPercent: number; daemonCpuPercent: number } | null> {
@@ -478,7 +483,7 @@ export class DockerStatsService {
         this.sampleSystemTicks(),
         this.sampleProcessCpuTicks(daemonPids),
       ]);
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 1000));
       const [sysB, ticksB] = await Promise.all([
         this.sampleSystemTicks(),
         this.sampleProcessCpuTicks(daemonPids),

@@ -37,6 +37,10 @@ services:
       dockerfile: Dockerfile
     container_name: lomoa-nest
     restart: unless-stopped
+    # 관리자 "자원 구성"이 도커 데몬 자체(dockerd/containerd) CPU/메모리를 /proc에서
+    # 읽으려면 호스트 PID 네임스페이스가 보여야 한다 — 기본(격리된) 네임스페이스에서는
+    # 컨테이너 안에서 자기 프로세스만 보여서 도커 자체 몫이 항상 0으로 나왔다.
+    pid: host
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASS}@postgres:5432/${DB_NAME}?options=-c%20search_path%3Dlost_ark

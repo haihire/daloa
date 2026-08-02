@@ -87,6 +87,13 @@ export class AdminMonitoringController {
     return this.dockerStats.getResourceBreakdownHistory();
   }
 
+  // 최근 배포/재시작 이력 (컨테이너 현황 페이지의 업데이트 내역 드롭다운용).
+  @UseGuards(AdminGuard)
+  @Get('admin/monitoring/deploy-events')
+  deployEvents() {
+    return this.monitoring.getRecentContainerEvents(14, 30);
+  }
+
   // 배포 이벤트 기록(GitHub Actions가 호출). 관리자 세션 대신 공유 토큰으로 인증.
   // nest: 배포 워크플로에서, next: Vercel 배포 성공 시 deployment_status 워크플로에서 POST.
   @Post('webhooks/deploy')
