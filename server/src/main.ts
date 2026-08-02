@@ -33,11 +33,10 @@ async function bootstrap() {
     origin: origins,
   });
 
-  // 전역 에러 필터 - 500 이상 에러 발생 시 카카오 알림
+  // 전역 에러 필터 - 500 이상 에러 발생 시 카카오 알림 + 에러 로그 DB 기록
   const kakaoService = app.get(KakaoService);
-  app.useGlobalFilters(new AllExceptionsFilter(kakaoService));
-
   const monitoring = app.get(AdminMonitoringService);
+  app.useGlobalFilters(new AllExceptionsFilter(kakaoService, monitoring));
   app.use((req: Request, res: Response, next: NextFunction) => {
     const started = process.hrtime.bigint();
     res.on('finish', () => {

@@ -48,10 +48,41 @@ interface ContainerHistoryPoint {
   avgMemUsedMb: number;
 }
 
+// 호스트 전체를 "4개 컨테이너 / 도커 자체 / 기타(OS 등)"로 쪼갠 값. cpuPercent는 모두
+// 호스트 전체 용량 기준 0~100 스케일로 정규화돼 있어 그대로 적층해서 보여줄 수 있다.
+interface ResourceBreakdown {
+  hostCpuPercent: number;
+  hostMemUsedMb: number;
+  hostMemTotalMb: number;
+  containers: Array<{ label: string; cpuPercent: number; memUsedMb: number }>;
+  dockerOverheadCpuPercent: number;
+  dockerOverheadMemMb: number;
+  osOtherCpuPercent: number;
+  osOtherMemMb: number;
+}
+
+interface ResourceBreakdownHistoryPoint {
+  bucket: string;
+  nestCpu: number;
+  nestMemMb: number;
+  nginxCpu: number;
+  nginxMemMb: number;
+  redisCpu: number;
+  redisMemMb: number;
+  postgresCpu: number;
+  postgresMemMb: number;
+  dockerOverheadCpu: number;
+  dockerOverheadMemMb: number;
+  osOtherCpu: number;
+  osOtherMemMb: number;
+  hostCpu: number;
+}
+
 interface ContainersResponse {
   containers: ContainerStat[];
   host: HostStats | null;
   statuses: ContainerStatus[];
+  breakdown: ResourceBreakdown | null;
 }
 
 interface AiDiagnosis {
@@ -213,27 +244,92 @@ const markdownComponents: Components = {
 
 // 카드 정렬 순서 (서비스 의존도 순)
 const LABEL_ORDER = ["nest", "nginx", "redis", "postgres"];
-const HISTORY_TABS = ["nest", "nginx", "redis", "postgres"] as const;
+const HISTORY_TABS = ["전체", "nest", "nginx", "redis", "postgres"] as const;
+
+// dataviz 스킬 카테고리 팔레트(1~6번 슬롯, 인접쌍 CVD 검증 통과 순서 그대로 사용).
+// 세그먼트가 잘 안 보이는 3개(redis/postgres/dockerOverhead)는 범례 텍스트로 항상 값을 병기해 보완한다.
+const SERIES_META = {
+  nest: { label: "nest", color: "#2a78d6" },
+  nginx: { label: "nginx", color: "#eb6834" },
+  redis: { label: "redis", color: "#1baf7a" },
+  postgres: { label: "postgres", color: "#eda100" },
+  dockerOverhead: { label: "도커 자체", color: "#e87ba4" },
+  osOther: { label: "기타", color: "#008300" },
+} as const;
+
+const CPU_HISTORY_SERIES: Array<{
+  key: keyof ResourceBreakdownHistoryPoint;
+  meta: (typeof SERIES_META)[keyof typeof SERIES_META];
+}> = [
+  { key: "nestCpu", meta: SERIES_META.nest },
+  { key: "nginxCpu", meta: SERIES_META.nginx },
+  { key: "redisCpu", meta: SERIES_META.redis },
+  { key: "postgresCpu", meta: SERIES_META.postgres },
+  { key: "dockerOverheadCpu", meta: SERIES_META.dockerOverhead },
+  { key: "osOtherCpu", meta: SERIES_META.osOther },
+];
+
+const MEM_HISTORY_SERIES: Array<{
+  key: keyof ResourceBreakdownHistoryPoint;
+  meta: (typeof SERIES_META)[keyof typeof SERIES_META];
+}> = [
+  { key: "nestMemMb", meta: SERIES_META.nest },
+  { key: "nginxMemMb", meta: SERIES_META.nginx },
+  { key: "redisMemMb", meta: SERIES_META.redis },
+  { key: "postgresMemMb", meta: SERIES_META.postgres },
+  { key: "dockerOverheadMemMb", meta: SERIES_META.dockerOverhead },
+  { key: "osOtherMemMb", meta: SERIES_META.osOther },
+];
 
 let containersCache: ContainerStat[] | null = null;
 let statusesCache: ContainerStatus[] | null = null;
 let hostCache: HostStats | null = null;
+let breakdownCache: ResourceBreakdown | null = null;
+let breakdownHistoryCache: ResourceBreakdownHistoryPoint[] | null = null;
 const containerHistoryCache: Record<string, ContainerHistoryPoint[]> = {};
 
-function barColor(pct: number): string {
-  if (pct >= 85) return "#ef4444";
-  if (pct >= 60) return "#f59e0b";
-  return "#2563eb";
-}
-
-function UsageBar({ pct }: { pct: number }) {
-  const clamped = Math.max(0, Math.min(100, pct));
+/**
+ * CPU/메모리 구성을 막대(너비=비율)로 보여주면, 값이 작을 때(EC2 유휴 상태 등) 세그먼트가
+ * 안 보이는 문제가 있었다. 대신 항목별로 숫자를 큼직하게 보여주는 타일 그리드로 표시 —
+ * 값의 크기와 무관하게 항상 읽힌다.
+ */
+function StatGrid({
+  title,
+  segments,
+  formatSegment,
+  renderTotal,
+}: {
+  title: string;
+  segments: { key: string; label: string; value: number; color: string }[];
+  formatSegment: (value: number) => string;
+  renderTotal: (sum: number) => string;
+}) {
+  const sum = segments.reduce((s, seg) => s + seg.value, 0);
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-      <div
-        className="h-full rounded-full transition-all"
-        style={{ width: `${clamped}%`, background: barColor(clamped) }}
-      />
+    <div>
+      <div className="mb-1.5 flex items-center justify-between text-xs">
+        <span className="text-[color:var(--admin-text-muted)]">{title}</span>
+        <span className="font-semibold tabular-nums">{renderTotal(sum)}</span>
+      </div>
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+        {segments.map((seg) => (
+          <div
+            key={seg.key}
+            className="rounded-lg border border-[color:var(--admin-border)] px-2.5 py-2"
+          >
+            <div className="mb-1 flex items-center gap-1.5 text-[11px] text-[color:var(--admin-text-muted)]">
+              <span
+                className="inline-block h-2 w-2 shrink-0 rounded-full"
+                style={{ background: seg.color }}
+              />
+              <span className="truncate">{seg.label}</span>
+            </div>
+            <div className="text-base font-bold tabular-nums text-[color:var(--admin-text)]">
+              {formatSegment(seg.value)}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -280,13 +376,20 @@ export default function ContainersPage() {
     statusesCache ?? [],
   );
   const [host, setHost] = useState<HostStats | null>(hostCache);
+  const [breakdown, setBreakdown] = useState<ResourceBreakdown | null>(
+    breakdownCache,
+  );
   const [loading, setLoading] = useState(containersCache === null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
-  const [historyTab, setHistoryTab] = useState<string>("nest");
+  const [historyTab, setHistoryTab] =
+    useState<(typeof HISTORY_TABS)[number]>("전체");
   const [containerHistory, setContainerHistory] = useState<
     ContainerHistoryPoint[]
-  >(containerHistoryCache["nest"] ?? []);
+  >([]);
+  const [breakdownHistory, setBreakdownHistory] = useState<
+    ResourceBreakdownHistoryPoint[]
+  >(breakdownHistoryCache ?? []);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [activeChart, setActiveChart] = useState<string | null>(null);
 
@@ -436,18 +539,21 @@ export default function ContainersPage() {
         if (!alive || !res.ok) return;
         const raw = (await res.json()) as ContainersResponse | ContainerStat[];
         const parsed: ContainersResponse = Array.isArray(raw)
-          ? { containers: raw, host: null, statuses: [] }
+          ? { containers: raw, host: null, statuses: [], breakdown: null }
           : {
               containers: raw.containers ?? [],
               host: raw.host ?? null,
               statuses: raw.statuses ?? [],
+              breakdown: raw.breakdown ?? null,
             };
         containersCache = parsed.containers;
         statusesCache = parsed.statuses;
         hostCache = parsed.host;
+        breakdownCache = parsed.breakdown;
         setContainers(parsed.containers);
         setStatuses(parsed.statuses);
         setHost(parsed.host);
+        setBreakdown(parsed.breakdown);
         setUpdatedAt(new Date());
       } catch {
         // keep previous snapshot
@@ -464,6 +570,7 @@ export default function ContainersPage() {
   }, []);
 
   useEffect(() => {
+    if (historyTab === "전체") return;
     let alive = true;
     const cached = containerHistoryCache[historyTab];
     if (cached) {
@@ -489,6 +596,38 @@ export default function ContainersPage() {
       }
     }
     void loadHistory();
+    return () => {
+      alive = false;
+    };
+  }, [historyTab]);
+
+  // "전체" 탭: 컨테이너 4개 + 도커 자체 + 기타(OS)를 한 번에 보여주는 적층 추세.
+  useEffect(() => {
+    if (historyTab !== "전체") return;
+    let alive = true;
+    if (breakdownHistoryCache) {
+      setBreakdownHistory(breakdownHistoryCache);
+    } else {
+      setHistoryLoading(true);
+      setBreakdownHistory([]);
+    }
+    async function loadBreakdownHistory() {
+      try {
+        const res = await fetch(
+          "/api/admin/monitoring/resource-breakdown-history",
+          { cache: "no-store" },
+        );
+        if (!alive || !res.ok) return;
+        const data = (await res.json()) as ResourceBreakdownHistoryPoint[];
+        breakdownHistoryCache = data;
+        setBreakdownHistory(data);
+      } catch {
+        // keep previous
+      } finally {
+        if (alive) setHistoryLoading(false);
+      }
+    }
+    void loadBreakdownHistory();
     return () => {
       alive = false;
     };
@@ -520,6 +659,61 @@ export default function ContainersPage() {
       ).length,
     [cards],
   );
+
+  // breakdown.containers는 실행 중인 것만 담겨 오므로, 죽은 컨테이너는 0으로 채운다.
+  const cpuSegments = useMemo(() => {
+    if (!breakdown) return [];
+    const byLabel = new Map(
+      breakdown.containers.map((c) => [c.label, c.cpuPercent]),
+    );
+    return [
+      ...LABEL_ORDER.map((label) => ({
+        key: label,
+        label: SERIES_META[label as keyof typeof SERIES_META].label,
+        value: byLabel.get(label) ?? 0,
+        color: SERIES_META[label as keyof typeof SERIES_META].color,
+      })),
+      {
+        key: "dockerOverhead",
+        label: SERIES_META.dockerOverhead.label,
+        value: breakdown.dockerOverheadCpuPercent,
+        color: SERIES_META.dockerOverhead.color,
+      },
+      {
+        key: "osOther",
+        label: SERIES_META.osOther.label,
+        value: breakdown.osOtherCpuPercent,
+        color: SERIES_META.osOther.color,
+      },
+    ];
+  }, [breakdown]);
+
+  const memSegments = useMemo(() => {
+    if (!breakdown) return [];
+    const byLabel = new Map(
+      breakdown.containers.map((c) => [c.label, c.memUsedMb]),
+    );
+    return [
+      ...LABEL_ORDER.map((label) => ({
+        key: label,
+        label: SERIES_META[label as keyof typeof SERIES_META].label,
+        value: byLabel.get(label) ?? 0,
+        color: SERIES_META[label as keyof typeof SERIES_META].color,
+      })),
+      {
+        key: "dockerOverhead",
+        label: SERIES_META.dockerOverhead.label,
+        value: breakdown.dockerOverheadMemMb,
+        color: SERIES_META.dockerOverhead.color,
+      },
+      {
+        key: "osOther",
+        label: SERIES_META.osOther.label,
+        value: breakdown.osOtherMemMb,
+        color: SERIES_META.osOther.color,
+      },
+    ];
+  }, [breakdown]);
 
   return (
     <div className="flex h-full flex-col">
@@ -562,110 +756,94 @@ export default function ContainersPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">
-          {/* EC2 호스트 */}
+          {/* 자원 현황 — 서비스별 실행상태 + CPU/메모리(4개 컨테이너+도커 자체+기타)+디스크를 숫자 위주로 보여준다 */}
           {host && (
             <div className="admin-card p-4">
-              <p className="mb-3 text-sm font-semibold">EC2 호스트 전체</p>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div>
-                  <div className="mb-1 flex items-center justify-between text-xs">
-                    <span className="text-[color:var(--admin-text-muted)]">
-                      CPU
-                    </span>
-                    <span className="font-semibold tabular-nums">
-                      {host.cpuPercent.toFixed(1)}%
-                    </span>
-                  </div>
-                  <UsageBar pct={host.cpuPercent} />
+              <p className="mb-3 text-sm font-semibold">자원 현황</p>
+
+              {cards.length > 0 && (
+                <div className="mb-4 flex flex-wrap gap-2">
+                  {cards.map(({ label, status, stat }) => {
+                    const meta =
+                      SERIES_META[label as keyof typeof SERIES_META];
+                    return (
+                      <div
+                        key={label}
+                        className="flex items-center gap-1.5 rounded-lg border border-[color:var(--admin-border)] px-2.5 py-1.5 text-xs"
+                      >
+                        <span
+                          className="inline-block h-2 w-2 shrink-0 rounded-full"
+                          style={{ background: meta?.color ?? "#9ca3af" }}
+                        />
+                        <span className="font-semibold">{label}</span>
+                        {status ? (
+                          <StateBadge state={status.state} />
+                        ) : stat ? (
+                          <StateBadge state="running" />
+                        ) : null}
+                        {status && <HealthDot health={status.health} />}
+                        <span className="text-[color:var(--admin-text-muted)]">
+                          {status?.status || (stat ? "실행 중" : "—")}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
+              )}
+
+              <div className="space-y-4">
+                {breakdown ? (
+                  <>
+                    <StatGrid
+                      title="CPU"
+                      segments={cpuSegments}
+                      formatSegment={(v) => `${v.toFixed(1)}%`}
+                      renderTotal={(sum) => `${sum.toFixed(1)}%`}
+                    />
+                    <StatGrid
+                      title="메모리"
+                      segments={memSegments}
+                      formatSegment={(v) => `${Math.round(v)}MB`}
+                      renderTotal={(sum) =>
+                        `${Math.round(sum)}MB / ${breakdown.hostMemTotalMb}MB (${((sum / breakdown.hostMemTotalMb) * 100).toFixed(1)}%)`
+                      }
+                    />
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <p className="mb-1 text-xs text-[color:var(--admin-text-muted)]">
+                        CPU
+                      </p>
+                      <p className="text-lg font-bold tabular-nums">
+                        {host.cpuPercent.toFixed(1)}%
+                      </p>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs text-[color:var(--admin-text-muted)]">
+                        메모리
+                      </p>
+                      <p className="text-lg font-bold tabular-nums">
+                        {host.memPercent.toFixed(1)}%
+                      </p>
+                      <p className="text-[11px] text-[color:var(--admin-text-muted)] tabular-nums">
+                        {host.memUsedMb}MB / {host.memTotalMb}MB
+                      </p>
+                    </div>
+                  </>
+                )}
                 <div>
-                  <div className="mb-1 flex items-center justify-between text-xs">
-                    <span className="text-[color:var(--admin-text-muted)]">
-                      메모리
-                    </span>
-                    <span className="font-semibold tabular-nums">
-                      {host.memPercent.toFixed(1)}%
-                    </span>
-                  </div>
-                  <UsageBar pct={host.memPercent} />
-                  <p className="mt-1 text-[11px] text-[color:var(--admin-text-muted)] tabular-nums">
-                    {host.memUsedMb}MB / {host.memTotalMb}MB
+                  <p className="mb-1 text-xs text-[color:var(--admin-text-muted)]">
+                    디스크
                   </p>
-                </div>
-                <div>
-                  <div className="mb-1 flex items-center justify-between text-xs">
-                    <span className="text-[color:var(--admin-text-muted)]">
-                      디스크
-                    </span>
-                    <span className="font-semibold tabular-nums">
-                      {host.diskPercent}%
-                    </span>
-                  </div>
-                  <UsageBar pct={host.diskPercent} />
-                  <p className="mt-1 text-[11px] text-[color:var(--admin-text-muted)] tabular-nums">
+                  <p className="text-lg font-bold tabular-nums">
+                    {host.diskPercent}%
+                  </p>
+                  <p className="text-[11px] text-[color:var(--admin-text-muted)] tabular-nums">
                     {host.diskUsedGb}GB / {host.diskTotalGb}GB
                   </p>
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* 컨테이너 카드 */}
-          {cards.length > 0 && (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {cards.map(({ label, status, stat }) => (
-                <div key={label} className="admin-card p-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <p className="text-sm font-semibold">{label}</p>
-                    {status ? (
-                      <StateBadge state={status.state} />
-                    ) : stat ? (
-                      <StateBadge state="running" />
-                    ) : null}
-                  </div>
-
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-[11px] text-[color:var(--admin-text-muted)]">
-                      {status?.status || (stat ? "실행 중" : "—")}
-                    </span>
-                    {status && <HealthDot health={status.health} />}
-                  </div>
-
-                  {stat ? (
-                    <div className="space-y-2">
-                      <div>
-                        <div className="mb-0.5 flex items-center justify-between text-[11px]">
-                          <span className="text-[color:var(--admin-text-muted)]">
-                            CPU
-                          </span>
-                          <span className="font-medium tabular-nums">
-                            {stat.cpuPercent.toFixed(1)}%
-                          </span>
-                        </div>
-                        <UsageBar pct={stat.cpuPercent} />
-                      </div>
-                      <div>
-                        <div className="mb-0.5 flex items-center justify-between text-[11px]">
-                          <span className="text-[color:var(--admin-text-muted)]">
-                            메모리
-                          </span>
-                          <span className="font-medium tabular-nums">
-                            {stat.memPercent.toFixed(1)}%
-                          </span>
-                        </div>
-                        <UsageBar pct={stat.memPercent} />
-                        <p className="mt-0.5 text-[10px] text-[color:var(--admin-text-muted)] tabular-nums">
-                          {stat.memUsedMb}MB / {stat.memTotalMb}MB
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-[11px] text-[color:var(--admin-text-subtle)]">
-                      자원 데이터 없음
-                    </p>
-                  )}
-                </div>
-              ))}
             </div>
           )}
 
@@ -686,6 +864,22 @@ export default function ContainersPage() {
                 ))}
               </div>
             </div>
+            {historyTab === "전체" && (
+              <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1">
+                {Object.values(SERIES_META).map((meta) => (
+                  <span
+                    key={meta.label}
+                    className="flex items-center gap-1 text-[11px] text-[color:var(--admin-text-muted)]"
+                  >
+                    <span
+                      className="inline-block h-2 w-2 shrink-0 rounded-full"
+                      style={{ background: meta.color }}
+                    />
+                    {meta.label}
+                  </span>
+                ))}
+              </div>
+            )}
             <div className="grid gap-3 md:grid-cols-2">
               <div>
                 <p className="mb-1 text-xs text-[color:var(--admin-text-muted)]">
@@ -696,6 +890,53 @@ export default function ContainersPage() {
                     <div className="grid h-full place-items-center text-[11px] text-[color:var(--admin-text-muted)]">
                       불러오는 중...
                     </div>
+                  ) : historyTab === "전체" ? (
+                    breakdownHistory.length === 0 ? (
+                      <div className="grid h-full place-items-center text-[11px] text-[color:var(--admin-text-muted)]">
+                        데이터 없음
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart
+                          data={breakdownHistory}
+                          margin={{ top: 5, right: 14, left: 0, bottom: 0 }}
+                          onMouseEnter={() => setActiveChart("breakdown-cpu")}
+                          onMouseLeave={() => setActiveChart(null)}
+                        >
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke="#e5e7eb"
+                            vertical={false}
+                          />
+                          <XAxis
+                            dataKey="bucket"
+                            tick={{ fontSize: 9, fill: "#6b7280" }}
+                            {...dateAxis(breakdownHistory, "bucket")}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 10, fill: "#6b7280" }}
+                            unit="%"
+                          />
+                          <Tooltip
+                            active={activeChart === "breakdown-cpu"}
+                            formatter={(v, name) => [`${v ?? 0}%`, name]}
+                            wrapperStyle={{ pointerEvents: "none" }}
+                          />
+                          {CPU_HISTORY_SERIES.map((s) => (
+                            <Area
+                              key={s.key}
+                              type="linear"
+                              dataKey={s.key}
+                              stackId="cpu"
+                              stroke={s.meta.color}
+                              fill={s.meta.color}
+                              fillOpacity={0.75}
+                              name={s.meta.label}
+                            />
+                          ))}
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    )
                   ) : containerHistory.length === 0 ? (
                     <div className="grid h-full place-items-center text-[11px] text-[color:var(--admin-text-muted)]">
                       데이터 없음
@@ -741,13 +982,60 @@ export default function ContainersPage() {
               </div>
               <div>
                 <p className="mb-1 text-xs text-[color:var(--admin-text-muted)]">
-                  메모리 %
+                  메모리 {historyTab === "전체" ? "(MB)" : "%"}
                 </p>
                 <div className="h-32">
                   {historyLoading ? (
                     <div className="grid h-full place-items-center text-[11px] text-[color:var(--admin-text-muted)]">
                       불러오는 중...
                     </div>
+                  ) : historyTab === "전체" ? (
+                    breakdownHistory.length === 0 ? (
+                      <div className="grid h-full place-items-center text-[11px] text-[color:var(--admin-text-muted)]">
+                        데이터 없음
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart
+                          data={breakdownHistory}
+                          margin={{ top: 5, right: 14, left: 0, bottom: 0 }}
+                          onMouseEnter={() => setActiveChart("breakdown-mem")}
+                          onMouseLeave={() => setActiveChart(null)}
+                        >
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke="#e5e7eb"
+                            vertical={false}
+                          />
+                          <XAxis
+                            dataKey="bucket"
+                            tick={{ fontSize: 9, fill: "#6b7280" }}
+                            {...dateAxis(breakdownHistory, "bucket")}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 10, fill: "#6b7280" }}
+                            unit="MB"
+                          />
+                          <Tooltip
+                            active={activeChart === "breakdown-mem"}
+                            formatter={(v, name) => [`${v ?? 0}MB`, name]}
+                            wrapperStyle={{ pointerEvents: "none" }}
+                          />
+                          {MEM_HISTORY_SERIES.map((s) => (
+                            <Area
+                              key={s.key}
+                              type="linear"
+                              dataKey={s.key}
+                              stackId="mem"
+                              stroke={s.meta.color}
+                              fill={s.meta.color}
+                              fillOpacity={0.75}
+                              name={s.meta.label}
+                            />
+                          ))}
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    )
                   ) : containerHistory.length === 0 ? (
                     <div className="grid h-full place-items-center text-[11px] text-[color:var(--admin-text-muted)]">
                       데이터 없음

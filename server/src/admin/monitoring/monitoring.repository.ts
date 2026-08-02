@@ -41,6 +41,17 @@ export interface SiteClickRow {
 
 type RetentionTable = 'apm_request_timings' | 'apm_page_load_timings';
 
+export interface ErrorLogRow {
+  id: bigint;
+  status_code: number;
+  error_name: string;
+  method: string;
+  path: string;
+  message: string | null;
+  stack: string | null;
+  created_at: Date;
+}
+
 export interface PageLoadSeriesRow {
   bucket: string;
   date: string;
@@ -82,6 +93,23 @@ export interface ContainerHourlyCpuRow {
   hour: number;
   avg_cpu: number;
   max_cpu: number;
+}
+
+export interface ResourceBreakdownHistoryRow {
+  bucket: string;
+  avg_nest_cpu: number;
+  avg_nest_mem_mb: number;
+  avg_nginx_cpu: number;
+  avg_nginx_mem_mb: number;
+  avg_redis_cpu: number;
+  avg_redis_mem_mb: number;
+  avg_postgres_cpu: number;
+  avg_postgres_mem_mb: number;
+  avg_docker_overhead_cpu: number;
+  avg_docker_overhead_mem_mb: number;
+  avg_os_other_cpu: number;
+  avg_os_other_mem_mb: number;
+  avg_host_cpu: number;
 }
 
 @Injectable()
@@ -220,6 +248,25 @@ export class MonitoringRepository {
     await this.prisma
       .$executeRaw`CREATE INDEX IF NOT EXISTS idx_container_events_service_occurred_at ON container_events(service, occurred_at)`;
 
+    // 애플리케이션 에러 로그. 전역 예외 필터(AllExceptionsFilter)가 401/404를 뺀 모든 에러를 기록.
+    // 파일 로그/Sentry와 별개로, 관리자 UI에서 상태코드·기간으로 조회하기 쉽게 DB에 남긴다.
+    await this.prisma.$executeRaw`
+      CREATE TABLE IF NOT EXISTS error_logs (
+        id BIGSERIAL PRIMARY KEY,
+        status_code SMALLINT NOT NULL,
+        error_name VARCHAR(80) NOT NULL,
+        method VARCHAR(10) NOT NULL,
+        path VARCHAR(512) NOT NULL,
+        message TEXT,
+        stack TEXT,
+        created_at TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    await this.prisma
+      .$executeRaw`CREATE INDEX IF NOT EXISTS idx_error_logs_created_at ON error_logs(created_at DESC)`;
+    await this.prisma
+      .$executeRaw`CREATE INDEX IF NOT EXISTS idx_error_logs_status_created_at ON error_logs(status_code, created_at DESC)`;
+
     for (const container of Object.keys(DOCKER_TABLE) as ContainerName[]) {
       await this.prisma.$executeRawUnsafe(`
         CREATE TABLE IF NOT EXISTS docker_metrics_${container} (
@@ -236,6 +283,33 @@ export class MonitoringRepository {
         ON docker_metrics_${container}(created_at)
       `);
     }
+
+    // 호스트 전체 자원의 매 5분 스냅샷: 4개 컨테이너(코어수로 정규화한 CPU%, 호스트 스케일)
+    // + 도커 데몬 자체(dockerd/containerd 등) + 그 나머지(OS/커널/기타 프로세스) + 호스트 총합.
+    // 한 행 안의 모든 값이 같은 순간·같은 스케일이라 "전체" 적층(stacked) 추세 하나로 바로 그릴 수 있다.
+    await this.prisma.$executeRaw`
+      CREATE TABLE IF NOT EXISTS host_resource_breakdown (
+        id BIGSERIAL PRIMARY KEY,
+        nest_cpu_percent DECIMAL(5,2) NOT NULL,
+        nest_mem_used_mb INT NOT NULL,
+        nginx_cpu_percent DECIMAL(5,2) NOT NULL,
+        nginx_mem_used_mb INT NOT NULL,
+        redis_cpu_percent DECIMAL(5,2) NOT NULL,
+        redis_mem_used_mb INT NOT NULL,
+        postgres_cpu_percent DECIMAL(5,2) NOT NULL,
+        postgres_mem_used_mb INT NOT NULL,
+        docker_overhead_cpu_percent DECIMAL(5,2) NOT NULL,
+        docker_overhead_mem_mb INT NOT NULL,
+        os_other_cpu_percent DECIMAL(5,2) NOT NULL,
+        os_other_mem_mb INT NOT NULL,
+        host_cpu_percent DECIMAL(5,2) NOT NULL,
+        host_mem_used_mb INT NOT NULL,
+        host_mem_total_mb INT NOT NULL,
+        created_at TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    await this.prisma
+      .$executeRaw`CREATE INDEX IF NOT EXISTS idx_host_resource_breakdown_created_at ON host_resource_breakdown(created_at)`;
   }
 
   async recordRequest(input: {
@@ -636,6 +710,71 @@ export class MonitoringRepository {
     );
   }
 
+  async saveResourceBreakdown(input: {
+    containers: Record<ContainerName, { cpuPercent: number; memUsedMb: number }>;
+    dockerOverheadCpuPercent: number;
+    dockerOverheadMemMb: number;
+    osOtherCpuPercent: number;
+    osOtherMemMb: number;
+    hostCpuPercent: number;
+    hostMemUsedMb: number;
+    hostMemTotalMb: number;
+  }): Promise<void> {
+    const c = input.containers;
+    await this.prisma.$executeRaw`
+      INSERT INTO host_resource_breakdown
+        (nest_cpu_percent, nest_mem_used_mb, nginx_cpu_percent, nginx_mem_used_mb,
+         redis_cpu_percent, redis_mem_used_mb, postgres_cpu_percent, postgres_mem_used_mb,
+         docker_overhead_cpu_percent, docker_overhead_mem_mb, os_other_cpu_percent,
+         os_other_mem_mb, host_cpu_percent, host_mem_used_mb, host_mem_total_mb, created_at)
+      VALUES (
+        ${c.nest.cpuPercent}::numeric, ${Math.round(c.nest.memUsedMb)},
+        ${c.nginx.cpuPercent}::numeric, ${Math.round(c.nginx.memUsedMb)},
+        ${c.redis.cpuPercent}::numeric, ${Math.round(c.redis.memUsedMb)},
+        ${c.postgres.cpuPercent}::numeric, ${Math.round(c.postgres.memUsedMb)},
+        ${input.dockerOverheadCpuPercent}::numeric,
+        ${Math.round(input.dockerOverheadMemMb)},
+        ${input.osOtherCpuPercent}::numeric,
+        ${Math.round(input.osOtherMemMb)},
+        ${input.hostCpuPercent}::numeric,
+        ${Math.round(input.hostMemUsedMb)},
+        ${Math.round(input.hostMemTotalMb)},
+        NOW()
+      )
+    `;
+  }
+
+  async findResourceBreakdownSeries(
+    days: number,
+  ): Promise<ResourceBreakdownHistoryRow[]> {
+    return this.prisma.$queryRaw<ResourceBreakdownHistoryRow[]>`
+      SELECT TO_CHAR(DATE_TRUNC('hour', created_at AT TIME ZONE 'Asia/Seoul'), 'MM-DD HH24:MI') AS bucket,
+             ROUND(AVG(nest_cpu_percent)::numeric, 2)::float AS avg_nest_cpu,
+             ROUND(AVG(nest_mem_used_mb))::int AS avg_nest_mem_mb,
+             ROUND(AVG(nginx_cpu_percent)::numeric, 2)::float AS avg_nginx_cpu,
+             ROUND(AVG(nginx_mem_used_mb))::int AS avg_nginx_mem_mb,
+             ROUND(AVG(redis_cpu_percent)::numeric, 2)::float AS avg_redis_cpu,
+             ROUND(AVG(redis_mem_used_mb))::int AS avg_redis_mem_mb,
+             ROUND(AVG(postgres_cpu_percent)::numeric, 2)::float AS avg_postgres_cpu,
+             ROUND(AVG(postgres_mem_used_mb))::int AS avg_postgres_mem_mb,
+             ROUND(AVG(docker_overhead_cpu_percent)::numeric, 2)::float AS avg_docker_overhead_cpu,
+             ROUND(AVG(docker_overhead_mem_mb))::int AS avg_docker_overhead_mem_mb,
+             ROUND(AVG(os_other_cpu_percent)::numeric, 2)::float AS avg_os_other_cpu,
+             ROUND(AVG(os_other_mem_mb))::int AS avg_os_other_mem_mb,
+             ROUND(AVG(host_cpu_percent)::numeric, 2)::float AS avg_host_cpu
+      FROM host_resource_breakdown
+      WHERE created_at >= NOW() - (${days}::int * INTERVAL '1 day')
+      GROUP BY DATE_TRUNC('hour', created_at AT TIME ZONE 'Asia/Seoul')
+      ORDER BY DATE_TRUNC('hour', created_at AT TIME ZONE 'Asia/Seoul') ASC
+    `;
+  }
+
+  async deleteResourceBreakdownOlderThan(retentionDays: number): Promise<void> {
+    await this.prisma.$executeRaw`
+      DELETE FROM host_resource_breakdown WHERE created_at < NOW() - (${retentionDays}::int * INTERVAL '1 day')
+    `;
+  }
+
   /** 기간 내 컨테이너 CPU/MEM 집계(평균/최대/최소/p95, 메모리 피크). */
   async findContainerAggregate(
     container: ContainerName,
@@ -724,6 +863,57 @@ export class MonitoringRepository {
       ORDER BY occurred_at DESC
       LIMIT ${limit}
     `;
+  }
+
+  /** 에러 1건 기록. 컬럼 길이에 맞춰 자른다(문자열 필드 오버플로 방지). */
+  async recordError(input: {
+    statusCode: number;
+    errorName: string;
+    method: string;
+    path: string;
+    message: string;
+    stack: string | null;
+  }): Promise<void> {
+    await this.prisma.$executeRaw`
+      INSERT INTO error_logs (status_code, error_name, method, path, message, stack)
+      VALUES (
+        ${input.statusCode},
+        ${input.errorName.slice(0, 80)},
+        ${input.method.slice(0, 10)},
+        ${input.path.slice(0, 512)},
+        ${input.message.slice(0, 2000)},
+        ${input.stack ? input.stack.slice(0, 8000) : null}
+      )
+    `;
+  }
+
+  /** 최근 N일 에러 로그 (최신순). statusClass로 4xx/5xx 필터. */
+  async findRecentErrors(input: {
+    days: number;
+    statusClass: 'all' | '4xx' | '5xx';
+    limit: number;
+  }): Promise<ErrorLogRow[]> {
+    const min = input.statusClass === '5xx' ? 500 : 400;
+    const max = input.statusClass === '4xx' ? 500 : 600;
+    return this.prisma.$queryRaw<ErrorLogRow[]>`
+      SELECT id, status_code, error_name, method, path, message, stack, created_at
+      FROM error_logs
+      WHERE created_at >= NOW() - (${input.days}::int * INTERVAL '1 day')
+        AND status_code >= ${min}
+        AND status_code < ${max}
+      ORDER BY created_at DESC
+      LIMIT ${input.limit}
+    `;
+  }
+
+  /** 오래된 에러 로그 정리. 삭제 건수 반환. */
+  async pruneErrorLogs(retentionDays: number): Promise<number> {
+    const rows = await this.prisma.$queryRaw<Array<{ id: bigint }>>`
+      DELETE FROM error_logs
+      WHERE created_at < NOW() - (${retentionDays}::int * INTERVAL '1 day')
+      RETURNING id
+    `;
+    return rows.length;
   }
 
   async deleteDockerMetricsOlderThan(
