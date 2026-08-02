@@ -61,11 +61,18 @@ interface ResourceBreakdown {
   hostCpuPercent: number;
   hostMemUsedMb: number;
   hostMemTotalMb: number;
-  containers: Array<{ label: string; cpuPercent: number; memUsedMb: number }>;
+  containers: Array<{
+    label: string;
+    cpuPercent: number;
+    memUsedMb: number;
+    diskUsedMb: number;
+  }>;
   dockerOverheadCpuPercent: number;
   dockerOverheadMemMb: number;
+  dockerOverheadDiskMb: number;
   osOtherCpuPercent: number;
   osOtherMemMb: number;
+  osOtherDiskMb: number;
 }
 
 interface ResourceBreakdownHistoryPoint {
@@ -260,7 +267,7 @@ const SERIES_META = {
   nginx: { label: "nginx", color: "#eb6834" },
   redis: { label: "redis", color: "#1baf7a" },
   postgres: { label: "postgres", color: "#eda100" },
-  dockerOverhead: { label: "도커 자체", color: "#e87ba4" },
+  dockerOverhead: { label: "docker", color: "#e87ba4" },
   osOther: { label: "OS", color: "#008300" },
 } as const;
 
@@ -768,6 +775,33 @@ export default function ContainersPage() {
     ];
   }, [breakdown]);
 
+  const diskSegments = useMemo(() => {
+    if (!breakdown) return [];
+    const byLabel = new Map(
+      breakdown.containers.map((c) => [c.label, c.diskUsedMb]),
+    );
+    return [
+      ...LABEL_ORDER.map((label) => ({
+        key: label,
+        label: SERIES_META[label as keyof typeof SERIES_META].label,
+        value: byLabel.get(label) ?? 0,
+        color: SERIES_META[label as keyof typeof SERIES_META].color,
+      })),
+      {
+        key: "dockerOverhead",
+        label: SERIES_META.dockerOverhead.label,
+        value: breakdown.dockerOverheadDiskMb,
+        color: SERIES_META.dockerOverhead.color,
+      },
+      {
+        key: "osOther",
+        label: SERIES_META.osOther.label,
+        value: breakdown.osOtherDiskMb,
+        color: SERIES_META.osOther.color,
+      },
+    ];
+  }, [breakdown]);
+
   return (
     <div className="flex h-full flex-col">
       <div className="mb-5 flex shrink-0 items-start justify-between gap-4">
@@ -919,15 +953,29 @@ export default function ContainersPage() {
                     <StatGrid
                       title="CPU"
                       segments={cpuSegments}
-                      formatSegment={(v) => `${v.toFixed(1)}%`}
-                      renderTotal={(sum) => `${sum.toFixed(1)}%`}
+                      formatSegment={(v) => `${v.toFixed(2)}%`}
+                      renderTotal={(sum) => `${sum.toFixed(2)}%`}
                     />
                     <StatGrid
                       title="메모리"
                       segments={memSegments}
-                      formatSegment={(v) => `${Math.round(v)}MB`}
+                      formatSegment={(v) =>
+                        `${Math.round(v)}MB (${((v / breakdown.hostMemTotalMb) * 100).toFixed(1)}%)`
+                      }
                       renderTotal={(sum) =>
                         `${Math.round(sum)}MB / ${breakdown.hostMemTotalMb}MB (${((sum / breakdown.hostMemTotalMb) * 100).toFixed(1)}%)`
+                      }
+                    />
+                    <StatGrid
+                      title="디스크"
+                      segments={diskSegments}
+                      formatSegment={(v) =>
+                        v >= 1024
+                          ? `${(v / 1024).toFixed(2)}GB`
+                          : `${Math.round(v)}MB`
+                      }
+                      renderTotal={(sum) =>
+                        `${(sum / 1024).toFixed(2)}GB / ${host.diskTotalGb}GB`
                       }
                     />
                   </>
@@ -952,19 +1000,19 @@ export default function ContainersPage() {
                         {host.memUsedMb}MB / {host.memTotalMb}MB
                       </p>
                     </div>
+                    <div>
+                      <p className="mb-1 text-xs text-[color:var(--admin-text-muted)]">
+                        디스크
+                      </p>
+                      <p className="text-lg font-bold tabular-nums">
+                        {host.diskPercent}%
+                      </p>
+                      <p className="text-[11px] text-[color:var(--admin-text-muted)] tabular-nums">
+                        {host.diskUsedGb}GB / {host.diskTotalGb}GB
+                      </p>
+                    </div>
                   </>
                 )}
-                <div>
-                  <p className="mb-1 text-xs text-[color:var(--admin-text-muted)]">
-                    디스크
-                  </p>
-                  <p className="text-lg font-bold tabular-nums">
-                    {host.diskPercent}%
-                  </p>
-                  <p className="text-[11px] text-[color:var(--admin-text-muted)] tabular-nums">
-                    {host.diskUsedGb}GB / {host.diskTotalGb}GB
-                  </p>
-                </div>
               </div>
             </div>
           )}
