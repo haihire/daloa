@@ -158,8 +158,21 @@ export default function MonitoringPage() {
   const [errDays, setErrDays] = useState<1 | 7 | 30>(7);
   const [errLoading, setErrLoading] = useState(true);
   const [expandedErrId, setExpandedErrId] = useState<string | null>(null);
+  const [copiedErrId, setCopiedErrId] = useState<string | null>(null);
   const hasLoadedRef = useRef(false);
   const prevVisitCountRef = useRef(0);
+
+  async function copyErrStack(id: string, stack: string) {
+    try {
+      await navigator.clipboard.writeText(stack);
+      setCopiedErrId(id);
+      setTimeout(() => {
+        setCopiedErrId((cur) => (cur === id ? null : cur));
+      }, 1500);
+    } catch {
+      // 클립보드 권한 거부/미지원 — 드래그 선택으로도 복사 가능하니 조용히 무시
+    }
+  }
 
   useEffect(() => {
     let alive = true;
@@ -985,9 +998,53 @@ export default function MonitoringPage() {
                       {expanded && e.stack ? (
                         <tr>
                           <td colSpan={6} className="bg-slate-50 px-3 py-2">
-                            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-[color:var(--admin-text)]">
-                              {e.stack}
-                            </pre>
+                            {/* 스택은 길어서 드래그 선택이 번거롭다 — 오른쪽 위 버튼으로 통째 복사.
+                                pre가 스크롤되므로 버튼은 감싼 div에 absolute로 띄운다. */}
+                            <div className="relative">
+                              <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words py-1 pl-1 pr-9 font-mono text-[11px] text-[color:var(--admin-text)]">
+                                {e.stack}
+                              </pre>
+                              <button
+                                type="button"
+                                onClick={() => copyErrStack(e.id, e.stack ?? "")}
+                                aria-label="에러 로그 복사"
+                                title="복사"
+                                className="absolute right-1 top-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border border-slate-300 bg-white text-[color:var(--admin-text-muted)] shadow-sm transition-colors hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600"
+                              >
+                                {copiedErrId === e.id ? (
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    className="h-3.5 w-3.5"
+                                  >
+                                    <polyline points="20 6 9 17 4 12" />
+                                  </svg>
+                                ) : (
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    className="h-3.5 w-3.5"
+                                  >
+                                    <rect
+                                      x="9"
+                                      y="9"
+                                      width="13"
+                                      height="13"
+                                      rx="2"
+                                    />
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                  </svg>
+                                )}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ) : null}
