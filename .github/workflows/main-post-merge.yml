@@ -59,9 +59,14 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker buildx create --use
+          # provenance/SBOM attestation을 끄지 않으면 빌드마다 첨부 메타데이터가 달라져
+          # 내용이 동일한 레이어도 다이제스트가 매번 바뀐다 → ECR push·EC2 pull이 안 바뀐
+          # 레이어까지 매번 통째로 다시 전송(레이어 캐시 무효화). 꺼서 다이제스트를 안정화.
+          # cache-to도 mode=max→min: 이 Dockerfile은 단일 스테이지라 max의 이점이 없음.
           docker buildx build \
             --cache-from type=gha \
-            --cache-to type=gha,mode=max \
+            --cache-to type=gha,mode=min \
+            --provenance=false \
             --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
             --push \
             ./server
