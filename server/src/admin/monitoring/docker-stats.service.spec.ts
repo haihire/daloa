@@ -11,10 +11,18 @@ function createService() {
   const saveDockerMetric = jest.fn().mockResolvedValue(undefined);
   const findDockerMetricSeries = jest.fn().mockResolvedValue([]);
   const deleteDockerMetricsOlderThan = jest.fn().mockResolvedValue(undefined);
+  const saveResourceBreakdown = jest.fn().mockResolvedValue(undefined);
+  const findResourceBreakdownSeries = jest.fn().mockResolvedValue([]);
+  const deleteResourceBreakdownOlderThan = jest
+    .fn()
+    .mockResolvedValue(undefined);
   const repo = {
     saveDockerMetric,
     findDockerMetricSeries,
     deleteDockerMetricsOlderThan,
+    saveResourceBreakdown,
+    findResourceBreakdownSeries,
+    deleteResourceBreakdownOlderThan,
   } as unknown as MonitoringRepository;
   // 크론 분산 락(runIfLockAcquired)이 항상 락을 잡은 것처럼 동작하도록 set은 'OK' 반환.
   const redis = { set: jest.fn().mockResolvedValue('OK') } as unknown as Redis;
@@ -22,6 +30,7 @@ function createService() {
     service: new DockerStatsService(repo, redis),
     saveDockerMetric,
     findDockerMetricSeries,
+    saveResourceBreakdown,
   };
 }
 

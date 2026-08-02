@@ -11,10 +11,26 @@ import * as Sentry from '@sentry/nestjs';
 import { KakaoService } from '../kakao/kakao.service';
 
 /**
+ * 에러를 DB에 남기는 기록기(선택). AdminMonitoringService가 구조적으로 이 형태를 만족한다.
+ * common → admin 모듈을 직접 import하지 않으려고 최소 인터페이스만 둔다.
+ */
+export interface ErrorLogRecorder {
+  recordError(input: {
+    statusCode: number;
+    errorName: string;
+    method: string;
+    path: string;
+    message: string;
+    stack: string | null;
+  }): Promise<void>;
+}
+
+/**
  * 전역 예외 필터
  * - 모든 에러(4xx, 5xx)에 대해 카카오 알림 전송
  * - 5xx: 쿨다운 1분, 4xx: 쿨다운 5분 (스팸 방지)
  * - 401/404는 빈번하므로 알림 제외
+ * - 401/404를 뺀 모든 에러를 DB(error_logs)에도 기록(관리자 UI 조회용, fire-and-forget)
  */
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -28,7 +44,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
   // 알림 제외 상태코드 (빈번하거나 의미 없는 에러)
   private readonly SKIP_STATUSES = new Set([401, 404]);
 
-  constructor(private readonly kakao: KakaoService) {}
+  constructor(
+    private readonly kakao: KakaoService,
+    private readonly recorder?: ErrorLogRecorder,
+  ) {}
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
@@ -55,6 +74,27 @@ export class AllExceptionsFilter implements ExceptionFilter {
     // 예기치 못한 서버 에러(5xx)만 Sentry로 전송 (4xx 클라이언트 에러는 노이즈라 제외)
     if (status >= 500) {
       Sentry.captureException(exception);
+    }
+
+    // DB 기록 (401/404 제외). 스택은 원인 추적이 필요한 5xx만 저장.
+    // fire-and-forget — 기록 실패가 요청 응답이나 다른 알림을 막지 않게 한다.
+    if (this.recorder && !this.SKIP_STATUSES.has(status)) {
+      const stack =
+        status >= 500 && exception instanceof Error
+          ? (exception.stack ?? null)
+          : null;
+      this.recorder
+        .recordError({
+          statusCode: status,
+          errorName,
+          method: request.method,
+          path: request.url,
+          message,
+          stack,
+        })
+        .catch((err: unknown) =>
+          this.logger.warn(`에러 로그 DB 기록 실패: ${toErrorMessage(err)}`),
+        );
     }
 
     // 알림 전송 (401, 404 제외)

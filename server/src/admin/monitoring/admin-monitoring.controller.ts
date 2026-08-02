@@ -46,21 +46,45 @@ export class AdminMonitoringController {
     return this.monitoring.getDashboard(pageVisitDays);
   }
 
+  // 최근 에러 로그 (401/404 제외 기록됨). status=all|4xx|5xx 로 필터.
+  @UseGuards(AdminGuard)
+  @Get('admin/monitoring/errors')
+  errors(
+    @Query('days') days?: string,
+    @Query('status') status?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const statusClass = status === '4xx' || status === '5xx' ? status : 'all';
+    return this.monitoring.getRecentErrors({
+      days: days ? Number(days) : undefined,
+      status: statusClass,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
   @UseGuards(AdminGuard)
   @Get('admin/monitoring/containers')
   async containers() {
-    const [containers, host, statuses] = await Promise.all([
+    const [containers, host, statuses, breakdown] = await Promise.all([
       this.dockerStats.getContainerStats(),
       this.dockerStats.getHostStats(),
       this.dockerStats.getContainerStatuses(),
+      this.dockerStats.getResourceBreakdown(),
     ]);
-    return { containers, host, statuses };
+    return { containers, host, statuses, breakdown };
   }
 
   @UseGuards(AdminGuard)
   @Get('admin/monitoring/container-history')
   containerHistory(@Query('container') container?: string) {
     return this.dockerStats.getContainerHistory(container ?? 'nest');
+  }
+
+  // 컨테이너 4개 밖의 몫(도커 데몬 자체 + OS/기타)의 7일 추세.
+  @UseGuards(AdminGuard)
+  @Get('admin/monitoring/resource-breakdown-history')
+  resourceBreakdownHistory() {
+    return this.dockerStats.getResourceBreakdownHistory();
   }
 
   // 배포 이벤트 기록(GitHub Actions가 호출). 관리자 세션 대신 공유 토큰으로 인증.

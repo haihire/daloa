@@ -5,6 +5,7 @@ import { runIfLockAcquired } from '../../common/cron-lock.util';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import {
   type DeviceType,
+  type ErrorLogRow,
   type VisitRow,
   MonitoringRepository,
 } from './monitoring.repository';
@@ -42,6 +43,7 @@ export class AdminMonitoringService implements OnModuleInit {
   private readonly logger = new Logger(AdminMonitoringService.name);
   private readonly SLOW_THRESHOLD_MS = 1200;
   private readonly MONITORING_METRIC_RETENTION_DAYS = 30;
+  private readonly ERROR_LOG_RETENTION_DAYS = 30;
   constructor(
     private readonly monitoringRepo: MonitoringRepository,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
@@ -148,6 +150,44 @@ export class AdminMonitoringService implements OnModuleInit {
     }));
   }
 
+  /** 에러 1건 기록. 전역 예외 필터가 호출(실패해도 요청 흐름엔 영향 없게 fire-and-forget). */
+  async recordError(input: {
+    statusCode: number;
+    errorName: string;
+    method: string;
+    path: string;
+    message: string;
+    stack: string | null;
+  }): Promise<void> {
+    await this.monitoringRepo.recordError(input);
+  }
+
+  /** 최근 에러 로그 조회 (관리자 UI). id(bigint)는 JSON 직렬화 위해 string으로 변환. */
+  async getRecentErrors(input: {
+    days?: number;
+    status?: 'all' | '4xx' | '5xx';
+    limit?: number;
+  }) {
+    const days = Math.max(1, Math.min(90, Math.trunc(input.days ?? 7)));
+    const limit = Math.max(1, Math.min(500, Math.trunc(input.limit ?? 100)));
+    const statusClass = input.status ?? 'all';
+    const rows = await this.monitoringRepo.findRecentErrors({
+      days,
+      statusClass,
+      limit,
+    });
+    return rows.map((r: ErrorLogRow) => ({
+      id: r.id.toString(),
+      statusCode: r.status_code,
+      errorName: r.error_name,
+      method: r.method,
+      path: r.path,
+      message: r.message,
+      stack: r.stack,
+      createdAt: r.created_at,
+    }));
+  }
+
   /**
    * 페이지 로딩 추이(실사용자 RUM). 달력(from~to, KST) 기준.
    * from===to면 그날 시간별, 아니면 일별. 잘못된/누락 입력은 오늘 하루로 폴백.
@@ -201,9 +241,12 @@ export class AdminMonitoringService implements OnModuleInit {
             'apm_page_load_timings',
             this.MONITORING_METRIC_RETENTION_DAYS,
           );
+        const deletedErrors = await this.monitoringRepo.pruneErrorLogs(
+          this.ERROR_LOG_RETENTION_DAYS,
+        );
 
         this.logger.log(
-          `monitoring retention cleanup completed: requests=${deletedRequests}, pageLoads=${deletedPageLoads}`,
+          `monitoring retention cleanup completed: requests=${deletedRequests}, pageLoads=${deletedPageLoads}, errors=${deletedErrors}`,
         );
       } catch (err: unknown) {
         this.logger.warn(

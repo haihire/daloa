@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -36,6 +36,32 @@ const PAGE_LOAD_METRICS = [
 // 사용자 로컬 타임존과 무관하게 한국시간(UTC+9) 기준 오늘 날짜(YYYY-MM-DD)
 function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+type ErrorLog = {
+  id: string;
+  statusCode: number;
+  errorName: string;
+  method: string;
+  path: string;
+  message: string | null;
+  stack: string | null;
+  createdAt: string;
+};
+
+// 에러 발생 시각을 한국시간 "M/D HH:MM:SS"로 표시
+function fmtErrTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
 }
 
 type Dashboard = {
@@ -127,6 +153,11 @@ export default function MonitoringPage() {
   const [pageLoadMinDate, setPageLoadMinDate] = useState<string>("");
   const [pageLoadSeries, setPageLoadSeries] = useState<PageLoadPoint[]>([]);
   const [pageLoadLoading, setPageLoadLoading] = useState(true);
+  const [errorLogs, setErrorLogs] = useState<ErrorLog[]>([]);
+  const [errStatus, setErrStatus] = useState<"all" | "4xx" | "5xx">("all");
+  const [errDays, setErrDays] = useState<1 | 7 | 30>(7);
+  const [errLoading, setErrLoading] = useState(true);
+  const [expandedErrId, setExpandedErrId] = useState<string | null>(null);
   const hasLoadedRef = useRef(false);
   const prevVisitCountRef = useRef(0);
 
@@ -227,6 +258,33 @@ export default function MonitoringPage() {
       alive = false;
     };
   }, [pageLoadFrom, pageLoadTo]);
+
+  // 에러 로그 조회 — 필터(상태/기간) 변경 시 + 15초 주기 갱신
+  useEffect(() => {
+    let alive = true;
+    setErrLoading(true);
+    async function loadErrors() {
+      try {
+        const res = await fetch(
+          `/api/admin/monitoring/errors?days=${errDays}&status=${errStatus}&limit=100`,
+          { cache: "no-store" },
+        );
+        if (!alive || !res.ok) return;
+        const rows = (await res.json()) as ErrorLog[];
+        setErrorLogs(Array.isArray(rows) ? rows : []);
+      } catch {
+        // keep previous
+      } finally {
+        if (alive) setErrLoading(false);
+      }
+    }
+    void loadErrors();
+    const timer = setInterval(() => void loadErrors(), 15000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [errStatus, errDays]);
 
   // 달력 하한(첫 데이터 날짜) 1회 조회 — 이 이전은 선택 불가
   useEffect(() => {
@@ -816,6 +874,130 @@ export default function MonitoringPage() {
           </div>
         </div>
         </div>
+      </div>
+
+      {/* 에러 로그 (401/404 제외 전부 기록) */}
+      <div className="admin-card p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold">에러 로그</p>
+            <span className="text-xs text-[color:var(--admin-text-muted)]">
+              최근 {errDays}일 · {errorLogs.length}건
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-0.5 rounded-md bg-slate-100 p-0.5">
+              {(["all", "5xx", "4xx"] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setErrStatus(s)}
+                  className={`rounded px-2 py-1 text-xs ${errStatus === s ? "bg-white font-semibold text-[color:var(--admin-text)]" : "text-[color:var(--admin-text-muted)]"}`}
+                >
+                  {s === "all" ? "전체" : s}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-0.5 rounded-md bg-slate-100 p-0.5">
+              {([1, 7, 30] as const).map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setErrDays(d)}
+                  className={`rounded px-2 py-1 text-xs ${errDays === d ? "bg-white font-semibold text-[color:var(--admin-text)]" : "text-[color:var(--admin-text-muted)]"}`}
+                >
+                  {d}일
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {errLoading && errorLogs.length === 0 ? (
+          <div className="grid h-24 place-items-center text-sm text-[color:var(--admin-text-muted)]">
+            불러오는 중...
+          </div>
+        ) : errorLogs.length === 0 ? (
+          <div className="grid h-24 place-items-center text-sm text-[color:var(--admin-text-muted)]">
+            에러 없음 🎉
+          </div>
+        ) : (
+          <div className="max-h-96 overflow-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="sticky top-0 bg-[color:var(--admin-card-bg,#fff)] text-[color:var(--admin-text-muted)]">
+                <tr className="border-b border-[color:var(--admin-border)]">
+                  <th className="whitespace-nowrap py-1.5 pr-2 font-medium">
+                    시각
+                  </th>
+                  <th className="py-1.5 pr-2 font-medium">상태</th>
+                  <th className="py-1.5 pr-2 font-medium">메서드</th>
+                  <th className="py-1.5 pr-2 font-medium">경로</th>
+                  <th className="py-1.5 pr-2 font-medium">에러</th>
+                  <th className="py-1.5 font-medium">메시지</th>
+                </tr>
+              </thead>
+              <tbody>
+                {errorLogs.map((e) => {
+                  const is5xx = e.statusCode >= 500;
+                  const canExpand = !!e.stack;
+                  const expanded = expandedErrId === e.id;
+                  return (
+                    <Fragment key={e.id}>
+                      <tr
+                        className={`border-b border-slate-100 ${canExpand ? "cursor-pointer hover:bg-slate-50" : ""}`}
+                        onClick={() =>
+                          canExpand &&
+                          setExpandedErrId(expanded ? null : e.id)
+                        }
+                      >
+                        <td className="whitespace-nowrap py-1.5 pr-2 text-[color:var(--admin-text-muted)]">
+                          {fmtErrTime(e.createdAt)}
+                        </td>
+                        <td className="py-1.5 pr-2">
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${is5xx ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}
+                          >
+                            {e.statusCode}
+                          </span>
+                        </td>
+                        <td className="py-1.5 pr-2 font-mono">{e.method}</td>
+                        <td
+                          className="max-w-[220px] truncate py-1.5 pr-2 font-mono"
+                          title={e.path}
+                        >
+                          {e.path}
+                        </td>
+                        <td className="whitespace-nowrap py-1.5 pr-2">
+                          {e.errorName}
+                        </td>
+                        <td
+                          className="max-w-[280px] truncate py-1.5"
+                          title={e.message ?? ""}
+                        >
+                          {e.message}
+                          {canExpand ? (
+                            <span className="ml-1 text-[color:var(--admin-text-muted)]">
+                              {expanded ? "▲" : "▼"}
+                            </span>
+                          ) : null}
+                        </td>
+                      </tr>
+                      {expanded && e.stack ? (
+                        <tr>
+                          <td colSpan={6} className="bg-slate-50 px-3 py-2">
+                            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-[color:var(--admin-text)]">
+                              {e.stack}
+                            </pre>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

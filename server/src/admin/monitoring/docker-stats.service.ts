@@ -1,7 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { execFile } from 'child_process';
-import { readFile } from 'fs/promises';
+import { readFile, readdir } from 'fs/promises';
+import { cpus } from 'os';
 import { promisify } from 'util';
 import type { Redis } from 'ioredis';
 import { runIfLockAcquired } from '../../common/cron-lock.util';
@@ -10,6 +11,7 @@ import {
   MonitoringRepository,
   ContainerName,
   ContainerHistoryRow,
+  ResourceBreakdownHistoryRow,
 } from './monitoring.repository';
 
 const execFileAsync = promisify(execFile);
@@ -47,6 +49,52 @@ export interface ContainerStatus {
   status: string; // 원문 (예: "Up 3 hours (healthy)")
   health: string; // healthy | unhealthy | starting | '' (헬스체크 없음)
 }
+
+/**
+ * EC2 호스트 전체 자원을 "4개 컨테이너 / 도커 데몬 자체(dockerd·containerd 등) /
+ * 그 나머지(OS·커널·기타 프로세스)"로 쪼갠 값. cpuPercent는 모두 호스트 전체 용량
+ * 기준 0~100 스케일로 정규화되어 있어 그대로 합산·적층(stack)해서 표시할 수 있다.
+ */
+export interface ResourceBreakdown {
+  hostCpuPercent: number;
+  hostMemUsedMb: number;
+  hostMemTotalMb: number;
+  containers: Array<{
+    label: string;
+    cpuPercent: number;
+    memUsedMb: number;
+  }>;
+  dockerOverheadCpuPercent: number;
+  dockerOverheadMemMb: number;
+  osOtherCpuPercent: number;
+  osOtherMemMb: number;
+}
+
+export interface ResourceBreakdownHistoryPoint {
+  bucket: string;
+  nestCpu: number;
+  nestMemMb: number;
+  nginxCpu: number;
+  nginxMemMb: number;
+  redisCpu: number;
+  redisMemMb: number;
+  postgresCpu: number;
+  postgresMemMb: number;
+  dockerOverheadCpu: number;
+  dockerOverheadMemMb: number;
+  osOtherCpu: number;
+  osOtherMemMb: number;
+  hostCpu: number;
+}
+
+// comm은 커널이 15자로 자르므로(예: containerd-shim-runc-v2 → containerd-shim) 자른 후 형태로 매칭.
+const DOCKER_DAEMON_PROCESS_NAMES = new Set([
+  'dockerd',
+  'containerd',
+  'containerd-shim',
+  'docker-proxy',
+  'docker-init',
+]);
 
 const CONTAINER_LABELS: Record<string, string> = {
   'lomoa-nest': 'nest',
@@ -94,6 +142,28 @@ function parseBytes(str: string): number {
 
 function toMb(bytes: number): number {
   return Number((bytes / 1024 / 1024).toFixed(1));
+}
+
+/** breakdown.containers 배열(존재하는 컨테이너만)을 4개 고정 컨테이너 레코드로 — 죽은 컨테이너는 0으로 채운다. */
+function containersToRecord(
+  containers: ResourceBreakdown['containers'],
+): Record<ContainerName, { cpuPercent: number; memUsedMb: number }> {
+  const base: Record<ContainerName, { cpuPercent: number; memUsedMb: number }> =
+    {
+      nest: { cpuPercent: 0, memUsedMb: 0 },
+      nginx: { cpuPercent: 0, memUsedMb: 0 },
+      redis: { cpuPercent: 0, memUsedMb: 0 },
+      postgres: { cpuPercent: 0, memUsedMb: 0 },
+    };
+  for (const c of containers) {
+    if (VALID_CONTAINERS.includes(c.label as ContainerName)) {
+      base[c.label as ContainerName] = {
+        cpuPercent: c.cpuPercent,
+        memUsedMb: c.memUsedMb,
+      };
+    }
+  }
+  return base;
 }
 
 @Injectable()
@@ -226,6 +296,20 @@ export class DockerStatsService {
             memPercent: stat.memPercent,
           });
         }
+
+        const breakdown = await this.computeResourceBreakdown(stats);
+        if (breakdown) {
+          await this.monitoringRepo.saveResourceBreakdown({
+            containers: containersToRecord(breakdown.containers),
+            dockerOverheadCpuPercent: breakdown.dockerOverheadCpuPercent,
+            dockerOverheadMemMb: breakdown.dockerOverheadMemMb,
+            osOtherCpuPercent: breakdown.osOtherCpuPercent,
+            osOtherMemMb: breakdown.osOtherMemMb,
+            hostCpuPercent: breakdown.hostCpuPercent,
+            hostMemUsedMb: breakdown.hostMemUsedMb,
+            hostMemTotalMb: breakdown.hostMemTotalMb,
+          });
+        }
       } catch (err: unknown) {
         this.logger.warn(
           `docker stats save failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -241,6 +325,7 @@ export class DockerStatsService {
         for (const container of VALID_CONTAINERS) {
           await this.monitoringRepo.deleteDockerMetricsOlderThan(container, 9);
         }
+        await this.monitoringRepo.deleteResourceBreakdownOlderThan(9);
       } catch (err: unknown) {
         this.logger.warn(
           `docker metrics cleanup failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -294,17 +379,9 @@ export class DockerStatsService {
 
   private async readHostCpu(): Promise<number | null> {
     try {
-      const sample = async () => {
-        const text = await readFile('/proc/stat', 'utf8');
-        const line = text.split('\n')[0];
-        const parts = line.trim().split(/\s+/).slice(1).map(Number);
-        const idle = (parts[3] ?? 0) + (parts[4] ?? 0);
-        const total = parts.reduce((a, b) => a + b, 0);
-        return { idle, total };
-      };
-      const a = await sample();
+      const a = await this.sampleSystemTicks();
       await new Promise((r) => setTimeout(r, 200));
-      const b = await sample();
+      const b = await this.sampleSystemTicks();
       const idleDelta = b.idle - a.idle;
       const totalDelta = b.total - a.total;
       if (totalDelta <= 0) return null;
@@ -312,6 +389,210 @@ export class DockerStatsService {
     } catch {
       return null;
     }
+  }
+
+  private async sampleSystemTicks(): Promise<{ idle: number; total: number }> {
+    const text = await readFile('/proc/stat', 'utf8');
+    const line = text.split('\n')[0];
+    const parts = line.trim().split(/\s+/).slice(1).map(Number);
+    const idle = (parts[3] ?? 0) + (parts[4] ?? 0);
+    const total = parts.reduce((a, b) => a + b, 0);
+    return { idle, total };
+  }
+
+  /** /proc를 뒤져 dockerd/containerd 계열 프로세스의 PID를 찾는다 (컨테이너 자체가 아닌, 도커를 돌리는 데몬). */
+  private async listDockerDaemonPids(): Promise<number[]> {
+    let entries: string[];
+    try {
+      entries = await readdir('/proc');
+    } catch {
+      return [];
+    }
+    const pids = entries.filter((e) => /^\d+$/.test(e));
+    const matched: number[] = [];
+    await Promise.all(
+      pids.map(async (pidStr) => {
+        try {
+          const comm = (await readFile(`/proc/${pidStr}/comm`, 'utf8')).trim();
+          if (DOCKER_DAEMON_PROCESS_NAMES.has(comm)) {
+            matched.push(Number(pidStr));
+          }
+        } catch {
+          // 샘플링 사이 종료된 프로세스이거나 권한 문제 — 무시
+        }
+      }),
+    );
+    return matched;
+  }
+
+  /** 주어진 PID들의 누적 CPU 틱(utime+stime)을 읽는다. /proc/stat의 total 델타와 같은 단위라 그대로 비율 계산에 쓸 수 있다. */
+  private async sampleProcessCpuTicks(
+    pids: number[],
+  ): Promise<Map<number, number>> {
+    const result = new Map<number, number>();
+    await Promise.all(
+      pids.map(async (pid) => {
+        try {
+          const stat = await readFile(`/proc/${pid}/stat`, 'utf8');
+          // comm이 괄호 안에 공백/괄호를 포함할 수 있어 마지막 ')' 뒤부터 필드를 센다.
+          const closeParen = stat.lastIndexOf(')');
+          if (closeParen === -1) return;
+          const rest = stat
+            .slice(closeParen + 2)
+            .trim()
+            .split(/\s+/);
+          const utime = Number(rest[11] ?? 0); // 14번째 필드
+          const stime = Number(rest[12] ?? 0); // 15번째 필드
+          result.set(pid, utime + stime);
+        } catch {
+          // 샘플링 사이 종료된 프로세스 — 무시
+        }
+      }),
+    );
+    return result;
+  }
+
+  /** 주어진 PID들의 실제 상주 메모리(RSS) 합계(MB). */
+  private async readProcessGroupRssMb(pids: number[]): Promise<number> {
+    let totalKb = 0;
+    await Promise.all(
+      pids.map(async (pid) => {
+        try {
+          const status = await readFile(`/proc/${pid}/status`, 'utf8');
+          const match = /VmRSS:\s+(\d+)\s*kB/.exec(status);
+          if (match) totalKb += Number(match[1]);
+        } catch {
+          // 무시
+        }
+      }),
+    );
+    return Math.round(totalKb / 1024);
+  }
+
+  /** 같은 200ms 샘플링 구간에서 호스트 전체 CPU%와 도커 데몬 프로세스 CPU%를 함께 측정(비교 기준 일치). */
+  private async sampleHostAndDaemonCpu(
+    daemonPids: number[],
+  ): Promise<{ hostCpuPercent: number; daemonCpuPercent: number } | null> {
+    try {
+      const [sysA, ticksA] = await Promise.all([
+        this.sampleSystemTicks(),
+        this.sampleProcessCpuTicks(daemonPids),
+      ]);
+      await new Promise((r) => setTimeout(r, 200));
+      const [sysB, ticksB] = await Promise.all([
+        this.sampleSystemTicks(),
+        this.sampleProcessCpuTicks(daemonPids),
+      ]);
+
+      const totalDelta = sysB.total - sysA.total;
+      if (totalDelta <= 0) return null;
+
+      const idleDelta = sysB.idle - sysA.idle;
+      const hostCpuPercent = Number(
+        (100 * (1 - idleDelta / totalDelta)).toFixed(1),
+      );
+
+      let daemonTicksDelta = 0;
+      for (const pid of daemonPids) {
+        const delta = (ticksB.get(pid) ?? 0) - (ticksA.get(pid) ?? 0);
+        if (delta > 0) daemonTicksDelta += delta;
+      }
+      const daemonCpuPercent = Number(
+        ((daemonTicksDelta / totalDelta) * 100).toFixed(1),
+      );
+
+      return { hostCpuPercent, daemonCpuPercent };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 호스트 전체 자원을 컨테이너별/도커 데몬/그 나머지(OS 등)로 분해한다.
+   * containers는 이미 `docker stats`로 얻은 값을 넘겨받아 재사용 — cron·API 양쪽에서 중복 호출을 피한다.
+   */
+  private async computeResourceBreakdown(
+    containers: ContainerStat[],
+  ): Promise<ResourceBreakdown | null> {
+    try {
+      const daemonPids = await this.listDockerDaemonPids();
+      const [cpu, mem, daemonMemMb] = await Promise.all([
+        this.sampleHostAndDaemonCpu(daemonPids),
+        this.readHostMemory(),
+        this.readProcessGroupRssMb(daemonPids),
+      ]);
+      if (!cpu || !mem) return null;
+
+      // docker stats의 CPU%는 코어 1개 기준(최대 100*코어수)이라, 호스트 전체 대비 비율로 맞추려면 코어 수로 나눠야 한다.
+      const numCpus = Math.max(1, cpus().length);
+      const normalizedContainers = containers.map((c) => ({
+        label: c.label,
+        cpuPercent: Number((c.cpuPercent / numCpus).toFixed(1)),
+        memUsedMb: c.memUsedMb,
+      }));
+      const containerCpuSum = normalizedContainers.reduce(
+        (sum, c) => sum + c.cpuPercent,
+        0,
+      );
+      const containerMemSum = normalizedContainers.reduce(
+        (sum, c) => sum + c.memUsedMb,
+        0,
+      );
+
+      const osOtherCpuPercent = Math.max(
+        0,
+        Number(
+          (cpu.hostCpuPercent - containerCpuSum - cpu.daemonCpuPercent).toFixed(
+            1,
+          ),
+        ),
+      );
+      const osOtherMemMb = Math.max(
+        0,
+        Math.round(mem.usedMb - containerMemSum - daemonMemMb),
+      );
+
+      return {
+        hostCpuPercent: cpu.hostCpuPercent,
+        hostMemUsedMb: mem.usedMb,
+        hostMemTotalMb: mem.totalMb,
+        containers: normalizedContainers,
+        dockerOverheadCpuPercent: cpu.daemonCpuPercent,
+        dockerOverheadMemMb: daemonMemMb,
+        osOtherCpuPercent,
+        osOtherMemMb,
+      };
+    } catch (err: unknown) {
+      this.logger.warn(
+        `resource breakdown failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return null;
+    }
+  }
+
+  async getResourceBreakdown(): Promise<ResourceBreakdown | null> {
+    const containers = await this.getContainerStats();
+    return this.computeResourceBreakdown(containers);
+  }
+
+  async getResourceBreakdownHistory(): Promise<ResourceBreakdownHistoryPoint[]> {
+    const rows = await this.monitoringRepo.findResourceBreakdownSeries(7);
+    return rows.map((row: ResourceBreakdownHistoryRow) => ({
+      bucket: row.bucket,
+      nestCpu: Number(row.avg_nest_cpu),
+      nestMemMb: Number(row.avg_nest_mem_mb),
+      nginxCpu: Number(row.avg_nginx_cpu),
+      nginxMemMb: Number(row.avg_nginx_mem_mb),
+      redisCpu: Number(row.avg_redis_cpu),
+      redisMemMb: Number(row.avg_redis_mem_mb),
+      postgresCpu: Number(row.avg_postgres_cpu),
+      postgresMemMb: Number(row.avg_postgres_mem_mb),
+      dockerOverheadCpu: Number(row.avg_docker_overhead_cpu),
+      dockerOverheadMemMb: Number(row.avg_docker_overhead_mem_mb),
+      osOtherCpu: Number(row.avg_os_other_cpu),
+      osOtherMemMb: Number(row.avg_os_other_mem_mb),
+      hostCpu: Number(row.avg_host_cpu),
+    }));
   }
 
   private async readDiskUsage(): Promise<{
