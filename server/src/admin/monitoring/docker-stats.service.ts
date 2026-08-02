@@ -578,6 +578,34 @@ export class DockerStatsService {
     }
   }
 
+  private diskUsageCache: {
+    data: Awaited<ReturnType<DockerStatsService['computeDiskUsage']>>;
+    expiresAt: number;
+  } | null = null;
+  private static readonly DISK_USAGE_CACHE_MS = 60_000;
+
+  /**
+   * `docker system df -v` 자체가 이미지 레이어를 훑느라 dockerd/containerd에 실제 CPU
+   * 부하를 준다(실측: 1회 호출에 dockerd+containerd 합쳐 약 50틱, 1초·2코어 총량의 ~25%).
+   * 매 라이브 폴링(10초)마다 이걸 다시 돌리면 그 부하 자체가 "도커 자체 CPU"로 잘못
+   * 잡히고, 안 그래도 잘 안 바뀌는 디스크 크기를 불필요하게 자주 재계산하는 낭비도 있어
+   * 60초 캐시한다.
+   */
+  private async getDiskUsageCached(): Promise<Awaited<
+    ReturnType<DockerStatsService['computeDiskUsage']>
+  >> {
+    const now = Date.now();
+    if (this.diskUsageCache && this.diskUsageCache.expiresAt > now) {
+      return this.diskUsageCache.data;
+    }
+    const data = await this.computeDiskUsage();
+    this.diskUsageCache = {
+      data,
+      expiresAt: now + DockerStatsService.DISK_USAGE_CACHE_MS,
+    };
+    return data;
+  }
+
   /**
    * 호스트 전체 자원을 컨테이너별/도커 데몬/그 나머지(OS 등)로 분해한다.
    * containers는 이미 `docker stats`로 얻은 값을 넘겨받아 재사용 — cron·API 양쪽에서 중복 호출을 피한다.
@@ -587,14 +615,16 @@ export class DockerStatsService {
   ): Promise<ResourceBreakdown | null> {
     try {
       const daemonPids = await this.listDockerDaemonPids();
-      const [cpu, mem, daemonMemMb, disk, hostDisk] = await Promise.all([
+      // 디스크 조회(docker system df -v)는 dockerd에 실제 부하를 주므로, CPU 샘플링
+      // 구간과 겹치지 않도록 CPU 측정이 끝난 뒤에 순차로 실행한다(위 getDiskUsageCached 참고).
+      const [cpu, mem, daemonMemMb, hostDisk] = await Promise.all([
         this.sampleHostAndDaemonCpu(daemonPids),
         this.readHostMemory(),
         this.readProcessGroupRssMb(daemonPids),
-        this.computeDiskUsage(),
         this.readDiskUsage(),
       ]);
       if (!cpu || !mem) return null;
+      const disk = await this.getDiskUsageCached();
 
       // docker stats의 CPU%는 코어 1개 기준(최대 100*코어수)이라, 호스트 전체 대비 비율로 맞추려면 코어 수로 나눠야 한다.
       const numCpus = Math.max(1, cpus().length);
