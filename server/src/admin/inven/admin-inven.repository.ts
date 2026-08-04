@@ -1,6 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { chunk } from '../../common/sql-batch.util';
 import type { CrawledPost, SiteCandidateDraft } from './site-extractor.service';
+
+// 한 번에 보낼 행 수. 게시글은 content(본문)가 커서 작게, 후보는 짧은 값뿐이라 크게.
+// Postgres 파라미터 상한(쿼리당 65,535)에도 여유가 있어야 한다 — 게시글은 행당 9개.
+const UPSERT_CHUNK_POSTS = 200;
+const UPSERT_CHUNK_CANDIDATES = 500;
 
 export interface InvenPost {
   id: bigint;
@@ -97,25 +103,55 @@ export class AdminInvenRepository {
    * 크롤된 게시글을 inven_posts에 일괄 upsert한다.
    * post_id 충돌 시 조회/추천/본문/제목을 최신값으로 갱신.
    * 댓글은 더 이상 수집하지 않음(본문만 사용) — comments는 빈 배열로 저장.
+   *
+   * 건당 개별 왕복이 아니라 멀티로우 INSERT 로 묶는다 — 한 배치가 평균 300건,
+   * 많으면 1,300건이라 건당 왕복이면 그만큼 순차 대기가 쌓여 nest CPU 가 튄다.
    */
   async upsertPosts(posts: CrawledPost[]): Promise<number> {
+    if (posts.length === 0) return 0;
+
+    // 같은 배치에 같은 post_id 가 두 번 들어오면 멀티로우 upsert 는
+    // "ON CONFLICT DO UPDATE command cannot affect row a second time" 로 통째로 실패한다.
+    // 크롤 순서상 뒤에 온 것이 최신이므로 마지막 값만 남긴다.
+    const unique = new Map<string, CrawledPost>();
+    for (const p of posts) unique.set(p.post_id, p);
+
     let saved = 0;
-    for (const p of posts) {
-      await this.prisma.$executeRaw`
-        INSERT INTO inven_posts
-          (board, post_id, url, title, author, date_str, views, likes, content, comments)
-        VALUES (
-          ${p.board}, ${p.post_id}, ${p.url}, ${p.title}, ${p.author},
-          ${p.date_str}, ${p.views}, ${p.likes}, ${p.content},
-          '[]'::jsonb
-        )
-        ON CONFLICT (post_id) DO UPDATE SET
-          views    = EXCLUDED.views,
-          likes    = EXCLUDED.likes,
-          content  = COALESCE(EXCLUDED.content, inven_posts.content),
-          title    = EXCLUDED.title
-      `;
-      saved += 1;
+    for (const batch of chunk([...unique.values()], UPSERT_CHUNK_POSTS)) {
+      const values: unknown[] = [];
+      const tuples = batch.map((p) => {
+        const i = values.length;
+        values.push(
+          p.board,
+          p.post_id,
+          p.url,
+          p.title,
+          p.author,
+          p.date_str,
+          p.views,
+          p.likes,
+          p.content ?? null,
+        );
+        // 숫자 컬럼엔 캐스트를 붙인다 — 멀티로우 VALUES 에서는 Postgres 가
+        // 파라미터 타입을 추론하지 못하는 경우가 있다.
+        return (
+          `($${i + 1},$${i + 2},$${i + 3},$${i + 4},$${i + 5},$${i + 6},` +
+          `$${i + 7}::int,$${i + 8}::int,$${i + 9},'[]'::jsonb)`
+        );
+      });
+
+      await this.prisma.$executeRawUnsafe(
+        `INSERT INTO inven_posts
+           (board, post_id, url, title, author, date_str, views, likes, content, comments)
+         VALUES ${tuples.join(',')}
+         ON CONFLICT (post_id) DO UPDATE SET
+           views    = EXCLUDED.views,
+           likes    = EXCLUDED.likes,
+           content  = COALESCE(EXCLUDED.content, inven_posts.content),
+           title    = EXCLUDED.title`,
+        ...values,
+      );
+      saved += batch.length;
     }
     return saved;
   }
@@ -146,21 +182,48 @@ export class AdminInvenRepository {
    * 크롤은 날짜별 증분 배치라, 덮어쓰면 과거 언급수가 사라져 정렬이 왜곡됨.
    */
   async upsertCandidates(drafts: SiteCandidateDraft[]): Promise<number> {
-    let saved = 0;
+    if (drafts.length === 0) return 0;
+
+    // 배치 안에 같은 domain 이 두 번 있으면 멀티로우 upsert 가 통째로 실패한다.
+    // 단순히 하나만 남기면 안 된다 — 원래 SQL 이 mention_count 를 "누적 합산"하므로,
+    // 건당 실행했을 때와 같은 결과가 되려면 여기서 미리 합쳐야 한다.
+    // (추출기가 이미 도메인별로 집계하지만, 바뀌어도 안 깨지도록 방어적으로 둔다)
+    const merged = new Map<string, SiteCandidateDraft>();
     for (const d of drafts) {
-      await this.prisma.$executeRaw`
-        INSERT INTO inven_site_candidates
-          (url, domain, name, description, category, mention_count, sample_post_id, status)
-        VALUES (${d.url}, ${d.domain}, '', '', '', ${d.mention_count}, ${d.sample_post_id}, 'pending')
-        ON CONFLICT (domain) DO UPDATE SET
-          mention_count = inven_site_candidates.mention_count + EXCLUDED.mention_count,
-          url = CASE
-            WHEN length(EXCLUDED.url) < length(inven_site_candidates.url)
-            THEN EXCLUDED.url ELSE inven_site_candidates.url
-          END
-        WHERE inven_site_candidates.status = 'pending'
-      `;
-      saved += 1;
+      const cur = merged.get(d.domain);
+      if (!cur) {
+        merged.set(d.domain, { ...d });
+        continue;
+      }
+      cur.mention_count += d.mention_count;
+      // 대표 url 은 더 짧은 쪽 (원래 SQL 의 CASE 와 같은 규칙)
+      if (d.url.length < cur.url.length) cur.url = d.url;
+      cur.sample_post_id = cur.sample_post_id ?? d.sample_post_id;
+    }
+
+    let saved = 0;
+    for (const batch of chunk([...merged.values()], UPSERT_CHUNK_CANDIDATES)) {
+      const values: unknown[] = [];
+      const tuples = batch.map((d) => {
+        const i = values.length;
+        values.push(d.url, d.domain, d.mention_count, d.sample_post_id);
+        return `($${i + 1},$${i + 2},'','','',$${i + 3}::int,$${i + 4},'pending')`;
+      });
+
+      await this.prisma.$executeRawUnsafe(
+        `INSERT INTO inven_site_candidates
+           (url, domain, name, description, category, mention_count, sample_post_id, status)
+         VALUES ${tuples.join(',')}
+         ON CONFLICT (domain) DO UPDATE SET
+           mention_count = inven_site_candidates.mention_count + EXCLUDED.mention_count,
+           url = CASE
+             WHEN length(EXCLUDED.url) < length(inven_site_candidates.url)
+             THEN EXCLUDED.url ELSE inven_site_candidates.url
+           END
+         WHERE inven_site_candidates.status = 'pending'`,
+        ...values,
+      );
+      saved += batch.length;
     }
     return saved;
   }

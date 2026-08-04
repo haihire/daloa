@@ -71,7 +71,17 @@ export class AdminMonitoringController {
       this.dockerStats.getContainerStatuses(),
       this.dockerStats.getResourceBreakdown(),
     ]);
-    return { containers, host, statuses, breakdown };
+    // 상단 요약 카드의 호스트 CPU%는 자원 분해(breakdown)와 "같은 샘플"을 쓴다.
+    // 각자 따로 재면 측정 창이 어긋나, 한 화면에 전체 1% / nest 80% 같은 모순된 값이 뜬다.
+    return {
+      containers,
+      host:
+        host && breakdown
+          ? { ...host, cpuPercent: breakdown.hostCpuPercent }
+          : host,
+      statuses,
+      breakdown,
+    };
   }
 
   @UseGuards(AdminGuard)
