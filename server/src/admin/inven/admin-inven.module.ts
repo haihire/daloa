@@ -18,5 +18,7 @@ import { SitesModule } from '../../sites/sites.module';
     SiteExtractorService,
     SiteSuggestService,
   ],
+  // 사이트 관리(admin/sites)도 같은 추천/메타 조회를 쓴다 — 후보 id 대신 URL로 호출.
+  exports: [SiteSuggestService],
 })
 export class AdminInvenModule {}
