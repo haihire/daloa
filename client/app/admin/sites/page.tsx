@@ -12,7 +12,7 @@ import {
 } from "recharts";
 import { buildGuestNotice, useAdminRole } from "@/lib/admin-role";
 import { dateAxis } from "@/lib/chart-ticks";
-import { SITE_CATEGORIES } from "@/lib/site-categories";
+import { useSiteCategories } from "@/lib/site-categories";
 
 interface Site {
   seq: number;
@@ -112,6 +112,7 @@ export default function AdminSitesPage() {
   const [query, setQuery] = useState("");
   const role = useAdminRole();
   const isGuest = role === "guest";
+  const categories = useSiteCategories();
 
   // 백드롭 클릭으로 모달을 닫되, "프레스를 백드롭에서 시작"한 경우에만 닫는다.
   // (입력칸 텍스트를 드래그 선택하다 마우스를 백드롭에서 떼면 click 타깃이
@@ -545,7 +546,7 @@ export default function AdminSitesPage() {
                             className="admin-select"
                           >
                             <option value="">선택 안 함</option>
-                            {SITE_CATEGORIES.map((c) => (
+                            {categories.map((c) => (
                               <option key={c} value={c}>
                                 {c}
                               </option>

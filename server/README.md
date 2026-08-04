@@ -84,7 +84,7 @@ NEXT_REVALIDATE_SECRET=...
 ```
 server/src/
 ├── main.ts               # 부트스트랩, CORS, 전역 필터
-├── app.module.ts         # 모듈 조합 (스케줄러는 PM2 워커0에서만 기동)
+├── app.module.ts         # 모듈 조합 (스케줄러는 모든 워커에서 기동, 크론별 Redis 락으로 중복 방지)
 ├── instrument.ts         # Sentry 초기화
 │
 ├── prisma/               # PostgreSQL 커넥션 (Prisma 7 + PrismaPg adapter)
@@ -186,5 +186,6 @@ server/src/
 
 ### 스케줄러
 
-- PM2 클러스터에서 `NODE_APP_INSTANCE === '0'` 워커만 크론 실행(중복 방지). 로컬 단일 프로세스는 항상 실행.
-- 신규 크론은 워커 가드를 매번 새로 짜지 않고 공용 락 유틸(`runIfLockAcquired`)을 재사용 — 예: RAG 주간 스냅샷 크론(매주 월요일 04:00 KST).
+- 모든 워커에 `ScheduleModule`이 등록된다(워커 고정 없음). 중복 실행 방지는 각 `@Cron`이 개별적으로 Redis 락(`runIfLockAcquired`)으로 처리 — "그 틱에 먼저 락을 잡은 워커만 실행"이라 특정 워커가 죽어도 다른 워커가 자연스럽게 이어받는다(페일오버).
+- 신규 크론은 워커 가드를 짜지 않고 공용 락 유틸(`runIfLockAcquired`)을 재사용 — 예: RAG 주간 스냅샷 크론(매주 월요일 04:00 KST).
+- 크론이 아닌 부팅 1회성 초기화(DDL 부트스트랩 등)는 여전히 `NODE_APP_INSTANCE === '0'` 가드를 쓴다(예: `AdminMonitoringService.onModuleInit`) — 여러 워커가 동시에 DDL을 치는 경쟁을 막기 위함이며 스케줄러 등록 여부와는 무관하다.

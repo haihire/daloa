@@ -1,14 +1,22 @@
-import { ConfigService } from '@nestjs/config';
-import { StreamersService, type YoutubeVideoItem } from './streamers.service';
+import {
+  YoutubeVideosService,
+  type YoutubeVideoItem,
+} from './youtube-videos.service';
+import type { StreamingRedisService } from './streaming-redis.service';
+import type { YoutubeApiService } from './youtube-api.service';
 
 type MockRedis = {
   get: jest.Mock;
   set: jest.Mock;
   ttl: jest.Mock;
+  smembers: jest.Mock;
+  sadd: jest.Mock;
+  srem: jest.Mock;
+  del: jest.Mock;
 };
 
 function createService(options?: {
-  localDisable?: string;
+  localDisable?: boolean;
   cache?: { items: YoutubeVideoItem[]; nextPageToken: string | null };
   popularCache?: { items: YoutubeVideoItem[] };
   dbVideos?: YoutubeVideoItem[];
@@ -30,44 +38,48 @@ function createService(options?: {
     }),
     set: jest.fn(),
     ttl: jest.fn(),
+    smembers: jest.fn().mockResolvedValue([]),
+    sadd: jest.fn(),
+    srem: jest.fn(),
+    del: jest.fn(),
   };
 
-  const config = {
-    get: jest.fn((key: string, defaultValue?: string) => {
-      const values: Record<string, string | undefined> = {
-        YOUTUBE_API_KEY: 'dummy-key',
-        LOCAL_DISABLE_QUOTA_APIS: options?.localDisable,
-      };
-      return values[key] ?? defaultValue;
-    }),
-  } as unknown as ConfigService;
+  // 테스트에서 YOUTUBE_REDIS_HOST 를 설정하지 않는 원래 시나리오와 동일하게,
+  // streamingRedis.client === redis(기본 REDIS_CLIENT) 로 둔다.
+  const streamingRedis = {
+    client: redis,
+    readOnly: false,
+  } as unknown as StreamingRedisService;
+
+  const youtubeApi = {
+    current: {} as never,
+    keyCount: 1,
+    currentIndex: 0,
+    rotateKey: jest.fn(() => 0),
+    quotaApisDisabled: options?.localDisable ?? false,
+  } as unknown as YoutubeApiService;
 
   const db = {
     query: jest.fn().mockResolvedValue([[], []]),
     findRecentVideos: jest.fn().mockResolvedValue(options?.dbVideos ?? []),
   };
 
-  const chzzk = {
-    fetchLivesByCategory: jest.fn().mockResolvedValue([]),
-    filterByViewerCount: jest.fn((items: unknown[]) => items),
-  };
-
-  const service = new StreamersService(
+  const service = new YoutubeVideosService(
     redis as never,
     db as never,
-    config,
-    chzzk as never,
+    streamingRedis,
+    youtubeApi,
   );
-  return { service, redis, db, chzzk };
+  return { service, redis, db, streamingRedis, youtubeApi };
 }
 
-describe('StreamersService', () => {
+describe('YoutubeVideosService', () => {
   afterEach(() => {
     jest.restoreAllMocks();
   });
 
   it('LOCAL_DISABLE_QUOTA_APIS=true면 시작 시 YouTube 갱신을 스킵한다', async () => {
-    const { service } = createService({ localDisable: 'true' });
+    const { service } = createService({ localDisable: true });
     const refreshSpy = jest.spyOn(service, 'refresh').mockResolvedValue();
 
     await service.onModuleInit();
@@ -91,7 +103,7 @@ describe('StreamersService', () => {
       nextPageToken: null,
     };
     const { service } = createService({
-      localDisable: 'true',
+      localDisable: true,
       cache: cached,
     });
     const fetchSpy = jest.spyOn(service as never, 'fetchFromYouTube');
@@ -103,7 +115,7 @@ describe('StreamersService', () => {
   });
 
   it('LOCAL_DISABLE_QUOTA_APIS=true고 캐시가 없으면 빈 영상 결과를 반환한다', async () => {
-    const { service } = createService({ localDisable: 'true' });
+    const { service } = createService({ localDisable: true });
     const fetchSpy = jest.spyOn(service as never, 'fetchFromYouTube');
 
     const result = await service.searchVideos();

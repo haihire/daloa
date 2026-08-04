@@ -118,6 +118,23 @@ export interface ResourceBreakdownHistoryRow {
 export class MonitoringRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * 부팅 시(워커0만, AdminMonitoringService.onModuleInit) `CREATE TABLE IF NOT EXISTS`로
+   * 만드는 테이블 — `db-migrations/*.sql`과 달리 `schema.prisma`에는 없다.
+   * `CREATE TABLE IF NOT EXISTS`는 기존 테이블의 컬럼 변경은 반영하지 않으므로,
+   * 이미 만들어진 뒤 스키마를 바꾸려면 여기가 아니라 `db-migrations/`에 ALTER를 추가할 것
+   * (과거 admin_users.role ENUM 불일치로 크래시 루프를 겪은 원인이 이 패턴).
+   *
+   * 생성 대상:
+   *   - ENUM 4종: apm_page_visits_device_type, apm_request_timings_scope,
+   *               apm_site_clicks_device_type, apm_youtube_clicks_device_type
+   *   - 테이블: apm_page_visits, apm_request_timings, apm_site_clicks, apm_youtube_clicks,
+   *             apm_page_load_timings, container_events, error_logs,
+   *             docker_metrics_{nest,nginx,redis,postgres}, host_resource_breakdown
+   *   - 뷰: apm_page_visit_daily (apm_page_visits 집계, 매 부팅 시 DROP 후 재생성)
+   *
+   * (참고: admin_users는 별도로 admin-auth.repository.ts 에서 같은 방식으로 부트스트랩된다.)
+   */
   async ensureMonitoringTables() {
     await this.prisma.$executeRaw`
       DO $$

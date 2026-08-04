@@ -1,18 +1,47 @@
-// 사이트 카테고리 고정 목록 (클라이언트 단일 정본).
-// 사이트 관리 폼과 인벤 후보 승인 폼이 함께 참조한다.
-// 아래 세 곳과 반드시 같이 바꿀 것:
-//   - db-migrations/008_loa_sites_category_enum.sql 의 CHECK 목록
-//   - server/src/admin/inven/site-suggest.service.ts 의 CATEGORIES
-export const SITE_CATEGORIES = [
-  "계산기·툴",
-  "빌드·세팅",
-  "시세·경제",
-  "공략·정보",
-  "캐릭터·스펙",
-  "전투분석·통계",
-  "숙제·일정",
-  "커뮤니티",
-  "기타",
-] as const;
+"use client";
 
-export type SiteCategory = (typeof SITE_CATEGORIES)[number];
+import { useEffect, useState } from "react";
+
+// 사이트 카테고리 고정 목록 — 서버 단일 정본(server/src/admin/site-categories.ts)을
+// GET /api/admin/sites/categories로 받아온다. DB CHECK 제약(SQL)은 언어가 달라
+// 별도 정본으로 남는다: db-migrations/008_loa_sites_category_enum.sql.
+// (이전엔 이 파일 자체가 고정 배열을 들고 있어 client/server/DB 3곳이 각각 따로
+// 바뀌어야 했다 — server를 단일 정본으로 삼아 client/server 2곳은 합쳤다.)
+
+let cache: string[] | null = null;
+let inflight: Promise<string[]> | null = null;
+
+async function fetchCategories(): Promise<string[]> {
+  if (cache) return cache;
+  if (!inflight) {
+    inflight = fetch("/api/admin/sites/categories", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : { categories: [] }))
+      .then((data: { categories?: string[] }) => {
+        cache = data.categories ?? [];
+        return cache;
+      })
+      .catch(() => [])
+      .finally(() => {
+        inflight = null;
+      });
+  }
+  return inflight;
+}
+
+/** 사이트 카테고리 고정 목록. 로드 전(첫 렌더)엔 빈 배열 — 로드되면 즉시 채워진다. */
+export function useSiteCategories(): string[] {
+  const [categories, setCategories] = useState<string[]>(cache ?? []);
+
+  useEffect(() => {
+    if (cache) return;
+    let alive = true;
+    void fetchCategories().then((cats) => {
+      if (alive) setCategories(cats);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  return categories;
+}
