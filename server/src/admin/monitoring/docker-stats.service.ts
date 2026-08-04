@@ -382,10 +382,15 @@ export class DockerStatsService {
     }
   }
 
+  /**
+   * 호스트 CPU% 단독 측정(AI 진단·RAG 스냅샷용). 컨테이너 현황 API는 자원 분해 쪽 값을 쓴다.
+   * 측정 창은 아래 sampleHostAndDaemonCpu·`docker stats`와 같은 1초로 맞춘다 — 200ms로 짧게 두면
+   * 컨테이너 쪽에서 잡힌 스파이크를 이 창이 비껴가, 호스트 총합이 컨테이너 합보다 작게 나온다.
+   */
   private async readHostCpu(): Promise<number | null> {
     try {
       const a = await this.sampleSystemTicks();
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 1000));
       const b = await this.sampleSystemTicks();
       const idleDelta = b.idle - a.idle;
       const totalDelta = b.total - a.total;

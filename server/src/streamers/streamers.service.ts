@@ -129,7 +129,13 @@ export class StreamersService implements OnModuleInit {
   private readonly logger = new Logger(StreamersService.name);
   private readonly youtubeKeys: ReturnType<typeof google.youtube>[];
   private readonly quotaApisDisabled: boolean;
+  /**
+   * 이름은 youtube 지만 실제로는 "운영(EC2) Redis" 다 — 유튜브 캐시와 라이브 캐시가 같은
+   * 인스턴스에 함께 있다. 로컬에서 YOUTUBE_REDIS_HOST 를 SSH 터널로 지정하면 운영 캐시를
+   * 그대로 읽는다. 운영에서는 이 값이 지정되지 않아 `this.redis` 와 동일 객체가 된다.
+   */
   private readonly youtubeRedis: RedisClient;
+  /** 위 Redis 를 읽기 전용으로 쓴다(= 로컬). 갱신 크론을 돌리지 않고 캐시만 읽는다. */
   private readonly youtubeRedisReadOnly: boolean;
   private currentKeyIdx = 0;
 
@@ -169,7 +175,7 @@ export class StreamersService implements OnModuleInit {
         lazyConnect: true,
       });
       this.logger.log(
-        `YouTube 전용 Redis 사용 — ${youtubeRedisHost}:${config.get<number>('YOUTUBE_REDIS_PORT', 6379)}`,
+        `운영 Redis 사용(YouTube·Chzzk 캐시) — ${youtubeRedisHost}:${config.get<number>('YOUTUBE_REDIS_PORT', 6379)}`,
       );
     } else {
       this.youtubeRedis = this.redis;
@@ -680,7 +686,7 @@ export class StreamersService implements OnModuleInit {
         return;
       }
       const serialized = JSON.stringify(lives);
-      await this.redis.setex(
+      await this.youtubeRedis.setex(
         CHZZK_LIVE_CACHE_KEY,
         CHZZK_LIVE_CACHE_TTL,
         serialized,
@@ -697,7 +703,7 @@ export class StreamersService implements OnModuleInit {
   async getChzzkLives(minViewers = 0): Promise<ChzzkLiveItem[]> {
     try {
       // 1. 캐시 확인
-      const cached = await this.redis.get(CHZZK_LIVE_CACHE_KEY);
+      const cached = await this.youtubeRedis.get(CHZZK_LIVE_CACHE_KEY);
       if (cached) {
         const lives = JSON.parse(cached) as ChzzkLiveItem[];
         const filtered = this.chzzk.filterByViewerCount(lives, minViewers);
@@ -707,7 +713,16 @@ export class StreamersService implements OnModuleInit {
         return filtered;
       }
 
-      // 2. 캐시 없으면 직접 API 호출
+      // 2. 읽기 전용(로컬)이면 여기서 끝 — 개발 PC 에서 Chzzk API 를 긁지 않는다.
+      //    운영 크론이 90초 TTL 로 계속 채우므로 잠깐 미스면 다음 요청에 다시 붙는다.
+      if (this.youtubeRedisReadOnly) {
+        this.logger.debug(
+          'YOUTUBE_REDIS_READONLY 활성화 — Chzzk 캐시 미스 시 빈 결과 반환',
+        );
+        return [];
+      }
+
+      // 3. 캐시 없으면 직접 API 호출
       this.logger.debug('Chzzk 캐시 미스 → 직접 API 호출');
       const lives = await this.chzzk.fetchLivesByCategory();
       const filtered = this.chzzk.filterByViewerCount(lives, minViewers);
@@ -724,6 +739,14 @@ export class StreamersService implements OnModuleInit {
   /** 1분마다 Chzzk 라이브 갱신 (워커0만) */
   @Cron('0 */1 * * * *')
   async refreshChzzkLives(): Promise<void> {
+    // 읽기 전용(로컬)이면 운영이 채워둔 캐시를 읽기만 한다. 안 그러면 개발 PC 가 매분
+    // Chzzk API 를 20여 페이지씩 긁어 불필요한 외부 트래픽이 계속 나간다.
+    if (this.youtubeRedisReadOnly) {
+      this.logger.debug(
+        'YOUTUBE_REDIS_READONLY 활성화 — 스케줄 Chzzk 갱신 스킵',
+      );
+      return;
+    }
     // 1분 주기라 TTL 10초 — 다음 틱(1분 후) 전까지 여유 있게 락이 풀리게.
     await runIfLockAcquired(
       this.redis,
