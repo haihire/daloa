@@ -79,6 +79,10 @@ export class FeedbackService {
    * 레이트리밋 2단:
    *  - IP당 10분 5건 (개인 도배 차단)
    *  - 전체 1분 60건 (분산 스팸에 대한 DB 보호 backstop)
+   *
+   * 카운터가 프로세스 메모리에만 있어 PM2 cluster 워커별로 독립이다 —
+   * 워커 수를 늘리면 실질 한도도 그만큼 비례해 늘어난다(워커 2개 = 위 수치의 2배).
+   * Redis에도 안 남기는 건 익명성 원칙(IP를 어디에도 저장하지 않음) 때문이라 의도된 트레이드오프.
    */
   private consumeQuota(clientIp: string): void {
     const now = Date.now();

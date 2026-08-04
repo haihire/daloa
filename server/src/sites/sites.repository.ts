@@ -193,28 +193,6 @@ export class SitesRepository {
     });
   }
 
-  async updateText(
-    seq: number,
-    input: Pick<SiteCreateInput, 'name' | 'description'>,
-  ): Promise<void> {
-    if (input.name !== undefined) {
-      const current = await this.prisma.loa_sites.findUnique({
-        where: { seq },
-        select: { href: true },
-      });
-      if (current) {
-        await this.prisma.$executeRaw`
-          UPDATE apm_site_clicks SET site_name = ${input.name}
-          WHERE site_href = ${current.href}
-        `;
-      }
-    }
-    await this.prisma.loa_sites.update({
-      where: { seq },
-      data: input,
-    });
-  }
-
   async delete(seq: number): Promise<void> {
     await this.prisma.loa_sites.delete({ where: { seq } });
   }

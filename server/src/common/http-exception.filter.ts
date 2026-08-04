@@ -36,7 +36,8 @@ export interface ErrorLogRecorder {
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
 
-  // 상태코드별 마지막 알림 시각 (스팸 방지)
+  // 상태코드별 마지막 알림 시각 (스팸 방지).
+  // 프로세스 메모리에만 있어 PM2 cluster 워커별로 독립 — 워커 수만큼 알림이 더 나올 수 있다.
   private readonly lastNotifiedAt = new Map<number, number>();
   private readonly COOLDOWN_5XX_MS = 60_000; // 5xx: 1분
   private readonly COOLDOWN_4XX_MS = 300_000; // 4xx: 5분

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { buildGuestNotice, useAdminRole } from "@/lib/admin-role";
-import { SITE_CATEGORIES } from "@/lib/site-categories";
+import { useSiteCategories } from "@/lib/site-categories";
 
 // ── 타입 ──────────────────────────────────────────────────────────────────────
 
@@ -143,6 +143,7 @@ function CandidatesTab({
 }: {
   requireMaster: (action: string) => boolean;
 }) {
+  const categories = useSiteCategories();
   const [candidates, setCandidates] = useState<SiteCandidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -197,9 +198,7 @@ function CandidatesTab({
       name: c.name || "",
       href: c.domain ? `https://${c.domain}` : c.url || "",
       // 후보의 옛 카테고리가 고정 목록 밖이면 빈값으로 — select에 없는 값이 저장돼 CHECK 위반하는 것 방지
-      category: (SITE_CATEGORIES as readonly string[]).includes(c.category)
-        ? c.category
-        : "",
+      category: categories.includes(c.category) ? c.category : "",
       description: c.description || "",
       icon: "",
     });
@@ -453,7 +452,7 @@ function CandidatesTab({
                           className="admin-select"
                         >
                           <option value="">선택 안 함</option>
-                          {SITE_CATEGORIES.map((c) => (
+                          {categories.map((c) => (
                             <option key={c} value={c}>
                               {c}
                             </option>

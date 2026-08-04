@@ -7,6 +7,7 @@ import {
   HttpCode,
   HttpException,
   HttpStatus,
+  Logger,
   Post,
   Query,
   Req,
@@ -22,6 +23,7 @@ import { RagRepository } from './rag/rag.repository';
 
 @Controller('api')
 export class AdminMonitoringController {
+  private readonly logger = new Logger(AdminMonitoringController.name);
   private readonly telemetryToken = process.env.TELEMETRY_INGEST_TOKEN ?? '';
   private readonly telemetryWindowMs = 60_000;
   private readonly telemetryMaxPerWindow = 12_000;
@@ -34,7 +36,19 @@ export class AdminMonitoringController {
     private readonly aiDiagnosis: AiDiagnosisService,
     private readonly ragWriter: RagWriterService,
     private readonly ragRepo: RagRepository,
-  ) {}
+  ) {
+    // TELEMETRY_INGEST_TOKEN이 없으면 assertTelemetryAllowed가 origin/referer 존재
+    // 여부만으로 통과시킨다(사실상 무인증) — 부팅 시 최소한 눈에 보이게 경고한다.
+    if (!this.telemetryToken) {
+      const msg =
+        'TELEMETRY_INGEST_TOKEN 미설정 — 텔레메트리 엔드포인트가 무인증 모드로 동작합니다 (origin/referer만 검사)';
+      if (process.env.NODE_ENV === 'production') {
+        this.logger.error(msg);
+      } else {
+        this.logger.warn(msg);
+      }
+    }
+  }
 
   @UseGuards(AdminGuard)
   @Get('admin/monitoring/dashboard')
@@ -332,6 +346,8 @@ export class AdminMonitoringController {
     this.consumeTelemetryBudget();
   }
 
+  // 카운터가 프로세스 메모리에만 있어 PM2 cluster 워커별로 독립이다 —
+  // 워커 수를 늘리면 실질 한도(분당 telemetryMaxPerWindow건)도 그만큼 비례해 늘어난다.
   private consumeTelemetryBudget() {
     const now = Date.now();
     if (now - this.telemetryWindowStartedAt >= this.telemetryWindowMs) {

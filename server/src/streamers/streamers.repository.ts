@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { chunk } from '../common/sql-batch.util';
-import type { YoutubeVideoItem } from './streamers.service';
+import type { YoutubeVideoItem } from './youtube-videos.service';
 
 // 한 배치가 보통 50~100건이라 한 방에 들어가지만, 상한이 늘어도 안전하도록 끊어 보낸다.
 const SNAPSHOT_CHUNK = 200;

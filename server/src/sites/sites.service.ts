@@ -9,31 +9,6 @@ import { SitesRepository, type SiteRecord } from './sites.repository';
 const CACHE_KEY = 'sites:all';
 const CACHE_TTL_SEC = 600;
 
-const SITE_TEXT_CANONICAL: Record<
-  string,
-  { name: string; description: string }
-> = {
-  'https://kloa.gg/': {
-    name: 'KLoa',
-    description: 'Lost Ark utility site',
-  },
-  'https://lostark.inven.co.kr/': {
-    name: 'Lost Ark Inven',
-    description: 'Lost Ark community',
-  },
-  'https://sasagefind.com/': {
-    name: 'Sasage search',
-    description: 'Lost Ark user search',
-  },
-  'https://lo4.app/': {
-    name: 'LOALAB',
-    description: 'Lost Ark tool collection',
-  },
-};
-
-const hasBrokenText = (value: unknown): value is string =>
-  typeof value === 'string' && /\?{2,}/.test(value);
-
 @Injectable()
 export class SitesService {
   private readonly logger = new Logger(SitesService.name);
@@ -47,80 +22,14 @@ export class SitesService {
   async findAll(): Promise<SiteRecord[]> {
     const cached = await this.redis.get(CACHE_KEY);
     if (cached) {
-      const parsedCache = JSON.parse(cached) as SiteRecord[];
-      const brokenInCache = parsedCache.filter(
-        (row) => hasBrokenText(row.name) || hasBrokenText(row.description),
-      );
-      if (brokenInCache.length === 0) {
-        this.logger.debug('sites: Redis cache hit');
-        return parsedCache;
-      }
-
-      this.logger.warn(
-        `sites: broken text detected in cache (${brokenInCache.length}). Reload from DB.`,
-      );
-      await this.redis.del(CACHE_KEY);
+      this.logger.debug('sites: Redis cache hit');
+      return JSON.parse(cached) as SiteRecord[];
     }
 
     const rows = await this.sitesRepo.findActive();
-    await this.repairBrokenCanonicalRows(rows);
-
-    const stillBroken = rows.some(
-      (row) => hasBrokenText(row.name) || hasBrokenText(row.description),
-    );
-    if (!stillBroken) {
-      await this.redis.set(
-        CACHE_KEY,
-        JSON.stringify(rows),
-        'EX',
-        CACHE_TTL_SEC,
-      );
-      this.logger.debug('sites: DB rows cached in Redis');
-    } else {
-      this.logger.warn('sites: skip Redis cache because broken text remains');
-    }
-
+    await this.redis.set(CACHE_KEY, JSON.stringify(rows), 'EX', CACHE_TTL_SEC);
+    this.logger.debug('sites: DB rows cached in Redis');
     return rows;
-  }
-
-  private async repairBrokenCanonicalRows(rows: SiteRecord[]): Promise<void> {
-    const allBrokenRows = rows.filter(
-      (row) => hasBrokenText(row.name) || hasBrokenText(row.description),
-    );
-
-    const brokenRows = allBrokenRows.filter(
-      (row) => !!SITE_TEXT_CANONICAL[row.href],
-    );
-    const unknownBrokenRows = allBrokenRows.filter(
-      (row) => !SITE_TEXT_CANONICAL[row.href],
-    );
-
-    if (unknownBrokenRows.length > 0) {
-      this.logger.error(
-        `sites: broken text cannot be repaired automatically: ${unknownBrokenRows
-          .map((row) => row.href)
-          .join(', ')}`,
-      );
-    }
-
-    if (brokenRows.length === 0) return;
-
-    await Promise.all(
-      brokenRows.map(async (row) => {
-        const canonical = SITE_TEXT_CANONICAL[row.href];
-        if (!canonical) return;
-
-        await this.sitesRepo.updateText(row.seq, {
-          name: canonical.name,
-          description: canonical.description,
-        });
-
-        row.name = canonical.name;
-        row.description = canonical.description;
-      }),
-    );
-
-    this.logger.warn(`sites: repaired broken text rows (${brokenRows.length})`);
   }
 
   async invalidateCache(): Promise<void> {

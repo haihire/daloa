@@ -15,6 +15,7 @@ import {
 import { SitesRepository } from '../../sites/sites.repository';
 import { SitesService } from '../../sites/sites.service';
 import { AdminGuard, AdminWriteGuard } from '../auth/admin.guard';
+import { SITE_CATEGORIES } from '../site-categories';
 
 @Controller('api/admin/sites')
 @UseGuards(AdminGuard)
@@ -23,6 +24,12 @@ export class AdminSitesController {
     private readonly sitesRepo: SitesRepository,
     private readonly sitesService: SitesService,
   ) {}
+
+  /** 사이트 카테고리 고정 목록 — 서버 단일 정본(site-categories.ts). */
+  @Get('categories')
+  getCategories() {
+    return { categories: SITE_CATEGORIES };
+  }
 
   @Get()
   async findAll() {

@@ -11,6 +11,7 @@ import * as dns from 'dns/promises';
 import { lookup as dnsLookup } from 'dns';
 import * as http from 'http';
 import * as https from 'https';
+import { SITE_CATEGORIES } from '../site-categories';
 
 export interface SiteSuggestion {
   name: string;
@@ -19,20 +20,11 @@ export interface SiteSuggestion {
   icon: string;
 }
 
-// 사이트 관리에서 쓰는 카테고리와 동일한 고정 목록.
-// db-migrations/008_loa_sites_category_enum.sql 의 CHECK 목록 및
-// client/app/admin/sites/page.tsx 의 SITE_CATEGORIES 와 반드시 같이 바꿀 것.
-const CATEGORIES = [
-  '계산기·툴',
-  '빌드·세팅',
-  '시세·경제',
-  '공략·정보',
-  '캐릭터·스펙',
-  '전투분석·통계',
-  '숙제·일정',
-  '커뮤니티',
-  '기타',
-];
+// 서버 단일 정본(../site-categories.ts)을 그대로 쓴다 — client는 이제
+// GET /api/admin/sites/categories로 이 목록을 받아온다.
+// db-migrations/008_loa_sites_category_enum.sql 의 CHECK 목록은 SQL이라 별도 정본으로
+// 남는다 — 카테고리를 바꾸면 그쪽도 반드시 같이 바꿀 것.
+const CATEGORIES: readonly string[] = SITE_CATEGORIES;
 
 interface SiteMeta {
   title: string;
