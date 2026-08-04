@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { buildGuestNotice, useAdminRole } from "@/lib/admin-role";
 import { useSiteCategories } from "@/lib/site-categories";
+import SiteFormModal, {
+  EMPTY_SITE_FORM,
+  type SiteForm,
+} from "@/components/admin/SiteFormModal";
 
 // ── 타입 ──────────────────────────────────────────────────────────────────────
 
@@ -72,72 +76,6 @@ export default function AdminInvenPage() {
 
 // ── 추천 사이트 탭 ────────────────────────────────────────────────────────────
 
-type SiteForm = {
-  name: string;
-  href: string;
-  category: string;
-  description: string;
-  icon: string;
-};
-
-const EMPTY_SITE_FORM: SiteForm = {
-  name: "",
-  href: "",
-  category: "",
-  description: "",
-  icon: "",
-};
-
-// 사이트 관리 탭과 동일한 카드 미리보기
-function SiteCardPreview({ form }: { form: SiteForm }) {
-  const iconSrc = (() => {
-    if (form.icon) return form.icon;
-    if (form.href) {
-      try {
-        const domain = new URL(form.href).hostname;
-        return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  })();
-
-  return (
-    <div className="relative flex flex-col rounded-xl border border-[color:var(--admin-border)] bg-[color:var(--admin-surface-muted)] p-3 min-h-[80px]">
-      <div className="flex items-start justify-between gap-2 pr-1">
-        <div className="flex min-w-0 items-center gap-1.5">
-          {iconSrc && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={iconSrc}
-              alt=""
-              width={16}
-              height={16}
-              className="shrink-0 rounded-sm"
-            />
-          )}
-          <span className="truncate font-semibold text-[color:var(--admin-text)] text-sm">
-            {form.name || (
-              <span className="text-[color:var(--admin-text-subtle)]">
-                이름
-              </span>
-            )}
-          </span>
-        </div>
-        <span className="admin-badge admin-badge-neutral">
-          {form.category || "카테고리"}
-        </span>
-      </div>
-      <p className="mt-1.5 text-xs text-[color:var(--admin-text-muted)] line-clamp-2">
-        {form.description || (
-          <span className="text-[color:var(--admin-text-subtle)]">설명</span>
-        )}
-      </p>
-    </div>
-  );
-}
-
 function CandidatesTab({
   requireMaster,
 }: {
@@ -152,17 +90,11 @@ function CandidatesTab({
   const [confirmTarget, setConfirmTarget] = useState<SiteCandidate | null>(
     null,
   );
-  // 사이트 추가 모달 대상 + 입력 폼
+  // 사이트 추가 모달 대상 + 입력 폼 (모달 UI 는 SiteFormModal 공용 컴포넌트)
   const [addTarget, setAddTarget] = useState<SiteCandidate | null>(null);
   const [form, setForm] = useState<SiteForm>(EMPTY_SITE_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
-  // AI 추천 생성 후 모달을 채웠는지 표시 (안내 문구용)
-  const [aiFilled, setAiFilled] = useState(false);
-  const [suggesting, setSuggesting] = useState(false);
-  // 경쟁 상태 방지: 현재 열린 후보 ID와 응답 대상 ID가 다르면 폼 갱신 무시.
-  // 값은 setter의 함수형 업데이트(cur) 안에서만 읽으므로 값 바인딩은 생략.
-  const [, setActiveFetchId] = useState<number | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -184,16 +116,13 @@ function CandidatesTab({
   // 백드롭 클릭으로 모달을 닫되, "프레스를 백드롭에서 시작"한 경우에만 닫는다.
   // (입력칸 텍스트를 드래그 선택하다 마우스를 백드롭에서 떼면 click 타깃이
   //  오버레이가 되어 의도치 않게 닫히는 문제 방지)
-  // 모달별로 ref를 분리해 서로 영향을 주지 않게 한다.
-  const addOverlayPressOnSelf = useRef(false);
   const confirmOverlayPressOnSelf = useRef(false);
 
   // "+ 사이트 추가" → 모달 열고 후보 정보로 폼 채우기 (URL은 도메인 루트)
+  // name·icon 자동 조회와 AI 추천은 SiteFormModal 이 href 기준으로 처리한다.
   const openAddModal = (c: SiteCandidate) => {
     if (!requireMaster("사이트 추가")) return;
     setAddTarget(c);
-    setAiFilled(false);
-    console.log("c", c);
     setForm({
       name: c.name || "",
       href: c.domain ? `https://${c.domain}` : c.url || "",
@@ -203,56 +132,12 @@ function CandidatesTab({
       icon: "",
     });
     setFormError("");
-    setActiveFetchId(c.id);
-    // 모달 열리자마자 name·icon 자동 fetch (AI 없이, 결정론적: 제목 앞부분 / favicon)
-    apiFetch(`/site-candidates/${c.id}/icon`)
-      .then((res) => {
-        setActiveFetchId((cur) => {
-          if (cur === c.id) {
-            const name = res.name as string | undefined;
-            const iconUrl = res.icon as string | undefined;
-            setForm((p) => ({
-              ...p,
-              ...(name ? { name } : {}),
-              ...(iconUrl ? { icon: iconUrl } : {}),
-            }));
-          }
-          return cur;
-        });
-      })
-      .catch(() => {});
-  };
-
-  // 모달 안 "✨ AI 추천" → Gemini 호출(클릭 시에만) → 폼 자동 채움
-  const runAiSuggest = async () => {
-    if (!addTarget) return;
-    setSuggesting(true);
-    setFormError("");
-    try {
-      const s = await apiFetch(`/site-candidates/${addTarget.id}/suggest`, {
-        method: "POST",
-      });
-      // AI는 카테고리·설명만 채운다 (이름·아이콘은 모달 열 때 결정론적으로 채움)
-      setForm((p) => ({
-        ...p,
-        category: (s.category as string) || p.category,
-        description: (s.description as string) || p.description,
-      }));
-      setAiFilled(true);
-    } catch (e) {
-      setFormError(e instanceof Error ? e.message : "AI 추천 실패");
-    } finally {
-      setSuggesting(false);
-    }
   };
 
   const closeAddModal = () => {
     setAddTarget(null);
     setForm(EMPTY_SITE_FORM);
     setFormError("");
-    setAiFilled(false);
-    setSuggesting(false);
-    setActiveFetchId(null);
   };
 
   // 모달 저장 → 후보 승인 API (loa_sites 등록 + status=added)
@@ -323,7 +208,7 @@ function CandidatesTab({
         <div className="admin-card p-6 text-center">
           <p className="admin-page-subtitle">검토할 추천 사이트가 없습니다.</p>
           <p className="text-xs text-[color:var(--admin-muted)] mt-2">
-            수집이 돌면 인벤에서 언급된 새 사이트 후보가 여기에 모입니다.
+            수집이 돌면 인벤에서 언급된 신규 사이트 후보가 여기에 모입니다.
           </p>
         </div>
       )}
@@ -382,128 +267,20 @@ function CandidatesTab({
         ))}
       </div>
 
-      {/* 사이트 추가 모달 (사이트 관리 탭과 동일 형식) */}
-      {addTarget && (
-        <div
-          className="admin-modal-overlay"
-          onMouseDown={(e) => {
-            addOverlayPressOnSelf.current = e.target === e.currentTarget;
-          }}
-          onClick={(e) => {
-            // mousedown·click 모두 오버레이 자신에서 일어난 진짜 백드롭 클릭만 닫기
-            if (
-              !saving &&
-              e.target === e.currentTarget &&
-              addOverlayPressOnSelf.current
-            ) {
-              closeAddModal();
-            }
-            addOverlayPressOnSelf.current = false;
-          }}
-        >
-          <div className="admin-modal w-full max-w-2xl p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-base font-semibold text-[color:var(--admin-text)]">
-                새 사이트 추가 · {addTarget.domain}
-              </h2>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={runAiSuggest}
-                  disabled={saving || suggesting}
-                  className="admin-btn admin-btn-secondary text-xs px-3 py-1 whitespace-nowrap"
-                  title="AI로 카테고리·설명을 추천받아 채웁니다 (이름·아이콘은 자동)"
-                >
-                  {suggesting ? "AI 추천 중..." : "✨ AI 추천"}
-                </button>
-                <button
-                  onClick={closeAddModal}
-                  disabled={saving}
-                  className="text-[color:var(--admin-text-subtle)] hover:text-[color:var(--admin-text)] text-lg leading-none"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-            {aiFilled && (
-              <p className="mb-4 rounded border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs text-blue-700">
-                ✨ AI가 추천한 값으로 채웠습니다. 검토 후 수정해서 저장하세요.
-              </p>
-            )}
-            <div className="flex gap-6">
-              {/* 폼 */}
-              <div className="flex-1 min-w-0">
-                <div className="grid grid-cols-2 gap-4">
-                  {(
-                    ["name", "href", "category", "description", "icon"] as const
-                  ).map((field) => (
-                    <div
-                      key={field}
-                      className={field === "description" ? "col-span-2" : ""}
-                    >
-                      <label className="admin-label capitalize">{field}</label>
-                      {field === "category" ? (
-                        // 승인 시 loa_sites에 그대로 저장되므로 CHECK 목록에서만 고른다
-                        <select
-                          value={form.category}
-                          disabled={saving}
-                          onChange={(e) =>
-                            setForm((p) => ({ ...p, category: e.target.value }))
-                          }
-                          className="admin-select"
-                        >
-                          <option value="">선택 안 함</option>
-                          {categories.map((c) => (
-                            <option key={c} value={c}>
-                              {c}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input
-                          type="text"
-                          value={form[field]}
-                          disabled={saving}
-                          onChange={(e) =>
-                            setForm((p) => ({ ...p, [field]: e.target.value }))
-                          }
-                          className="admin-input"
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
-                {formError && (
-                  <p className="text-red-500 text-xs mt-2">{formError}</p>
-                )}
-                <div className="flex gap-2 mt-5">
-                  <button
-                    onClick={submitAdd}
-                    disabled={saving}
-                    className="admin-btn admin-btn-primary"
-                  >
-                    {saving ? "저장 중..." : "저장"}
-                  </button>
-                  <button
-                    onClick={closeAddModal}
-                    disabled={saving}
-                    className="admin-btn admin-btn-secondary"
-                  >
-                    취소
-                  </button>
-                </div>
-              </div>
-
-              {/* 카드 미리보기 */}
-              <div className="w-52 shrink-0">
-                <p className="text-xs text-[color:var(--admin-text-muted)] mb-2 font-medium">
-                  미리보기
-                </p>
-                <SiteCardPreview form={form} />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 사이트 추가 모달 — 사이트 관리(수정)와 같은 공용 컴포넌트 */}
+      <SiteFormModal
+        open={addTarget !== null}
+        title={`신규 사이트 추가`}
+        form={form}
+        setForm={setForm}
+        categories={categories}
+        saving={saving}
+        error={formError}
+        setError={setFormError}
+        onSave={submitAdd}
+        onClose={closeAddModal}
+        autoFetchMeta
+      />
 
       {/* 블랙리스트 등록 확인 모달 */}
       {confirmTarget && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -13,6 +13,10 @@ import {
 import { buildGuestNotice, useAdminRole } from "@/lib/admin-role";
 import { dateAxis } from "@/lib/chart-ticks";
 import { useSiteCategories } from "@/lib/site-categories";
+import SiteFormModal, {
+  EMPTY_SITE_FORM,
+  type SiteForm,
+} from "@/components/admin/SiteFormModal";
 
 interface Site {
   seq: number;
@@ -23,63 +27,6 @@ interface Site {
   icon: string | null;
   is_active: number;
   click_count: number;
-}
-
-const EMPTY_FORM = {
-  name: "",
-  href: "",
-  category: "",
-  description: "",
-  icon: "",
-};
-
-function SiteCardPreview({ form }: { form: typeof EMPTY_FORM }) {
-  const iconSrc = (() => {
-    if (form.icon) return form.icon;
-    if (form.href) {
-      try {
-        const domain = new URL(form.href).hostname;
-        return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  })();
-
-  return (
-    <div className="relative flex flex-col rounded-xl border border-[color:var(--admin-border)] bg-[color:var(--admin-surface-muted)] p-3 min-h-[80px]">
-      <div className="flex items-start justify-between gap-2 pr-1">
-        <div className="flex min-w-0 items-center gap-1.5">
-          {iconSrc && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={iconSrc}
-              alt=""
-              width={16}
-              height={16}
-              className="shrink-0 rounded-sm"
-            />
-          )}
-          <span className="truncate font-semibold text-[color:var(--admin-text)] text-sm">
-            {form.name || (
-              <span className="text-[color:var(--admin-text-subtle)]">
-                이름
-              </span>
-            )}
-          </span>
-        </div>
-        <span className="admin-badge admin-badge-neutral">
-          {form.category || "카테고리"}
-        </span>
-      </div>
-      <p className="mt-1.5 text-xs text-[color:var(--admin-text-muted)] line-clamp-2">
-        {form.description || (
-          <span className="text-[color:var(--admin-text-subtle)]">설명</span>
-        )}
-      </p>
-    </div>
-  );
 }
 
 const CATEGORY_TONE: Record<string, string> = {
@@ -114,14 +61,14 @@ export default function AdminSitesPage() {
   const isGuest = role === "guest";
   const categories = useSiteCategories();
 
-  // 백드롭 클릭으로 모달을 닫되, "프레스를 백드롭에서 시작"한 경우에만 닫는다.
-  // (입력칸 텍스트를 드래그 선택하다 마우스를 백드롭에서 떼면 click 타깃이
-  //  오버레이가 되어 의도치 않게 닫히는 문제 방지)
-  const overlayPressOnSelf = useRef(false);
+  // 활성 상태 필터. 기본은 활성만 — 비활성은 사실상 숨긴 항목이라 평소엔 안 보이는 게 낫다.
+  const [activeFilter, setActiveFilter] = useState<
+    "active" | "inactive" | "all"
+  >("active");
 
-  // 추가/수정 폼
+  // 추가/수정 폼 (모달 UI 는 SiteFormModal 공용 컴포넌트)
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState<SiteForm>(EMPTY_SITE_FORM);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -228,7 +175,7 @@ export default function AdminSitesPage() {
   function cancelEdit() {
     setShowForm(false);
     setEditingId(null);
-    setForm(EMPTY_FORM);
+    setForm(EMPTY_SITE_FORM);
     setFormError("");
   }
 
@@ -441,13 +388,23 @@ export default function AdminSitesPage() {
   const sortedSites = [...sites].sort(
     (a, b) => (b.click_count ?? 0) - (a.click_count ?? 0),
   );
+  // 활성 상태 필터 (기본 활성만) → 이름 필터 순으로 걸러낸다.
+  const statusFiltered =
+    activeFilter === "all"
+      ? sortedSites
+      : sortedSites.filter((site) =>
+          activeFilter === "active" ? site.is_active : !site.is_active,
+        );
   // 이름 필터 — 공백만이면 전체 표시, 아니면 이름에 포함된 것만 (대소문자 무시)
   const normalizedQuery = query.trim().toLowerCase();
   const visibleSites = normalizedQuery
-    ? sortedSites.filter((site) =>
+    ? statusFiltered.filter((site) =>
         site.name.toLowerCase().includes(normalizedQuery),
       )
-    : sortedSites;
+    : statusFiltered;
+  // 필터 버튼에 붙일 개수 (이름 검색과 무관하게 전체 기준)
+  const activeCount = sortedSites.filter((s) => s.is_active).length;
+  const inactiveCount = sortedSites.length - activeCount;
 
   return (
     <div className="flex h-full flex-col">
@@ -476,7 +433,7 @@ export default function AdminSitesPage() {
               if (!requireMaster("사이트 추가")) return;
               setShowForm(true);
               setEditingId(null);
-              setForm(EMPTY_FORM);
+              setForm(EMPTY_SITE_FORM);
               setFormError("");
             }}
             disabled={isProcessing}
@@ -487,121 +444,19 @@ export default function AdminSitesPage() {
         </div>
       </div>
 
-      {/* 모달 */}
-      {showForm && (
-        <div
-          className="admin-modal-overlay"
-          onMouseDown={(e) => {
-            overlayPressOnSelf.current = e.target === e.currentTarget;
-          }}
-          onClick={(e) => {
-            // mousedown·click 모두 오버레이 자신에서 일어난 진짜 백드롭 클릭만 닫기
-            if (
-              !isProcessing &&
-              e.target === e.currentTarget &&
-              overlayPressOnSelf.current
-            ) {
-              cancelEdit();
-            }
-            overlayPressOnSelf.current = false;
-          }}
-        >
-          <div className="admin-modal w-full max-w-2xl p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-base font-semibold text-[color:var(--admin-text)]">
-                {editingId ? `사이트 수정 · #${editingId}` : "새 사이트 추가"}
-              </h2>
-              <button
-                onClick={cancelEdit}
-                disabled={isProcessing}
-                className="text-[color:var(--admin-text-subtle)] hover:text-[color:var(--admin-text)] text-lg leading-none"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="flex gap-6">
-              {/* 폼 */}
-              <div className="flex-1 min-w-0">
-                <div className="grid grid-cols-2 gap-4">
-                  {(["name", "href", "category", "description"] as const).map(
-                    (field) => (
-                      <div
-                        key={field}
-                        className={field === "description" ? "col-span-2" : ""}
-                      >
-                        <label className="admin-label capitalize">
-                          {field}
-                        </label>
-                        {field === "category" ? (
-                          // 자유 입력이면 카테고리가 다시 난립하므로 고정 목록에서만 고른다
-                          <select
-                            value={form.category}
-                            disabled={isProcessing}
-                            onChange={(e) =>
-                              setForm((p) => ({
-                                ...p,
-                                category: e.target.value,
-                              }))
-                            }
-                            className="admin-select"
-                          >
-                            <option value="">선택 안 함</option>
-                            {categories.map((c) => (
-                              <option key={c} value={c}>
-                                {c}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <input
-                            type="text"
-                            value={form[field]}
-                            disabled={isProcessing}
-                            onChange={(e) =>
-                              setForm((p) => ({
-                                ...p,
-                                [field]: e.target.value,
-                              }))
-                            }
-                            className="admin-input"
-                          />
-                        )}
-                      </div>
-                    ),
-                  )}
-                </div>
-                {formError && (
-                  <p className="text-red-500 text-xs mt-2">{formError}</p>
-                )}
-                <div className="flex gap-2 mt-5">
-                  <button
-                    onClick={handleSave}
-                    disabled={saving || isProcessing}
-                    className="admin-btn admin-btn-primary"
-                  >
-                    {saving ? "저장 중..." : "저장"}
-                  </button>
-                  <button
-                    onClick={cancelEdit}
-                    disabled={isProcessing}
-                    className="admin-btn admin-btn-secondary"
-                  >
-                    취소
-                  </button>
-                </div>
-              </div>
-
-              {/* 카드 미리보기 */}
-              <div className="w-52 shrink-0">
-                <p className="text-xs text-[color:var(--admin-text-muted)] mb-2 font-medium">
-                  미리보기
-                </p>
-                <SiteCardPreview form={form} />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <SiteFormModal
+        open={showForm}
+        title={editingId ? `사이트 수정` : "신규 사이트 추가"}
+        form={form}
+        setForm={setForm}
+        categories={categories}
+        saving={saving}
+        error={formError}
+        setError={setFormError}
+        onSave={handleSave}
+        onClose={cancelEdit}
+        disabled={isProcessing}
+      />
 
       {error && (
         <div className="admin-card mb-4 shrink-0 px-4 py-3 border-red-200 bg-red-50">
@@ -616,15 +471,45 @@ export default function AdminSitesPage() {
         </div>
       ) : (
         <>
-          <div className="mb-4 shrink-0 max-w-xs">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="사이트 이름 검색"
-              aria-label="사이트 이름 검색"
-              className="admin-input"
-            />
+          <div className="mb-4 flex shrink-0 flex-wrap items-center gap-3">
+            <div className="max-w-xs flex-1 min-w-[180px]">
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="사이트 이름 검색"
+                aria-label="사이트 이름 검색"
+                className="admin-input"
+              />
+            </div>
+            {/* 활성 상태 필터 — 기본은 활성만(비활성은 사실상 숨긴 항목) */}
+            <div
+              role="group"
+              aria-label="활성 상태 필터"
+              className="flex shrink-0 items-center gap-1 whitespace-nowrap text-xs"
+            >
+              {(
+                [
+                  ["active", `활성 ${activeCount}`],
+                  ["inactive", `비활성 ${inactiveCount}`],
+                  ["all", `전체 ${sortedSites.length}`],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={activeFilter === value}
+                  onClick={() => setActiveFilter(value)}
+                  className={`admin-btn admin-btn-sm shrink-0 whitespace-nowrap ${
+                    activeFilter === value
+                      ? "admin-btn-primary"
+                      : "admin-btn-secondary"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex min-h-0 flex-1 items-stretch gap-4">
             <div className="admin-card overflow-hidden flex-1 min-w-0 flex flex-col">
@@ -659,7 +544,11 @@ export default function AdminSitesPage() {
                         >
                           {normalizedQuery
                             ? `'${query.trim()}'에 해당하는 사이트가 없어요.`
-                            : "사이트가 없습니다."}
+                            : activeFilter === "active"
+                              ? "활성 사이트가 없습니다."
+                              : activeFilter === "inactive"
+                                ? "비활성 사이트가 없습니다."
+                                : "사이트가 없습니다."}
                         </td>
                       </tr>
                     )}
