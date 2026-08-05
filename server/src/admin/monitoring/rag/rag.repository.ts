@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { kstDateString } from '../../../common/kst-date.util';
 
 /**
  * RAG 문서/청크 저장소.
@@ -37,11 +38,9 @@ function toVectorLiteral(embedding: number[]): string {
 /**
  * Date → 'YYYY-MM-DD'.
  * Date를 그대로 넘겨 ::date로 캐스팅하면 DB 세션 타임존에 따라 하루가 밀릴 수 있어,
- * 애플리케이션에서 UTC 기준 날짜 문자열로 확정해 넘긴다.
+ * 애플리케이션에서 한국시간(Asia/Seoul) 기준 날짜 문자열로 확정해 넘긴다.
  */
-function toDateString(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
+const toDateString = kstDateString;
 
 @Injectable()
 export class RagRepository {
