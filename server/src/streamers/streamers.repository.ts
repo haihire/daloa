@@ -111,12 +111,14 @@ export class StreamersRepository {
   async findViewHistory(
     days: number,
   ): Promise<{ date: string; avg: number }[]> {
+    // recorded_date는 KST 기준 날짜 문자열로 저장된다(youtube-videos.service.ts).
+    // 범위 하한도 세션 기본 타임존(UTC)의 CURRENT_DATE 대신 한국시간 기준으로 맞춘다.
     return this.prisma.$queryRaw<{ date: string; avg: number }[]>`
       SELECT
         TO_CHAR(recorded_date, 'YYYY-MM-DD') AS date,
         ROUND(AVG(view_count))::int         AS avg
       FROM youtube_view_snapshots
-      WHERE recorded_date >= CURRENT_DATE - (${days}::int * INTERVAL '1 day')
+      WHERE recorded_date >= (NOW() AT TIME ZONE 'Asia/Seoul')::date - (${days}::int * INTERVAL '1 day')
       GROUP BY recorded_date
       ORDER BY recorded_date ASC
     `;

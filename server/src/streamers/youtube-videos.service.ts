@@ -2,6 +2,7 @@ import { Injectable, Inject, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import type { Redis as RedisClient } from 'ioredis';
 import { runIfLockAcquired } from '../common/cron-lock.util';
+import { todayKst } from '../common/kst-date.util';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { StreamersRepository } from './streamers.repository';
 import { StreamingRedisService } from './streaming-redis.service';
@@ -257,10 +258,10 @@ export class YoutubeVideosService implements OnModuleInit {
     }
   }
 
-  /** 현재 인기 영상의 조회수를 오늘 날짜로 DB에 저장 (UPSERT) */
+  /** 현재 인기 영상의 조회수를 오늘 날짜(KST)로 DB에 저장 (UPSERT) */
   async snapshotViewCounts(items: YoutubeVideoItem[]): Promise<void> {
     if (items.length === 0) return;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayKst();
     try {
       await this.streamersRepo.upsertViewSnapshots(items, today);
       this.logger.log(

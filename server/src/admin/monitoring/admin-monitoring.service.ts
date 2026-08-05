@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import type { Redis } from 'ioredis';
 import { runIfLockAcquired } from '../../common/cron-lock.util';
+import { todayKst } from '../../common/kst-date.util';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import {
   type DeviceType,
@@ -194,11 +195,7 @@ export class AdminMonitoringService implements OnModuleInit {
    */
   async getPageLoadSeries(from?: string, to?: string) {
     const dateRe = /^\d{4}-\d{2}-\d{2}$/;
-    // KST(UTC+9) 오늘 날짜 문자열
-    const todayKst = new Date(Date.now() + 9 * 3600 * 1000)
-      .toISOString()
-      .slice(0, 10);
-    let start = from && dateRe.test(from) ? from : todayKst;
+    let start = from && dateRe.test(from) ? from : todayKst();
     let end = to && dateRe.test(to) ? to : start;
     if (start > end) [start, end] = [end, start];
     // 범위 상한 90일 (일별 버킷 과다 방지)
