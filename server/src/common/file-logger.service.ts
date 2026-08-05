@@ -1,6 +1,7 @@
 import { LoggerService } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
+import { todayKst } from './kst-date.util';
 
 const LOG_DIR = path.resolve(process.cwd(), 'logs');
 
@@ -27,7 +28,7 @@ export class FileLoggerService implements LoggerService {
 
   // ─── 내부 유틸 ────────────────────────────────────────────
   private today(): string {
-    return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    return todayKst();
   }
 
   /** 날짜가 바뀌면 스트림 교체 (일별 로테이션) */

@@ -13,6 +13,7 @@ import {
 import { APP_CONSTRAINTS, TRAFFIC_PROFILE } from '../ec2-context.config';
 import { RagRepository } from './rag.repository';
 import { RagEmbeddingService } from './rag-embedding.service';
+import { kstDateString } from '../../../common/kst-date.util';
 import { findSecretLeaks, SECRET_PROMPT_RULES } from './rag-secrets';
 
 /**
@@ -271,9 +272,7 @@ export class RagWriterService {
   }
 }
 
-function fmtDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
+const fmtDate = kstDateString;
 
 /**
  * 마크다운을 문단 경계로 잘라 청크를 만든다.

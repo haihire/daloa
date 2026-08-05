@@ -238,11 +238,13 @@ export class AdminInvenRepository {
     const board = opts.board ?? null;
     const limit = opts.limit ?? 50;
     const offset = opts.offset ?? 0;
+    // 관리자가 고르는 날짜(date)는 KST 기준이므로, crawled_at도 KST로 변환해 비교한다
+    // (세션 기본 타임존(UTC)으로 그냥 ::date 캐스팅하면 하루가 밀린다).
     return this.prisma.$queryRaw<InvenPost[]>`
       SELECT id, board, post_id, url, title, author, date_str, views, likes,
              left(content, 300) AS content, crawled_at
       FROM inven_posts
-      WHERE (${date}::date IS NULL OR crawled_at::date = ${date}::date)
+      WHERE (${date}::date IS NULL OR (crawled_at AT TIME ZONE 'Asia/Seoul')::date = ${date}::date)
         AND (${board}::text IS NULL OR board = ${board}::text)
       ORDER BY likes * 5 + views DESC
       LIMIT ${limit} OFFSET ${offset}

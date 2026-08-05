@@ -9,6 +9,7 @@ import {
   releaseLock,
   runIfLockAcquired,
 } from '../common/cron-lock.util';
+import { todayKst } from '../common/kst-date.util';
 import { REDIS_CLIENT } from '../redis/redis.module';
 
 /**
@@ -224,7 +225,7 @@ export class KakaoService {
    */
   private async updateRefreshToken(newToken: string): Promise<void> {
     const envPath = path.join(process.cwd(), '.env');
-    const issuedAt = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const issuedAt = todayKst();
 
     // 메모리 즉시 반영
     process.env['KAKAO_REFRESH_TOKEN'] = newToken;
