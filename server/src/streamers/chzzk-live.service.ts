@@ -4,7 +4,7 @@ import type { Redis as RedisClient } from 'ioredis';
 import { runIfLockAcquired } from '../common/cron-lock.util';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { StreamingRedisService } from './streaming-redis.service';
-import { ChzzkClient, type ChzzkLiveItem } from './chzzk.client';
+import { ChzzkClient, type LiveItem } from './chzzk.client';
 
 const CHZZK_LIVE_CACHE_KEY = 'live:chzzk:current';
 // 크론 5분 + 1.5배 grace. TTL 이 주기보다 짧으면 매 주기마다 캐시가 비는 구간이 생기고,
@@ -52,12 +52,12 @@ export class ChzzkLiveService {
   }
 
   /** Chzzk 라이브 조회 (캐시 우선, 없으면 직접 API 호출 후 캐시에 채워둠) */
-  async getChzzkLives(minViewers = 0): Promise<ChzzkLiveItem[]> {
+  async getChzzkLives(minViewers = 0): Promise<LiveItem[]> {
     try {
       // 1. 캐시 확인
       const cached = await this.streamingRedis.client.get(CHZZK_LIVE_CACHE_KEY);
       if (cached) {
-        const lives = JSON.parse(cached) as ChzzkLiveItem[];
+        const lives = JSON.parse(cached) as LiveItem[];
         const filtered = this.chzzk.filterByViewerCount(lives, minViewers);
         this.logger.debug(
           `Chzzk 캐시 hit: ${lives.length}개 → 필터링 후 ${filtered.length}개 (최소시청자 ${minViewers})`,

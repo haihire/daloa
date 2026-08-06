@@ -2,7 +2,7 @@
 
 import React from "react";
 import Image from "next/image";
-import type { ChzzkLiveItem } from "@/types";
+import type { LiveItem } from "@/types";
 import { event as gaEvent } from "@/lib/gtag";
 
 function formatViewCount(n: number): string {
@@ -12,12 +12,16 @@ function formatViewCount(n: number): string {
   return String(n);
 }
 
-export type LivePlatform = 'chzzk' | 'youtube';
+function imageSrcKey(item: LiveItem): string {
+  return item.thumbnailUrl || item.channelImageUrl || "";
+}
+
+export type LivePlatform = "chzzk" | "youtube";
 
 export default function StreamList({
   initialItems = [],
 }: {
-  initialItems?: ChzzkLiveItem[];
+  initialItems?: LiveItem[];
 }) {
   const [failedImages, setFailedImages] = React.useState<Set<string>>(
     new Set(),
@@ -27,15 +31,47 @@ export default function StreamList({
   );
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [refreshSpin, setRefreshSpin] = React.useState(false);
-  const [platform, setPlatform] = React.useState<LivePlatform>('chzzk');
-  const [displayItems, setDisplayItems] = React.useState<ChzzkLiveItem[]>(
+  const [platform, setPlatform] = React.useState<LivePlatform>("chzzk");
+  const [displayItems, setDisplayItems] = React.useState<LiveItem[]>(
     Array.isArray(initialItems) ? initialItems : [],
   );
+  // 최신 displayItems를 항상 참조하기 위한 ref — applyNewItems가 useCallback 클로저에
+  // 갇힌 stale 값이 아니라 실제 "지금 화면에 있는" 이전 아이템과 비교하게 한다.
+  const displayItemsRef = React.useRef(displayItems);
+  React.useEffect(() => {
+    displayItemsRef.current = displayItems;
+  }, [displayItems]);
+
+  /**
+   * 새 데이터를 반영하되, 이미지 URL이 실제로 바뀐(또는 새로 들어온) 채널만
+   * loadedImages에서 지운다. channelId가 같고 URL도 그대로면 브라우저가 이미 로드해둔
+   * <Image>를 React가 재사용하는데, 그때 loadedImages를 통째로 비우면 src가 안
+   * 바뀌었으니 onLoad가 다시 안 터져서 opacity-0에 영원히 갇히는 버그가 있었다
+   * (새로고침·플랫폼 전환·마운트 시 전부 이 문제를 겪었다).
+   * failedImages는 항상 전부 지운다 — 실패는 "로드된 상태"가 아니라 브라우저가
+   * 캐시하지 않으므로, src가 그대로여도 재시도 자체는 안전하다(예전엔 한 번 실패하면
+   * 계속 실패로 남아있던 반대 방향 버그가 있었다).
+   */
+  const applyNewItems = React.useCallback((items: LiveItem[]) => {
+    const prevByChannel = new Map(
+      displayItemsRef.current.map((it) => [it.channelId, imageSrcKey(it)]),
+    );
+    setLoadedImages((prev) => {
+      const next = new Set(prev);
+      for (const item of items) {
+        if (prevByChannel.get(item.channelId) !== imageSrcKey(item)) {
+          next.delete(item.channelId);
+        }
+      }
+      return next;
+    });
+    setFailedImages(new Set());
+    setDisplayItems(items);
+  }, []);
 
   React.useEffect(() => {
-    setDisplayItems(Array.isArray(initialItems) ? initialItems : []);
-    setLoadedImages(new Set());
-  }, [initialItems]);
+    applyNewItems(Array.isArray(initialItems) ? initialItems : []);
+  }, [initialItems, applyNewItems]);
 
   // SSR/ISR 캐시가 비었거나 stale일 수 있어, 마운트 시 클라이언트에서 현재 치지직 라이브를
   // 한 번 보정 조회한다. (백엔드는 14개 반환해도 SSR 캐시 때문에 "없음"으로 보이던 문제 방지)
@@ -46,9 +82,9 @@ export default function StreamList({
         const res = await fetch(
           `/api/streamers/live?platform=chzzk&minViewers=0`,
         );
-        const data = (await res.json()) as ChzzkLiveItem[];
+        const data = (await res.json()) as LiveItem[];
         if (!cancelled && Array.isArray(data) && data.length > 0) {
-          setDisplayItems(data);
+          applyNewItems(data);
         }
       } catch {
         // best-effort 보정
@@ -57,49 +93,55 @@ export default function StreamList({
     return () => {
       cancelled = true;
     };
-    // 마운트 시 1회만 (초기 플랫폼은 chzzk)
-  }, []);
+    // applyNewItems는 참조가 안정적(useCallback deps: [])이라 여기 넣어도 마운트 시
+    // 1회만 실행된다 (초기 플랫폼은 chzzk).
+  }, [applyNewItems]);
 
   const handleRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     setRefreshSpin(true);
     try {
-      const res = await fetch(`/api/streamers/live?platform=${platform}&minViewers=0`);
-      const data = (await res.json()) as ChzzkLiveItem[];
-      setLoadedImages(new Set());
-      setDisplayItems(data);
+      const res = await fetch(
+        `/api/streamers/live?platform=${platform}&minViewers=0`,
+      );
+      const data = (await res.json()) as LiveItem[];
+      applyNewItems(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error('새로고침 실패:', error);
+      console.error("새로고침 실패:", error);
     } finally {
       setIsRefreshing(false);
       setRefreshSpin(false);
     }
-  }, [platform]);
+  }, [platform, applyNewItems]);
 
-  const handlePlatformChange = React.useCallback(async (newPlatform: LivePlatform) => {
-    // 이미 선택된 플랫폼 중복 클릭 방지 (함수형 업데이트로 최신 platform 비교)
-    let isSame = false;
-    setPlatform((prev) => {
-      if (prev === newPlatform) {
-        isSame = true;
-        return prev;
+  const handlePlatformChange = React.useCallback(
+    async (newPlatform: LivePlatform) => {
+      // 이미 선택된 플랫폼 중복 클릭 방지 (함수형 업데이트로 최신 platform 비교)
+      let isSame = false;
+      setPlatform((prev) => {
+        if (prev === newPlatform) {
+          isSame = true;
+          return prev;
+        }
+        return newPlatform;
+      });
+      if (isSame) return;
+
+      setIsRefreshing(true);
+      try {
+        const res = await fetch(
+          `/api/streamers/live?platform=${newPlatform}&minViewers=0`,
+        );
+        const data = (await res.json()) as LiveItem[];
+        applyNewItems(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error("플랫폼 전환 실패:", error);
+      } finally {
+        setIsRefreshing(false);
       }
-      return newPlatform;
-    });
-    if (isSame) return;
-
-    setIsRefreshing(true);
-    try {
-      const res = await fetch(`/api/streamers/live?platform=${newPlatform}&minViewers=0`);
-      const data = (await res.json()) as ChzzkLiveItem[];
-      setLoadedImages(new Set());
-      setDisplayItems(data);
-    } catch (error) {
-      console.error('플랫폼 전환 실패:', error);
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, []);
+    },
+    [applyNewItems],
+  );
 
   const handleImageError = (channelId: string) => {
     setFailedImages((prev) => new Set([...prev, channelId]));
@@ -109,7 +151,7 @@ export default function StreamList({
     setLoadedImages((prev) => new Set([...prev, channelId]));
   };
 
-  const handleClick = (item: ChzzkLiveItem) => {
+  const handleClick = (item: LiveItem) => {
     gaEvent("click_live", {
       platform,
       label: item.channelName,
@@ -140,63 +182,66 @@ export default function StreamList({
   };
 
   // 토글 버튼 섹션을 메모이제이션 (displayItems 변경 시 재렌더링 방지)
-  const controlsBar = React.useMemo(() => (
-    <div className="flex items-center justify-between gap-2">
-      <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-        🎮 라이브
-      </h2>
-      <div className="flex items-center gap-1">
-        <div className="flex bg-slate-200 dark:bg-slate-700 rounded p-0.5">
+  const controlsBar = React.useMemo(
+    () => (
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+          🎮 라이브
+        </h2>
+        <div className="flex items-center gap-1">
+          <div className="flex bg-slate-200 dark:bg-slate-700 rounded p-0.5">
+            <button
+              onClick={() => handlePlatformChange("chzzk")}
+              disabled={isRefreshing}
+              className={`text-xs px-2 py-1 rounded transition-colors ${
+                platform === "chzzk"
+                  ? "bg-white dark:bg-slate-600 text-slate-900 dark:text-white font-semibold"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+              }`}
+              aria-label="치지직 라이브"
+            >
+              치지직
+            </button>
+            <button
+              onClick={() => handlePlatformChange("youtube")}
+              disabled={isRefreshing}
+              className={`text-xs px-2 py-1 rounded transition-colors ${
+                platform === "youtube"
+                  ? "bg-white dark:bg-slate-600 text-slate-900 dark:text-white font-semibold"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+              }`}
+              aria-label="유튜브 라이브"
+            >
+              유튜브
+            </button>
+          </div>
           <button
-            onClick={() => handlePlatformChange('chzzk')}
+            onClick={handleRefresh}
             disabled={isRefreshing}
-            className={`text-xs px-2 py-1 rounded transition-colors ${
-              platform === 'chzzk'
-                ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white font-semibold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-            aria-label="치지직 라이브"
+            className="text-xs px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 active:scale-95 dark:bg-slate-700 dark:hover:bg-slate-600 transition-all flex items-center gap-1"
+            aria-label="새로고침"
           >
-            치지직
-          </button>
-          <button
-            onClick={() => handlePlatformChange('youtube')}
-            disabled={isRefreshing}
-            className={`text-xs px-2 py-1 rounded transition-colors ${
-              platform === 'youtube'
-                ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white font-semibold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-            aria-label="유튜브 라이브"
-          >
-            유튜브
+            <svg
+              viewBox="0 0 24 24"
+              width={12}
+              height={12}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={refreshSpin ? "animate-spin" : ""}
+            >
+              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+              <polyline points="21 3 21 9 15 9" />
+            </svg>
+            새로고침
           </button>
         </div>
-        <button
-          onClick={handleRefresh}
-          disabled={isRefreshing}
-          className="text-xs px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 active:scale-95 dark:bg-slate-700 dark:hover:bg-slate-600 transition-all flex items-center gap-1"
-          aria-label="새로고침"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            width={12}
-            height={12}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={refreshSpin ? 'animate-spin' : ''}
-          >
-            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-            <polyline points="21 3 21 9 15 9" />
-          </svg>
-          새로고침
-        </button>
       </div>
-    </div>
-  ), [platform, isRefreshing, refreshSpin, handlePlatformChange, handleRefresh]);
+    ),
+    [platform, isRefreshing, refreshSpin, handlePlatformChange, handleRefresh],
+  );
 
   return (
     <div className="flex flex-col gap-2">
@@ -227,8 +272,8 @@ export default function StreamList({
                     fill
                     className={`object-cover ${
                       loadedImages.has(item.channelId)
-                        ? 'youtube-card-enter'
-                        : 'opacity-0'
+                        ? "youtube-card-enter"
+                        : "opacity-0"
                     }`}
                     unoptimized
                     onLoad={() => handleImageLoad(item.channelId)}
@@ -241,8 +286,8 @@ export default function StreamList({
                     fill
                     className={`object-cover ${
                       loadedImages.has(item.channelId)
-                        ? 'youtube-card-enter'
-                        : 'opacity-0'
+                        ? "youtube-card-enter"
+                        : "opacity-0"
                     }`}
                     unoptimized
                     onLoad={() => handleImageLoad(item.channelId)}

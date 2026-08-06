@@ -8,6 +8,8 @@
 export const FAVORITES_KEY = "loa_favorites";
 export const PRESETS_KEY = "loa_presets";
 export const ACTIVE_VIEW_KEY = "loa_active_view";
+/** 전체 탭에서 사용자가 직접 끌어 만든 카드 순서 (한 번도 안 끌었으면 비어 있다) */
+export const ALL_ORDER_KEY = "loa_all_order";
 /** 같은 탭 안의 다른 컴포넌트에 변경을 알리는 이벤트 (storage 이벤트는 다른 탭에만 간다) */
 export const STORE_EVENT = "loa_sites_store_changed";
 
@@ -37,18 +39,24 @@ export interface SitesStoreState {
   favorites: string[];
   presets: Preset[];
   activeView: ActiveView;
+  allOrder: string[];
 }
 
 const EMPTY_STATE: SitesStoreState = {
   favorites: [],
   presets: [],
   activeView: VIEW_ALL,
+  allOrder: [],
 };
 
 // useSyncExternalStore는 값이 그대로면 같은 객체 참조를 돌려받아야 무한 렌더를 피한다.
 // 원본 문자열을 기억해 두고 바뀐 경우에만 새 스냅샷을 만든다.
-let cachedRaw: { favorites: string; presets: string; view: string } | null =
-  null;
+let cachedRaw: {
+  favorites: string;
+  presets: string;
+  view: string;
+  allOrder: string;
+} | null = null;
 let cachedState: SitesStoreState = EMPTY_STATE;
 
 function parseHrefs(raw: string): string[] {
@@ -92,21 +100,24 @@ export function readStore(): SitesStoreState {
     const favorites = localStorage.getItem(FAVORITES_KEY) ?? "";
     const presets = localStorage.getItem(PRESETS_KEY) ?? "";
     const view = localStorage.getItem(ACTIVE_VIEW_KEY) ?? "";
+    const allOrder = localStorage.getItem(ALL_ORDER_KEY) ?? "";
 
     if (
       cachedRaw &&
       cachedRaw.favorites === favorites &&
       cachedRaw.presets === presets &&
-      cachedRaw.view === view
+      cachedRaw.view === view &&
+      cachedRaw.allOrder === allOrder
     ) {
       return cachedState;
     }
 
-    cachedRaw = { favorites, presets, view };
+    cachedRaw = { favorites, presets, view, allOrder };
     cachedState = {
       favorites: parseHrefs(favorites),
       presets: parsePresets(presets),
       activeView: view || VIEW_ALL,
+      allOrder: parseHrefs(allOrder),
     };
     return cachedState;
   } catch {
@@ -122,7 +133,12 @@ export function readServerStore(): SitesStoreState {
 export function subscribeStore(onStoreChange: () => void): () => void {
   const handler = (event: Event) => {
     if (event instanceof StorageEvent && event.key !== null) {
-      const watched = [FAVORITES_KEY, PRESETS_KEY, ACTIVE_VIEW_KEY];
+      const watched = [
+        FAVORITES_KEY,
+        PRESETS_KEY,
+        ACTIVE_VIEW_KEY,
+        ALL_ORDER_KEY,
+      ];
       if (!watched.includes(event.key)) return;
     }
     onStoreChange();
@@ -156,6 +172,41 @@ export function savePresets(next: Preset[]): void {
 
 export function saveActiveView(next: ActiveView): void {
   write(ACTIVE_VIEW_KEY, next);
+}
+
+export function saveAllOrder(next: string[]): void {
+  write(ALL_ORDER_KEY, JSON.stringify(next));
+}
+
+/**
+ * 전체 탭에 카드를 늘어놓을 순서.
+ *
+ * - 저장된 순서가 없으면(= 한 번도 안 끌었으면) 예전 규칙 그대로: 즐겨찾기가 위,
+ *   나머지는 서버가 준 순서.
+ * - 한 번이라도 끌었으면 그때 저장된 순서를 그대로 따른다. 이 뒤로는 즐겨찾기를
+ *   새로 켜도 위로 올라오지 않는다 — 사용자가 손으로 정한 자리를 우리가 다시
+ *   흔드는 쪽이 더 당황스럽다.
+ * - 저장된 순서에 없는 사이트(관리자가 새로 추가한 것)는 뒤에 붙이고,
+ *   목록에서 사라진 href 는 버린다.
+ */
+export function allViewOrder(
+  allHrefs: string[],
+  saved: string[],
+  favorites: string[],
+): string[] {
+  const known = new Set(allHrefs);
+
+  if (saved.length === 0) {
+    const favSet = new Set(favorites);
+    return [
+      ...favorites.filter((href) => known.has(href)),
+      ...allHrefs.filter((href) => !favSet.has(href)),
+    ];
+  }
+
+  const placed = saved.filter((href) => known.has(href));
+  const placedSet = new Set(placed);
+  return [...placed, ...allHrefs.filter((href) => !placedSet.has(href))];
 }
 
 export function createPresetId(): string {

@@ -10,8 +10,11 @@ export interface Site {
   clickCount?: number;
 }
 
-export interface ChzzkLiveItem {
-  platform: "chzzk";
+// 이름과 달리 Chzzk 전용이 아니다 — /api/streamers/live는 platform 쿼리에 따라
+// Chzzk·YouTube 라이브를 같은 모양으로 반환한다(server/src/streamers/chzzk.client.ts
+// LiveItem과 동일 형태).
+export interface LiveItem {
+  platform: "chzzk" | "youtube";
   channelId: string;
   channelName: string;
   title: string;

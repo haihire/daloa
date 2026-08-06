@@ -2,7 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
 
-export interface ChzzkLiveItem {
+// 이름과 달리 Chzzk 전용이 아니다 — YouTube 라이브(youtube-live.service.ts)도 이 형태를
+// 그대로 재사용한다. platform 필드로 두 플랫폼을 구분한다.
+export interface LiveItem {
   platform: 'chzzk' | 'youtube';
   channelName: string;
   channelId: string;
@@ -89,7 +91,7 @@ export class ChzzkClient {
    * 카테고리/개수는 Lost_Ark 고정 + CHZZK_LIVE_PAGE_SIZE env 사용(인자 없음).
    * @returns 로스트아크 라이브 목록 (빈 배열도 정상)
    */
-  async fetchLivesByCategory(): Promise<ChzzkLiveItem[]> {
+  async fetchLivesByCategory(): Promise<LiveItem[]> {
     try {
       const allLives: ChzzkLiveRawItem[] = [];
       let nextToken: string | undefined;
@@ -202,7 +204,7 @@ export class ChzzkClient {
   /**
    * 라이브 목록을 시청자수 기준으로 필터링
    */
-  filterByViewerCount(items: ChzzkLiveItem[], minViewers = 0): ChzzkLiveItem[] {
+  filterByViewerCount(items: LiveItem[], minViewers = 0): LiveItem[] {
     return items.filter((item) => item.viewerCount >= minViewers);
   }
 

@@ -6,7 +6,7 @@ import {
   CRON_JITTER_FREQUENT_SEC,
 } from '../common/cron-lock.util';
 import { REDIS_CLIENT } from '../redis/redis.module';
-import { ChzzkClient, type ChzzkLiveItem } from './chzzk.client';
+import { ChzzkClient, type LiveItem } from './chzzk.client';
 import { YoutubeApiService } from './youtube-api.service';
 import {
   toYoutubeApiError,
@@ -35,7 +35,7 @@ export class YoutubeLiveService {
     @Inject(REDIS_CLIENT) private readonly redis: RedisClient,
     private readonly youtubeApi: YoutubeApiService,
     // filterByViewerCount는 플랫폼 무관 범용 필터라 Chzzk 전용 크라이언트에만 있어도
-    // YouTube 라이브(ChzzkLiveItem[] 재사용)에도 그대로 쓸 수 있다.
+    // YouTube 라이브(LiveItem[] 재사용)에도 그대로 쓸 수 있다.
     private readonly chzzk: ChzzkClient,
   ) {}
 
@@ -120,7 +120,7 @@ export class YoutubeLiveService {
     });
 
     // 3. LiveEntry 매핑
-    const lives: ChzzkLiveItem[] = [];
+    const lives: LiveItem[] = [];
     for (const video of videosRes.data.items || []) {
       if (!video.snippet || !video.liveStreamingDetails || !video.id) continue;
 
@@ -160,12 +160,12 @@ export class YoutubeLiveService {
   }
 
   /** YouTube 라이브 조회 (캐시 우선, 없으면 락으로 직렬화 후 직접 API 호출) */
-  async getYoutubeLives(minViewers = 0): Promise<ChzzkLiveItem[]> {
+  async getYoutubeLives(minViewers = 0): Promise<LiveItem[]> {
     try {
       // 1. 캐시 확인
       const cached = await this.redis.get(YOUTUBE_LIVE_CACHE_KEY);
       if (cached) {
-        const lives = JSON.parse(cached) as ChzzkLiveItem[];
+        const lives = JSON.parse(cached) as LiveItem[];
         const filtered = this.chzzk.filterByViewerCount(lives, minViewers);
         this.logger.debug(
           `YouTube 캐시 hit: ${lives.length}개 → 필터링 후 ${filtered.length}개 (최소시청자 ${minViewers})`,
@@ -193,7 +193,7 @@ export class YoutubeLiveService {
       // 다시 캐시 확인
       const cached2 = await this.redis.get(YOUTUBE_LIVE_CACHE_KEY);
       if (cached2) {
-        const lives = JSON.parse(cached2) as ChzzkLiveItem[];
+        const lives = JSON.parse(cached2) as LiveItem[];
         const filtered = this.chzzk.filterByViewerCount(lives, minViewers);
         this.logger.debug(
           `YouTube 직접 호출 후: ${lives.length}개 → 필터링 후 ${filtered.length}개`,
