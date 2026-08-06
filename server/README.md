@@ -22,9 +22,6 @@ CLIENT_ORIGIN=http://localhost:3000
 DATABASE_URL=postgresql://user:password@localhost:5432/lomoa
 PRISMA_DB_SCHEMA=public  # 선택, 기본값 public
 
-# 로스트아크 공식 API
-LOSTARK_API_KEY=...
-
 # YouTube Data API v3 (영상 검색 + 라이브)
 YOUTUBE_API_KEY=...
 YOUTUBE_API_KEY_2=...   # 추가 키 (선택, _3/_4 형식으로 계속 추가 — 할당량 순환)
@@ -93,21 +90,16 @@ server/src/
 │
 ├── sites/                # GET /api/sites  (Redis 캐시 + 매일 09:00 상태 점검·카카오 알림)
 ├── streamers/            # 유튜브 영상 + 치지직/유튜브 실시간 라이브
-│   ├── streamers.controller.ts   # /api/streamers · /popular · /view-history · /live
+│   ├── streamers.controller.ts   # /api/streamers · /live
 │   └── chzzk.client.ts           # 치지직 Open API 클라이언트
-├── lostark/              # GET /api/lostark/stats  (공식 API 래퍼 + Rate Limiter)
-├── characters/           # 특성 빌드 분류 로직 (컨트롤러 없음 — admin-characters 내부용, 홈 노출은 폐기)
-├── users/                # 원정대 upsert / 조회 (외부 캐릭터 크롤러 연동)
 ├── feedback/             # POST /api/feedback  (익명 사용자 피드백 + 방문 이력 요약 저장)
 ├── kakao/                # 카카오 알림 서비스 (리프레시 토큰 자동 갱신)
 ├── revalidate/           # Vercel ISR 캐시 무효화 트리거
 └── admin/                # 관리자 API (/api/admin/*) — 도메인별 하위 폴더로 분리
     ├── auth/                 # 로그인/로그아웃/세션(admin.guard, RequireOwner) — Redis TTL 1h
     ├── cache/                # Redis 캐시 purge
-    ├── characters/           # 캐릭터 목록 조회
     ├── feedback/             # 사용자 피드백 조회/삭제
     ├── sites/                # 사이트 CRUD + 클릭 시계열
-    ├── youtube/              # 유튜브 영상 차단/해제
     ├── inven/                # 인벤 크롤 파이프라인 + 사이트 후보 승인
     │   ├── admin-inven-pipeline.service.ts # Python site-finder 실행
     │   ├── admin-inven-cron.service.ts     # 주기 크롤 크론
@@ -135,14 +127,8 @@ server/src/
 | GET    | `/api/sites`                          | 사이트 목록 (DB + Redis 캐시)                            |
 | GET    | `/api/streamers`                      | 유튜브 최신 영상 (`pageToken` 쿼리)                      |
 | GET    | `/api/streamers/live`                 | 실시간 라이브 (`platform=chzzk\|youtube`)                |
-| GET    | `/api/streamers/view-history`         | 날짜별 평균 조회수 히스토리 (`days`)                     |
-| GET    | `/api/lostark/stats`                  | 로스트아크 통계                                          |
-| POST   | `/api/users/search`                   | 원정대 검색 및 DB upsert (`{ characterName }`)           |
-| GET    | `/api/users/exists/:name`             | 캐릭터명 존재 여부 (크롤러용)                            |
-| GET    | `/api/users/stats`                    | 저장된 유저/원정대 통계                                  |
 | POST   | `/api/admin/auth/login`               | 관리자 로그인                                            |
 | GET    | `/api/admin/sites`                    | 사이트 관리 목록                                         |
-| POST   | `/api/admin/youtube/block`            | 유튜브 영상 차단                                         |
 | POST   | `/api/admin/inven/pipeline/run`       | 인벤 크롤 파이프라인 실행                                |
 | GET    | `/api/admin/inven/site-candidates`    | 사이트 추천 후보 목록                                    |
 | POST   | `/api/feedback`                       | 익명 사용자 피드백 등록                                  |
@@ -154,8 +140,6 @@ server/src/
 | GET    | `/api/admin/monitoring/rag/documents` | RAG 지식베이스 문서 목록                                 |
 | POST   | `/api/admin/monitoring/rag/snapshot`  | RAG 스냅샷 수동 생성 (owner 전용, 매주 자동 크론도 있음) |
 | POST   | `/api/telemetry/*`                    | 페이지뷰·요청시간·사이트/유튜브 클릭 수집                |
-
-> `GET /api/streamers/popular`(인기 영상)는 엔드포인트로 남아 있으나 **홈 노출은 폐기**됨. `/api/class-summary`(AI 직업 한줄평)는 모듈째 제거됨.
 
 ---
 

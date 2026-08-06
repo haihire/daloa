@@ -287,9 +287,8 @@ export class AdminMonitoringController {
     @Headers('x-telemetry-token') token: string | undefined,
     @Body()
     body: {
-      siteName?: string;
       siteHref?: string;
-      siteCategory?: string;
+      siteIdx?: number;
       deviceType?: 'mobile' | 'desktop' | 'tablet' | 'bot' | 'unknown';
     },
   ) {
@@ -298,9 +297,8 @@ export class AdminMonitoringController {
       return { ok: false };
     }
     return this.monitoring.recordSiteClick({
-      siteName: body.siteName ?? body.siteHref,
       siteHref: body.siteHref,
-      siteCategory: body.siteCategory ?? 'unknown',
+      siteIdx: typeof body.siteIdx === 'number' ? body.siteIdx : null,
       deviceType: body.deviceType ?? 'unknown',
     });
   }

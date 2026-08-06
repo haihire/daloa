@@ -1,7 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import type { Redis } from 'ioredis';
-import { runIfLockAcquired } from '../common/cron-lock.util';
+import {
+  runIfLockAcquired,
+  CRON_JITTER_DAILY_SEC,
+} from '../common/cron-lock.util';
 import { KakaoService, type SiteChange } from '../kakao/kakao.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { SitesRepository, type SiteRecord } from './sites.repository';
@@ -40,8 +43,12 @@ export class SitesService {
   @Cron('0 0 9 * * *')
   async checkSites() {
     // PM2 cluster 여러 워커가 동시에 도는 것 방지 — 락 잡은 워커만 실행(페일오버 지원).
-    await runIfLockAcquired(this.redis, 'checkSites', () =>
-      this.checkSitesJob(),
+    await runIfLockAcquired(
+      this.redis,
+      'checkSites',
+      () => this.checkSitesJob(),
+      60,
+      CRON_JITTER_DAILY_SEC,
     );
   }
 

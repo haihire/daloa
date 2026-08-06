@@ -201,14 +201,15 @@ export class MonitoringRepository {
         created_at TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `;
+    // site_idx가 loa_sites(seq)를 참조하는 FK라 loa_sites가 먼저 존재해야 한다 — 로컬/CI는
+    // `prisma db push`가 Nest 부팅보다 먼저 loa_sites를 만들고, 운영은 이 앱 이전부터 있던
+    // 레거시 테이블이라 항상 먼저 존재한다.
     await this.prisma.$executeRaw`
       CREATE TABLE IF NOT EXISTS apm_site_clicks (
         id BIGSERIAL PRIMARY KEY,
-        site_name VARCHAR(255) NOT NULL,
-        site_href VARCHAR(500) NOT NULL,
-        site_category VARCHAR(100) NOT NULL DEFAULT 'unknown',
         device_type apm_site_clicks_device_type NOT NULL DEFAULT 'unknown',
-        created_at TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        site_idx BIGINT REFERENCES loa_sites(seq) ON DELETE SET NULL
       )
     `;
     await this.prisma.$executeRaw`
@@ -243,7 +244,7 @@ export class MonitoringRepository {
     await this.prisma
       .$executeRaw`CREATE INDEX IF NOT EXISTS idx_apm_site_clicks_created_at ON apm_site_clicks(created_at)`;
     await this.prisma
-      .$executeRaw`CREATE INDEX IF NOT EXISTS idx_apm_site_clicks_site_href ON apm_site_clicks(site_href)`;
+      .$executeRaw`CREATE INDEX IF NOT EXISTS idx_apm_site_clicks_site_idx ON apm_site_clicks(site_idx)`;
     await this.prisma
       .$executeRaw`CREATE INDEX IF NOT EXISTS idx_apm_youtube_clicks_created_at ON apm_youtube_clicks(created_at)`;
     await this.prisma
@@ -389,20 +390,25 @@ export class MonitoringRepository {
   }
 
   async recordSiteClick(input: {
-    siteName: string;
     siteHref: string;
-    siteCategory: string;
     deviceType: DeviceType;
+    siteIdx: number | null;
   }) {
+    // siteIdx는 클라이언트(SiteList)가 sites 응답의 seq를 그대로 실어 보낸 값.
+    // 배포 직후 캐시된 구버전 페이지(/api/sites는 24시간 CDN 캐시)가 이 필드 없이 보낼 수 있어,
+    // 없으면 href로 loa_sites를 찾아 서버가 대신 채운다(둘 다 못 찾으면 NULL로 남음 — FK가
+    // nullable인 이유). siteHref 자체는 저장하지 않는다 — loa_sites가 유일한 원본이라
+    // apm_site_clicks엔 그 사이트를 가리키는 site_idx만 있으면 된다.
     await this.prisma.$executeRaw`
       INSERT INTO apm_site_clicks
-        (site_name, site_href, site_category, device_type, created_at)
+        (device_type, created_at, site_idx)
       VALUES (
-        ${input.siteName},
-        ${input.siteHref},
-        ${input.siteCategory},
         ${input.deviceType}::apm_site_clicks_device_type,
-        NOW()
+        NOW(),
+        COALESCE(
+          ${input.siteIdx}::bigint,
+          (SELECT seq FROM loa_sites WHERE href = ${input.siteHref} LIMIT 1)
+        )
       )
     `;
   }
@@ -680,11 +686,24 @@ export class MonitoringRepository {
     return Number(rows[0]?.total ?? 0);
   }
 
+  /**
+   * 클릭 상위 20 사이트. site_idx(loa_sites.seq)로 묶어 사이트당 한 행만 나오게 한다.
+   * (예전엔 site_href+site_category 스냅샷으로 묶어서, 사이트 카테고리를 바꾸면 같은 사이트가
+   * 두 행으로 쪼개져 순위가 어긋났다 — site_idx는 사이트 개설 후 절대 안 바뀌는 값이라 안전.)
+   * 이름/카테고리/URL은 apm_site_clicks에 사본을 안 두고 항상 loa_sites에서 가져온다(정규화).
+   * INNER JOIN이라 site_idx가 NULL인 행(사이트가 삭제돼 FK가 SET NULL한 경우)은 자연히
+   * 빠진다 — 더는 존재하지 않는 사이트를 "클릭 상위"에 보여줄 수는 없으니 의도된 동작.
+   */
   async findSiteClicks() {
     return this.prisma.$queryRaw<SiteClickRow[]>`
-      SELECT MAX(site_name) AS site_name, site_href, site_category, COUNT(*) AS click_count
-      FROM apm_site_clicks
-      GROUP BY site_href, site_category
+      SELECT
+        s.name AS site_name,
+        s.href AS site_href,
+        COALESCE(s.category, 'unknown') AS site_category,
+        COUNT(*) AS click_count
+      FROM apm_site_clicks c
+      JOIN loa_sites s ON s.seq = c.site_idx
+      GROUP BY s.seq, s.name, s.href, s.category
       ORDER BY click_count DESC
       LIMIT 20
     `;

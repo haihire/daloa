@@ -28,11 +28,18 @@ interface Props {
   sites: Site[];
 }
 
-// 사이트 주소(도메인)만으로 구글 파비콘 서비스에서 작은 아이콘(32px, ~1-3KB, 7일 캐시)을 받음.
-// site.icon에 박힌 원본 대용량 파비콘(예: 256x256)을 16x16로 내려받던 낭비 제거.
-function faviconUrl(href: string): string | null {
+// site.icon(관리자가 사이트 수정 모달의 "불러오기"로 지정/검증해둔 값)이 있으면 그걸
+// 브라우저가 직접 받고, 없으면 도메인 기반 구글 파비콘으로 폴백한다. 프록시나
+// next/image를 거치지 않는다 — 한때 그렇게 해봤지만 우리 서버가 중간에 끼면서 홉이
+// 하나 더 늘어 대다수(이미 잘 뜨는) 사이트에서 오히려 느려지기만 했다. 대신 구글이
+// 못 찾는 소수 도메인(리다이렉트 뒤 404 등)은 site.icon에 실제로 동작하는 직접 URL을
+// DB에 미리 박아둔다(관리자가 "불러오기"로 채우거나, 정말 파비콘이 없는 사이트는
+// /site-icon-fallback.svg 로컬 정적 아이콘으로) — 방문자 브라우저가 매번 실패를
+// 겪지 않고 처음부터 되는 URL로 바로 요청한다.
+function faviconUrl(site: Site): string | null {
+  if (site.icon) return site.icon;
   try {
-    return `https://www.google.com/s2/favicons?domain=${new URL(href).hostname}&sz=32`;
+    return `https://www.google.com/s2/favicons?domain=${new URL(site.href).hostname}&sz=32`;
   } catch {
     return null;
   }
@@ -278,14 +285,16 @@ export default function SiteList({ sites }: Props) {
           >
             {filtered.map((site) => {
               const isFav = favSet.has(site.href);
-              const favicon = faviconUrl(site.href); // 사이트당 1회만 파싱
+              const favicon = faviconUrl(site); // 사이트당 1회만 계산
               const rank = rankMap.get(site.href); // 클릭수 기준 순위 (없으면 미표시)
               const trackSiteClick = () => {
+                // 서버는 site_idx(=loa_sites.seq)만 저장한다 — 이름/카테고리는 loa_sites가
+                // 원본이라 여기서 굳이 실어 보내지 않는다. gaEvent는 GA(구글 애널리틱스)용이라
+                // 우리 DB 스키마와 무관하게 사람이 읽을 라벨을 그대로 보낸다.
                 const payload = {
                   type: "site-click",
-                  siteName: site.name,
                   siteHref: site.href,
-                  siteCategory: site.category,
+                  siteIdx: site.seq,
                   deviceType: detectDeviceType(),
                 };
                 gaEvent("site_click", {

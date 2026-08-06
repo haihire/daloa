@@ -12,11 +12,17 @@ export async function GET(req: NextRequest) {
   if (pvDays) params.set("pvDays", pvDays);
   const query = params.size > 0 ? `?${params.toString()}` : "";
   try {
-    const res = await fetch(`${NEST_API}/api/admin/monitoring/dashboard${query}`, {
-      headers: { "x-admin-session": token },
-      cache: "no-store",
-    });
+    console.log("Fetching dashboard data", query);
+    const res = await fetch(
+      `${NEST_API}/api/admin/monitoring/dashboard${query}`,
+      {
+        headers: { "x-admin-session": token },
+        cache: "no-store",
+      },
+    );
     const data = await res.json().catch(() => ({}));
+    console.log("dashboard data", data);
+    console.log("dashboard query", query);
     return NextResponse.json(data, { status: res.status });
   } catch {
     return NextResponse.json(

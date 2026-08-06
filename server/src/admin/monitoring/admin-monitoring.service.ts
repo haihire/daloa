@@ -1,7 +1,10 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import type { Redis } from 'ioredis';
-import { runIfLockAcquired } from '../../common/cron-lock.util';
+import {
+  runIfLockAcquired,
+  CRON_JITTER_DAILY_SEC,
+} from '../../common/cron-lock.util';
 import { todayKst } from '../../common/kst-date.util';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import {
@@ -81,10 +84,9 @@ export class AdminMonitoringService implements OnModuleInit {
   }
 
   async recordSiteClick(input: {
-    siteName: string;
     siteHref: string;
-    siteCategory: string;
     deviceType: DeviceType;
+    siteIdx: number | null;
   }) {
     await this.monitoringRepo.recordSiteClick(input);
   }
@@ -226,31 +228,37 @@ export class AdminMonitoringService implements OnModuleInit {
 
   @Cron('0 0 3 * * *')
   async cleanupMetricRetention() {
-    await runIfLockAcquired(this.redis, 'cleanupMetricRetention', async () => {
-      try {
-        const deletedRequests =
-          await this.monitoringRepo.deleteMetricRowsOlderThan(
-            'apm_request_timings',
-            this.MONITORING_METRIC_RETENTION_DAYS,
+    await runIfLockAcquired(
+      this.redis,
+      'cleanupMetricRetention',
+      async () => {
+        try {
+          const deletedRequests =
+            await this.monitoringRepo.deleteMetricRowsOlderThan(
+              'apm_request_timings',
+              this.MONITORING_METRIC_RETENTION_DAYS,
+            );
+          const deletedPageLoads =
+            await this.monitoringRepo.deleteMetricRowsOlderThan(
+              'apm_page_load_timings',
+              this.MONITORING_METRIC_RETENTION_DAYS,
+            );
+          const deletedErrors = await this.monitoringRepo.pruneErrorLogs(
+            this.ERROR_LOG_RETENTION_DAYS,
           );
-        const deletedPageLoads =
-          await this.monitoringRepo.deleteMetricRowsOlderThan(
-            'apm_page_load_timings',
-            this.MONITORING_METRIC_RETENTION_DAYS,
-          );
-        const deletedErrors = await this.monitoringRepo.pruneErrorLogs(
-          this.ERROR_LOG_RETENTION_DAYS,
-        );
 
-        this.logger.log(
-          `monitoring retention cleanup completed: requests=${deletedRequests}, pageLoads=${deletedPageLoads}, errors=${deletedErrors}`,
-        );
-      } catch (err: unknown) {
-        this.logger.warn(
-          `monitoring retention cleanup failed: ${toErrorMessage(err)}`,
-        );
-      }
-    });
+          this.logger.log(
+            `monitoring retention cleanup completed: requests=${deletedRequests}, pageLoads=${deletedPageLoads}, errors=${deletedErrors}`,
+          );
+        } catch (err: unknown) {
+          this.logger.warn(
+            `monitoring retention cleanup failed: ${toErrorMessage(err)}`,
+          );
+        }
+      },
+      60,
+      CRON_JITTER_DAILY_SEC,
+    );
   }
 
   async getDashboard(pvDays = 14): Promise<AdminMonitoringDashboard> {

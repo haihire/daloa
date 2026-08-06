@@ -31,8 +31,15 @@ const PYTHON_BIN =
 
 // 증분 1회 실행에서 본문(상세페이지)을 fetch할 최대 글 수. 목록 메타데이터는
 // 캡과 무관하게 새 글 전체를 저장하므로 since_id는 매 런 gap 없이 전진한다.
-// 2시간치 신규 글(보통 수백)보다 넉넉하게 잡아 정상 운영 시엔 캡에 걸리지 않게 한다.
-const INVEN_MAX_DETAIL = Number(process.env.INVEN_MAX_DETAIL ?? 500);
+//
+// ⚠️ 캡에 걸려 스킵된 글은 content=null 로 저장되고 "영구히" 비어 있다.
+//    crawl.py 의 본문 대상은 그 런에서 수집한 글로 한정되는데, 다음 런은 증분이라
+//    이미 저장된 글을 다시 수집하지 않기 때문. 본문이 없으면 사이트 추출에서도 빠진다.
+//    => 캡 × 하루 실행 횟수 >= 하루 신규 글 수 를 항상 만족시켜야 한다.
+//
+// 실측(2026-08 기준) 하루 신규 글: 1,200~3,800건.
+// 크론이 새벽 4회(02~05시)라 4 × 1,200 = 4,800건 — 최대치에도 여유가 있다.
+const INVEN_MAX_DETAIL = Number(process.env.INVEN_MAX_DETAIL ?? 1200);
 
 export interface PipelineStatus {
   running: boolean;

@@ -7,7 +7,11 @@ import { StreamingRedisService } from './streaming-redis.service';
 import { ChzzkClient, type ChzzkLiveItem } from './chzzk.client';
 
 const CHZZK_LIVE_CACHE_KEY = 'live:chzzk:current';
-const CHZZK_LIVE_CACHE_TTL = 90; // 90초 (크론 1분 + 1.5배 grace)
+// 크론 5분 + 1.5배 grace. TTL 이 주기보다 짧으면 매 주기마다 캐시가 비는 구간이 생기고,
+// 그 사이 들어온 요청이 25페이지 스캔을 직접 돌게 된다.
+const CHZZK_LIVE_CACHE_TTL = 450;
+// 갱신 크론이 다른 크론과 같은 정각에 몰리지 않도록 흩어주는 폭(락 TTL 60초보다 짧아야 함)
+const CHZZK_CRON_JITTER_SEC = 30;
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -95,10 +99,15 @@ export class ChzzkLiveService {
     }
   }
 
-  /** 1분마다 Chzzk 라이브 갱신 (워커0만) */
-  @Cron('0 */1 * * * *')
+  /**
+   * 5분마다 Chzzk 라이브 갱신 (락 잡은 워커만).
+   *
+   * 화면의 "새로고침"은 이 캐시를 읽기만 한다(사용자가 연타해도 Chzzk API 로 나가지 않음).
+   * 즉 이 주기가 곧 데이터 신선도다 — 1분 주기는 25페이지 스캔을 매분 돌려 과했다.
+   */
+  @Cron('0 */5 * * * *')
   async refreshChzzkLives(): Promise<void> {
-    // 읽기 전용(로컬)이면 운영이 채워둔 캐시를 읽기만 한다. 안 그러면 개발 PC 가 매분
+    // 읽기 전용(로컬)이면 운영이 채워둔 캐시를 읽기만 한다. 안 그러면 개발 PC 가
     // Chzzk API 를 20여 페이지씩 긁어 불필요한 외부 트래픽이 계속 나간다.
     if (this.streamingRedis.readOnly) {
       this.logger.debug(
@@ -106,12 +115,13 @@ export class ChzzkLiveService {
       );
       return;
     }
-    // 1분 주기라 TTL 10초 — 다음 틱(1분 후) 전까지 여유 있게 풀리게.
+    // 5분 주기라 락 TTL 60초로 충분(주기보다 짧아야 다음 틱이 스킵되지 않는다).
     await runIfLockAcquired(
       this.redis,
       'refreshChzzkLives',
       () => this.updateChzzkLives(),
-      10,
+      60,
+      CHZZK_CRON_JITTER_SEC,
     );
   }
 }

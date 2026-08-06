@@ -3,17 +3,13 @@ import { YoutubeVideosService } from './youtube-videos.service';
 import { YoutubeLiveService } from './youtube-live.service';
 import { ChzzkLiveService } from './chzzk-live.service';
 
-export type {
-  YoutubeVideoItem,
-  PopularResponse,
-} from './youtube-videos.service';
+export type { YoutubeVideoItem } from './youtube-videos.service';
 
 /**
- * 파사드: streamers.controller.ts / admin-youtube.controller.ts 가 기대하는
- * API 형태를 유지한 채, 실제 구현은 4가지 책임(영상 검색+인기+숨김 / YouTube 라이브 /
- * Chzzk 라이브)으로 분리된 서비스에 위임한다. 각 서비스의 @Cron·OnModuleInit 은
- * StreamersModule의 providers에 등록되는 것만으로 독립적으로 동작하며 이 파사드를
- * 거치지 않는다.
+ * 파사드: streamers.controller.ts 가 기대하는 API 형태를 유지한 채, 실제 구현은
+ * 3가지 책임(영상 검색 / YouTube 라이브 / Chzzk 라이브)으로 분리된 서비스에 위임한다.
+ * 각 서비스의 @Cron·OnModuleInit 은 StreamersModule의 providers에 등록되는 것만으로
+ * 독립적으로 동작하며 이 파사드를 거치지 않는다.
  */
 @Injectable()
 export class StreamersService {
@@ -25,26 +21,6 @@ export class StreamersService {
 
   searchVideos(pageToken?: string) {
     return this.videos.searchVideos(pageToken);
-  }
-
-  searchPopularVideos(offset = 0, limit = 0) {
-    return this.videos.searchPopularVideos(offset, limit);
-  }
-
-  getViewHistory(days: number) {
-    return this.videos.getViewHistory(days);
-  }
-
-  blockVideo(videoId: string) {
-    return this.videos.blockVideo(videoId);
-  }
-
-  unblockVideo(videoId: string) {
-    return this.videos.unblockVideo(videoId);
-  }
-
-  listBlocked() {
-    return this.videos.listBlocked();
   }
 
   getYoutubeLives(minViewers = 0) {

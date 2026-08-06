@@ -71,12 +71,23 @@ describe("SiteList", () => {
     expect(screen.getByText("인벤 커뮤니티")).toBeInTheDocument();
   });
 
-  it("파비콘은 site.icon이 아니라 href 도메인 기반 구글 파비콘으로 렌더링된다", () => {
+  it("site.icon이 있으면 그 값이 파비콘으로 렌더링된다", () => {
+    const siteWithIcon: Site = {
+      ...MOCK_SITES[1],
+      icon: "https://example.com/icon.png",
+    };
+    const { container } = render(<SiteList sites={[siteWithIcon]} />);
+
+    const img = container.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img).toHaveAttribute("src", "https://example.com/icon.png");
+  });
+
+  it("site.icon이 없으면 href 도메인 기반 구글 파비콘으로 렌더링된다", () => {
     const { container } = render(<SiteList sites={[MOCK_SITES[1]]} />);
 
     const img = container.querySelector("img");
     expect(img).not.toBeNull();
-    // site.icon("https://example.com/icon.png")이 아니라 href 도메인에서 파생
     expect(img).toHaveAttribute(
       "src",
       "https://www.google.com/s2/favicons?domain=lostark.inven.co.kr&sz=32",

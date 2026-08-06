@@ -5,7 +5,11 @@ import { readFile, readdir } from 'fs/promises';
 import { cpus } from 'os';
 import { promisify } from 'util';
 import type { Redis } from 'ioredis';
-import { runIfLockAcquired } from '../../common/cron-lock.util';
+import {
+  runIfLockAcquired,
+  CRON_JITTER_FREQUENT_SEC,
+  CRON_JITTER_DAILY_SEC,
+} from '../../common/cron-lock.util';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import {
   MonitoringRepository,
@@ -288,55 +292,70 @@ export class DockerStatsService {
 
   @Cron('0 */5 * * * *')
   async saveContainerStats(): Promise<void> {
-    await runIfLockAcquired(this.redis, 'saveContainerStats', async () => {
-      try {
-        const stats = await this.getContainerStats();
-        for (const stat of stats) {
-          const container = stat.label as ContainerName;
-          if (!VALID_CONTAINERS.includes(container)) continue;
-          await this.monitoringRepo.saveDockerMetric(container, {
-            cpuPercent: stat.cpuPercent,
-            memUsedMb: stat.memUsedMb,
-            memTotalMb: stat.memTotalMb,
-            memPercent: stat.memPercent,
-          });
-        }
+    await runIfLockAcquired(
+      this.redis,
+      'saveContainerStats',
+      async () => {
+        try {
+          const stats = await this.getContainerStats();
+          for (const stat of stats) {
+            const container = stat.label as ContainerName;
+            if (!VALID_CONTAINERS.includes(container)) continue;
+            await this.monitoringRepo.saveDockerMetric(container, {
+              cpuPercent: stat.cpuPercent,
+              memUsedMb: stat.memUsedMb,
+              memTotalMb: stat.memTotalMb,
+              memPercent: stat.memPercent,
+            });
+          }
 
-        const breakdown = await this.computeResourceBreakdown(stats);
-        if (breakdown) {
-          await this.monitoringRepo.saveResourceBreakdown({
-            containers: containersToRecord(breakdown.containers),
-            dockerOverheadCpuPercent: breakdown.dockerOverheadCpuPercent,
-            dockerOverheadMemMb: breakdown.dockerOverheadMemMb,
-            osOtherCpuPercent: breakdown.osOtherCpuPercent,
-            osOtherMemMb: breakdown.osOtherMemMb,
-            hostCpuPercent: breakdown.hostCpuPercent,
-            hostMemUsedMb: breakdown.hostMemUsedMb,
-            hostMemTotalMb: breakdown.hostMemTotalMb,
-          });
+          const breakdown = await this.computeResourceBreakdown(stats);
+          if (breakdown) {
+            await this.monitoringRepo.saveResourceBreakdown({
+              containers: containersToRecord(breakdown.containers),
+              dockerOverheadCpuPercent: breakdown.dockerOverheadCpuPercent,
+              dockerOverheadMemMb: breakdown.dockerOverheadMemMb,
+              osOtherCpuPercent: breakdown.osOtherCpuPercent,
+              osOtherMemMb: breakdown.osOtherMemMb,
+              hostCpuPercent: breakdown.hostCpuPercent,
+              hostMemUsedMb: breakdown.hostMemUsedMb,
+              hostMemTotalMb: breakdown.hostMemTotalMb,
+            });
+          }
+        } catch (err: unknown) {
+          this.logger.warn(
+            `docker stats save failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
         }
-      } catch (err: unknown) {
-        this.logger.warn(
-          `docker stats save failed: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    });
+      },
+      60,
+      CRON_JITTER_FREQUENT_SEC,
+    );
   }
 
   @Cron('0 30 3 * * *')
   async cleanupContainerMetrics(): Promise<void> {
-    await runIfLockAcquired(this.redis, 'cleanupContainerMetrics', async () => {
-      try {
-        for (const container of VALID_CONTAINERS) {
-          await this.monitoringRepo.deleteDockerMetricsOlderThan(container, 9);
+    await runIfLockAcquired(
+      this.redis,
+      'cleanupContainerMetrics',
+      async () => {
+        try {
+          for (const container of VALID_CONTAINERS) {
+            await this.monitoringRepo.deleteDockerMetricsOlderThan(
+              container,
+              9,
+            );
+          }
+          await this.monitoringRepo.deleteResourceBreakdownOlderThan(9);
+        } catch (err: unknown) {
+          this.logger.warn(
+            `docker metrics cleanup failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
         }
-        await this.monitoringRepo.deleteResourceBreakdownOlderThan(9);
-      } catch (err: unknown) {
-        this.logger.warn(
-          `docker metrics cleanup failed: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    });
+      },
+      60,
+      CRON_JITTER_DAILY_SEC,
+    );
   }
 
   async getHostStats(): Promise<HostStats | null> {
