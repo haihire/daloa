@@ -1,7 +1,10 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import type { Redis as RedisClient } from 'ioredis';
-import { runIfLockAcquired } from '../common/cron-lock.util';
+import {
+  runIfLockAcquired,
+  CRON_JITTER_FREQUENT_SEC,
+} from '../common/cron-lock.util';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { ChzzkClient, type ChzzkLiveItem } from './chzzk.client';
 import { YoutubeApiService } from './youtube-api.service';
@@ -211,8 +214,12 @@ export class YoutubeLiveService {
   @Cron('0 */20 * * * *') // 운영: 20분 / 로컬: 2시간 (02:xx, 04:xx 등)
   async refreshYoutubeLives(): Promise<void> {
     // 20분 주기라 기본 TTL(60초)로 충분 — 다음 틱 전까지 여유 있게 풀림.
-    await runIfLockAcquired(this.redis, 'refreshYoutubeLives', () =>
-      this.refreshYoutubeLivesJob(),
+    await runIfLockAcquired(
+      this.redis,
+      'refreshYoutubeLives',
+      () => this.refreshYoutubeLivesJob(),
+      60,
+      CRON_JITTER_FREQUENT_SEC,
     );
   }
 

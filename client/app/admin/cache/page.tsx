@@ -5,7 +5,6 @@ import { buildGuestNotice, useAdminRole } from "@/lib/admin-role";
 
 const CACHE_KEYS = [
   { key: "sites", label: "사이트 목록", desc: "sites:all" },
-  { key: "youtube", label: "유튜브", desc: "youtube:popular:first" },
 ];
 
 type StatusMap = Record<string, "idle" | "loading" | "done" | "error">;
