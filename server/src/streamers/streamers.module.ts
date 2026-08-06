@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { StreamersController } from './streamers.controller';
 import { StreamersService } from './streamers.service';
 import { RedisModule } from '../redis/redis.module';
-import { StreamersRepository } from './streamers.repository';
 import { ChzzkClient } from './chzzk.client';
 import { StreamingRedisService } from './streaming-redis.service';
 import { YoutubeApiService } from './youtube-api.service';
@@ -15,7 +14,6 @@ import { ChzzkLiveService } from './chzzk-live.service';
   controllers: [StreamersController],
   providers: [
     StreamersService,
-    StreamersRepository,
     ChzzkClient,
     StreamingRedisService,
     YoutubeApiService,

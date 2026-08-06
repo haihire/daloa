@@ -8,6 +8,7 @@ import {
   acquireLock,
   releaseLock,
   runIfLockAcquired,
+  CRON_JITTER_DAILY_SEC,
 } from '../common/cron-lock.util';
 import { todayKst } from '../common/kst-date.util';
 import { REDIS_CLIENT } from '../redis/redis.module';
@@ -185,8 +186,12 @@ export class KakaoService {
   async checkRefreshTokenExpiry(): Promise<void> {
     // PM2 cluster 두 워커가 동시에 리프레시 토큰을 갱신하면 토큰 로테이션이
     // 꼬여(한쪽이 방금 무효화된 토큰으로 재시도) 카톡 알림이 완전히 끊길 수 있음 — 락으로 차단.
-    await runIfLockAcquired(this.redis, 'kakaoRefreshTokenCheck', () =>
-      this.checkRefreshTokenExpiryJob(),
+    await runIfLockAcquired(
+      this.redis,
+      'kakaoRefreshTokenCheck',
+      () => this.checkRefreshTokenExpiryJob(),
+      60,
+      CRON_JITTER_DAILY_SEC,
     );
   }
 

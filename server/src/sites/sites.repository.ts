@@ -7,11 +7,11 @@ export interface SiteRecord {
   href: string;
   category: string | null;
   description: string | null;
+  icon: string | null;
   clickCount: number;
 }
 
 export interface AdminSiteRecord extends SiteRecord {
-  icon: string | null;
   is_active: number;
   click_count: number;
 }
@@ -46,7 +46,12 @@ export class SitesRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findActive(): Promise<SiteRecord[]> {
-    // 각 사이트의 클릭수(apm_site_clicks)를 href 기준으로 LEFT JOIN해 인기 순위 산출에 사용
+    // 각 사이트의 클릭수(apm_site_clicks)를 site_idx 기준으로 LEFT JOIN해 인기 순위 산출에 사용.
+    // href가 아니라 site_idx로 잡는 이유: href/category는 관리자가 나중에 바꿀 수 있는 값이라
+    // 조인 키로 쓰면 사이트 이름이 바뀐 시점 전후로 클릭이 갈라진다. site_idx(loa_sites.seq)는
+    // 사이트 개설 후 절대 안 바뀌므로 이걸로 묶어야 클릭수가 항상 사이트 하나로 합산된다.
+    // 정렬도 여기서 클릭수 내림차순으로 미리 해둔다 — 이 결과가 그대로 Redis 캐시(sites:all)에
+    // 저장되므로 클라이언트(SiteList)가 매 렌더마다 다시 정렬할 필요가 없다.
     const rows = await this.prisma.$queryRaw<
       Array<{
         seq: bigint;
@@ -54,16 +59,17 @@ export class SitesRepository {
         href: string;
         category: string | null;
         description: string | null;
+        icon: string | null;
         click_count: bigint;
       }>
     >`
-      SELECT s.seq, s.name, s.href, s.category, s.description,
+      SELECT s.seq, s.name, s.href, s.category, s.description, s.icon,
              COUNT(c.id) AS click_count
       FROM loa_sites s
-      LEFT JOIN apm_site_clicks c ON c.site_href = s.href
+      LEFT JOIN apm_site_clicks c ON c.site_idx = s.seq
       WHERE s.is_active = true
-      GROUP BY s.seq, s.name, s.href, s.category, s.description
-      ORDER BY s.seq ASC
+      GROUP BY s.seq, s.name, s.href, s.category, s.description, s.icon
+      ORDER BY click_count DESC, s.seq ASC
     `;
     return rows.map((row) => ({
       seq: Number(row.seq),
@@ -71,12 +77,13 @@ export class SitesRepository {
       href: row.href,
       category: row.category,
       description: row.description,
+      icon: row.icon,
       clickCount: Number(row.click_count),
     }));
   }
 
   async findAdminAll(): Promise<AdminSiteRecord[]> {
-    // 각 사이트의 클릭수(apm_site_clicks)를 href 기준으로 LEFT JOIN해 함께 반환
+    // 각 사이트의 클릭수(apm_site_clicks)를 site_idx 기준으로 LEFT JOIN해 함께 반환 (findActive 참고)
     const rows = await this.prisma.$queryRaw<
       Array<{
         seq: bigint;
@@ -92,7 +99,7 @@ export class SitesRepository {
       SELECT s.seq, s.name, s.href, s.category, s.description, s.icon, s.is_active,
              COUNT(c.id) AS click_count
       FROM loa_sites s
-      LEFT JOIN apm_site_clicks c ON c.site_href = s.href
+      LEFT JOIN apm_site_clicks c ON c.site_idx = s.seq
       GROUP BY s.seq, s.name, s.href, s.category, s.description, s.icon, s.is_active
       ORDER BY s.seq ASC
     `;
@@ -139,7 +146,7 @@ export class SitesRepository {
            ) AS d(day)
       LEFT JOIN loa_sites s ON s.seq = ${seq}
       LEFT JOIN apm_site_clicks c
-        ON c.site_href = s.href
+        ON c.site_idx = s.seq
        AND c.created_at >= d.day::timestamp AT TIME ZONE 'Asia/Seoul'
        AND c.created_at < (d.day + INTERVAL '1 day') AT TIME ZONE 'Asia/Seoul'
       GROUP BY d.day
@@ -157,10 +164,10 @@ export class SitesRepository {
     const rows = await this.prisma.$queryRaw<Array<{ max_daily: bigint }>>`
       SELECT COALESCE(MAX(cnt), 0) AS max_daily
       FROM (
-        SELECT site_href, (created_at AT TIME ZONE 'Asia/Seoul')::date AS d, COUNT(*) AS cnt
+        SELECT site_idx, (created_at AT TIME ZONE 'Asia/Seoul')::date AS d, COUNT(*) AS cnt
         FROM apm_site_clicks
         WHERE created_at >= ((NOW() AT TIME ZONE 'Asia/Seoul')::date - ((${days}::int - 1) * INTERVAL '1 day')) AT TIME ZONE 'Asia/Seoul'
-        GROUP BY site_href, (created_at AT TIME ZONE 'Asia/Seoul')::date
+        GROUP BY site_idx, (created_at AT TIME ZONE 'Asia/Seoul')::date
       ) t
     `;
     return Number(rows[0]?.max_daily ?? 0);
@@ -175,22 +182,10 @@ export class SitesRepository {
   }
 
   async update(seq: number, input: SiteUpdateInput): Promise<void> {
-    // 이름/URL 변경 시 클릭 로그(apm_site_clicks)도 동기화 — 기존 href로 매칭 후 갱신.
-    // href가 바뀌어도 과거 클릭 이력이 새 URL에 그대로 연결되도록 함.
-    if (input.name !== undefined || input.href !== undefined) {
-      const current = await this.prisma.loa_sites.findUnique({
-        where: { seq },
-        select: { href: true },
-      });
-      if (current) {
-        await this.prisma.$executeRaw`
-          UPDATE apm_site_clicks
-          SET site_name = COALESCE(${input.name ?? null}, site_name),
-              site_href = COALESCE(${input.href ?? null}, site_href)
-          WHERE site_href = ${current.href}
-        `;
-      }
-    }
+    // 클릭 로그(apm_site_clicks)는 site_idx로 조인되므로 이름/URL/카테고리를 바꿔도
+    // 별도 동기화가 필요 없다 — site_idx(=seq)는 이 사이트가 존재하는 한 절대 바뀌지 않는다.
+    // (예전엔 site_href로 apm_site_clicks를 찾아 site_name/site_href만 손으로 갱신했는데,
+    // site_category는 놓쳐서 카테고리를 바꾸면 클릭 상위 목록에 같은 사이트가 두 줄로 쪼개졌다.)
     await this.prisma.loa_sites.update({
       where: { seq },
       data: input,

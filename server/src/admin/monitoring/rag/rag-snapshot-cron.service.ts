@@ -2,7 +2,10 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import type { Redis } from 'ioredis';
 import { REDIS_CLIENT } from '../../../redis/redis.module';
-import { runIfLockAcquired } from '../../../common/cron-lock.util';
+import {
+  runIfLockAcquired,
+  CRON_JITTER_DAILY_SEC,
+} from '../../../common/cron-lock.util';
 import { RagWriterService } from './rag-writer.service';
 
 @Injectable()
@@ -24,22 +27,28 @@ export class RagSnapshotCronService {
    */
   @Cron('0 4 * * 1', { timeZone: 'Asia/Seoul' })
   async runWeeklySnapshot() {
-    await runIfLockAcquired(this.redis, 'ragWeeklySnapshot', async () => {
-      this.logger.log('주간 운영 스냅샷 생성 시작');
-      try {
-        const result = await this.writer.generateWeeklySnapshot();
-        if (result.created) {
-          this.logger.log(
-            `스냅샷 생성 완료: ${result.title} (청크 ${result.chunks}개)`,
+    await runIfLockAcquired(
+      this.redis,
+      'ragWeeklySnapshot',
+      async () => {
+        this.logger.log('주간 운영 스냅샷 생성 시작');
+        try {
+          const result = await this.writer.generateWeeklySnapshot();
+          if (result.created) {
+            this.logger.log(
+              `스냅샷 생성 완료: ${result.title} (청크 ${result.chunks}개)`,
+            );
+          } else {
+            this.logger.log(`스냅샷 건너뜀: ${result.reason}`);
+          }
+        } catch (e) {
+          this.logger.error(
+            `주간 스냅샷 생성 실패: ${e instanceof Error ? e.message : e}`,
           );
-        } else {
-          this.logger.log(`스냅샷 건너뜀: ${result.reason}`);
         }
-      } catch (e) {
-        this.logger.error(
-          `주간 스냅샷 생성 실패: ${e instanceof Error ? e.message : e}`,
-        );
-      }
-    });
+      },
+      60,
+      CRON_JITTER_DAILY_SEC,
+    );
   }
 }
