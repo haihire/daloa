@@ -48,15 +48,17 @@ model apm_request_timings {
 }
 
 model apm_site_clicks {
-  id            BigInt   @id(map: "idx_16530_primary") @default(autoincrement())
-  site_name     String
-  site_href     String
-  site_category String   @default("unknown")
-  device_type   String   @default("unknown")
-  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  id          BigInt     @id(map: "idx_16530_primary") @default(autoincrement())
+  device_type String     @default("unknown")
+  created_at  DateTime   @default(now()) @db.Timestamptz(6)
+  /// loa_sites.seq FK. 이름/URL/카테고리는 loa_sites가 유일한 원본이라 여기엔 스냅샷을
+  /// 두지 않는다(정규화) — 표시할 땐 항상 loa_sites를 조인해서 최신값을 가져온다.
+  /// 사이트가 삭제되면 SET NULL: 클릭 개수는 남지만 어떤 사이트였는지는 더는 알 수 없다.
+  site_idx    BigInt?
+  loa_sites   loa_sites? @relation(fields: [site_idx], references: [seq], onDelete: SetNull, map: "fk_apm_site_clicks_site_idx")
 
   @@index([created_at], map: "idx_16530_idx_created_at")
-  @@index([site_href], map: "idx_16530_idx_site_href")
+  @@index([site_idx], map: "idx_16530_idx_site_idx")
 }
 
 model apm_youtube_clicks {
@@ -71,69 +73,133 @@ model apm_youtube_clicks {
   @@index([video_id], map: "idx_16546_idx_video_id")
 }
 
-model loa_ark_grid {
-  seq                                         BigInt      @id(map: "idx_16557_primary") @default(autoincrement())
-  core                                        String?
-  star                                        String?
-  class                                       BigInt?
-  order                                       Int?
-  loa_class                                   loa_class?  @relation(fields: [class], references: [idx], map: "FK_loa_ark_grid_lost_ark.loa_class")
-  loa_users_loa_users_core_moonToloa_ark_grid loa_users[] @relation("loa_users_core_moonToloa_ark_grid")
-  loa_users_loa_users_core_starToloa_ark_grid loa_users[] @relation("loa_users_core_starToloa_ark_grid")
-  loa_users_loa_users_core_sunToloa_ark_grid  loa_users[] @relation("loa_users_core_sunToloa_ark_grid")
+/// RUM(실사용자) 페이지 로딩 측정값. monitoring.repository.ts의 ensureMonitoringTables()가
+/// 부팅 시 CREATE TABLE IF NOT EXISTS로 만든다 — 여기 모델은 DB와 동기화된 참고용이며,
+/// 컬럼을 바꾸려면 이 파일이 아니라 db-migrations/에 ALTER를 추가할 것.
+model apm_page_load_timings {
+  id          BigInt   @id @default(autoincrement())
+  source      String   @default("rum") @db.VarChar(16)
+  path        String   @default("/") @db.VarChar(255)
+  device_type String   @default("unknown") @db.VarChar(16)
+  ttfb_ms     Int?
+  dcl_ms      Int?
+  lcp_ms      Int?
+  load_ms     Int?
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
 
-  @@index([class], map: "idx_16557_FK_loa_ark_grid_lost_ark.loa_class")
+  @@index([created_at], map: "idx_apm_page_load_timings_created_at")
+  @@index([source, created_at], map: "idx_apm_page_load_timings_source_created_at")
 }
 
-model loa_class {
-  idx             BigInt         @id(map: "idx_16564_primary") @default(autoincrement())
-  class_engraving String?
-  class_root      String?
-  gender          String?
-  class_detail    String?
-  loa_ark_grid    loa_ark_grid[]
-  loa_users       loa_users[]
+/// 서비스 변경(재시작/배포) 이벤트 로그. ensureMonitoringTables() 참고(위 주석과 동일).
+model container_events {
+  id          BigInt   @id @default(autoincrement())
+  service     String   @db.VarChar(16)
+  event_type  String   @db.VarChar(24)
+  detail      String?  @db.VarChar(500)
+  occurred_at DateTime @db.Timestamptz(6)
+  detected_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([service, occurred_at], map: "idx_container_events_service_occurred_at")
+}
+
+/// 애플리케이션 에러 로그(AllExceptionsFilter가 기록). ensureMonitoringTables() 참고(위 주석과 동일).
+model error_logs {
+  id          BigInt   @id @default(autoincrement())
+  status_code Int      @db.SmallInt
+  error_name  String   @db.VarChar(80)
+  method      String   @db.VarChar(10)
+  path        String   @db.VarChar(512)
+  message     String?
+  stack       String?
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at(sort: Desc)], map: "idx_error_logs_created_at")
+  @@index([status_code, created_at(sort: Desc)], map: "idx_error_logs_status_created_at")
+}
+
+/// 컨테이너별 CPU/메모리 샘플(nest/nginx/postgres/redis 4종, 5분 간격).
+/// 4개 테이블이 컬럼 구조는 동일하고 이름만 다르다 — ensureMonitoringTables() 참고(위 주석과 동일).
+model docker_metrics_nest {
+  id           BigInt   @id @default(autoincrement())
+  cpu_percent  Decimal  @db.Decimal(5, 2)
+  mem_used_mb  Int
+  mem_total_mb Int
+  mem_percent  Decimal  @db.Decimal(5, 2)
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_docker_nest_created_at")
+}
+
+model docker_metrics_nginx {
+  id           BigInt   @id @default(autoincrement())
+  cpu_percent  Decimal  @db.Decimal(5, 2)
+  mem_used_mb  Int
+  mem_total_mb Int
+  mem_percent  Decimal  @db.Decimal(5, 2)
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_docker_nginx_created_at")
+}
+
+model docker_metrics_postgres {
+  id           BigInt   @id @default(autoincrement())
+  cpu_percent  Decimal  @db.Decimal(5, 2)
+  mem_used_mb  Int
+  mem_total_mb Int
+  mem_percent  Decimal  @db.Decimal(5, 2)
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_docker_postgres_created_at")
+}
+
+model docker_metrics_redis {
+  id           BigInt   @id @default(autoincrement())
+  cpu_percent  Decimal  @db.Decimal(5, 2)
+  mem_used_mb  Int
+  mem_total_mb Int
+  mem_percent  Decimal  @db.Decimal(5, 2)
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_docker_redis_created_at")
+}
+
+/// 호스트 전체 자원의 5분 스냅샷(컨테이너 4종 + 도커 오버헤드 + OS 기타 + 호스트 총합).
+/// ensureMonitoringTables() 참고(위 주석과 동일).
+model host_resource_breakdown {
+  id                          BigInt   @id @default(autoincrement())
+  nest_cpu_percent            Decimal  @db.Decimal(5, 2)
+  nest_mem_used_mb            Int
+  nginx_cpu_percent           Decimal  @db.Decimal(5, 2)
+  nginx_mem_used_mb           Int
+  redis_cpu_percent           Decimal  @db.Decimal(5, 2)
+  redis_mem_used_mb           Int
+  postgres_cpu_percent        Decimal  @db.Decimal(5, 2)
+  postgres_mem_used_mb        Int
+  docker_overhead_cpu_percent Decimal  @db.Decimal(5, 2)
+  docker_overhead_mem_mb      Int
+  os_other_cpu_percent        Decimal  @db.Decimal(5, 2)
+  os_other_mem_mb             Int
+  host_cpu_percent            Decimal  @db.Decimal(5, 2)
+  host_mem_used_mb            Int
+  host_mem_total_mb           Int
+  created_at                  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_host_resource_breakdown_created_at")
 }
 
 model loa_sites {
-  seq         BigInt    @id(map: "idx_16576_primary") @default(autoincrement())
-  name        String
-  href        String    @unique(map: "idx_16576_uq_href")
-  category    String?
-  description String?
-  icon        String?
-  is_active   Boolean?  @default(true)
-  last_title  String?
-  last_status Int?
-  checked_at  DateTime? @db.Timestamptz(6)
-}
-
-model loa_users {
-  seq                                            BigInt        @id(map: "idx_16584_primary") @default(autoincrement())
-  server                                         String?
-  level                                          Float?
-  combat_power                                   Decimal?      @db.Decimal(10, 2)
-  class                                          BigInt?
-  thesix                                         Int?
-  name                                           String?       @unique(map: "idx_16584_uq_name")
-  expedition_key                                 String?
-  core_sun                                       BigInt?
-  core_moon                                      BigInt?
-  core_star                                      BigInt?
-  stat_crit                                      Int           @default(0)
-  stat_spec                                      Int           @default(0)
-  stat_swift                                     Int           @default(0)
-  stat_build                                     String?
-  loa_ark_grid_loa_users_core_moonToloa_ark_grid loa_ark_grid? @relation("loa_users_core_moonToloa_ark_grid", fields: [core_moon], references: [seq], map: "core_moons")
-  loa_ark_grid_loa_users_core_starToloa_ark_grid loa_ark_grid? @relation("loa_users_core_starToloa_ark_grid", fields: [core_star], references: [seq], map: "core_stars")
-  loa_ark_grid_loa_users_core_sunToloa_ark_grid  loa_ark_grid? @relation("loa_users_core_sunToloa_ark_grid", fields: [core_sun], references: [seq], map: "core_suns")
-  loa_class                                      loa_class?    @relation(fields: [class], references: [idx], map: "fk_users_class")
-
-  @@index([core_moon], map: "idx_16584_core_moon")
-  @@index([core_star], map: "idx_16584_core_star")
-  @@index([core_sun], map: "idx_16584_core_sun")
-  @@index([class], map: "idx_16584_fk_users_class")
-  @@index([stat_build], map: "idx_16584_idx_stat_build")
+  seq             BigInt            @id(map: "idx_16576_primary") @default(autoincrement())
+  name            String
+  href            String            @unique(map: "idx_16576_uq_href")
+  category        String?
+  description     String?
+  icon            String?
+  is_active       Boolean?          @default(true)
+  last_title      String?
+  last_status     Int?
+  checked_at      DateTime?         @db.Timestamptz(6)
+  apm_site_clicks apm_site_clicks[]
 }
 
 model inven_posts {
@@ -189,22 +255,6 @@ model user_feedbacks {
   first_seen_at DateTime? @db.Date
 
   @@index([created_at(sort: Desc)])
-}
-
-model youtube_view_snapshots {
-  id            BigInt   @id(map: "idx_16605_primary") @default(autoincrement())
-  video_id      String
-  title         String   @default("")
-  channel_title String   @default("")
-  thumbnail_url String   @default("")
-  published_at  DateTime @db.Timestamptz(6)
-  duration      String   @default("")
-  view_count    BigInt   @default(0)
-  recorded_date DateTime @db.Date
-
-  @@unique([video_id, recorded_date], map: "idx_16605_uk_video_date")
-  @@index([published_at], map: "idx_16605_idx_published_at")
-  @@index([recorded_date], map: "idx_16605_idx_recorded_date")
 }
 
 /// RAG 지식베이스 문서. append-only 스냅샷 — 생성 후 내용을 수정하지 않는다.
