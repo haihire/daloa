@@ -10,4 +10,4 @@
 --
 -- ⚠️ 배포 순서: 이 테이블을 참조하지 않는 새 서버 코드가 이미 배포된 뒤에 실행할 것.
 
-DROP TABLE IF EXISTS youtube_view_snapshots;
+DROP TABLE IF EXISTS lost_ark.youtube_view_snapshots;
