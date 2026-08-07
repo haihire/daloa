@@ -410,12 +410,14 @@ export default function MonitoringPage() {
         counters.iOS += row.count;
       else if (name.includes("mac")) counters.Mac += row.count;
     }
-    return toFixedHundred([
-      { osName: "Windows", count: counters.Windows },
-      { osName: "GNU/Linux", count: counters["GNU/Linux"] },
-      { osName: "iOS", count: counters.iOS },
-      { osName: "Mac", count: counters.Mac },
-    ]);
+    return toFixedHundred(
+      [
+        { osName: "Windows", count: counters.Windows },
+        { osName: "GNU/Linux", count: counters["GNU/Linux"] },
+        { osName: "iOS", count: counters.iOS },
+        { osName: "Mac", count: counters.Mac },
+      ].sort((a, b) => b.count - a.count),
+    );
   }, [data.osVisits]);
 
   const normalizeLabel = (value: string) =>
