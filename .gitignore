@@ -95,3 +95,5 @@ work-log/
 
 # 코드리뷰용 흐름 문서 (로컬 전용)
 code-review/
+
+security/
