@@ -355,7 +355,11 @@ function storedFavorites(): string[] {
   return JSON.parse(localStorage.getItem("loa_favorites") || "[]") as string[];
 }
 
-describe("SiteList 즐겨찾기 드래그 정렬", () => {
+function storedAllOrder(): string[] {
+  return JSON.parse(localStorage.getItem("loa_all_order") || "[]") as string[];
+}
+
+describe("SiteList 카드 드래그 정렬", () => {
   beforeEach(() => {
     localStorageMock.clear();
     Object.defineProperty(window, "localStorage", {
@@ -378,20 +382,57 @@ describe("SiteList 즐겨찾기 드래그 정렬", () => {
     expect(cardFor(container, "라마바")).toHaveAttribute("draggable", "true");
   });
 
-  it("즐겨찾기가 아닌 카드를 끌어도 즐겨찾기 순서는 바뀌지 않는다", () => {
+  it("전체 탭에서는 즐겨찾기가 아닌 카드도 옮길 수 있다", () => {
     localStorage.setItem("loa_favorites", JSON.stringify([A, B]));
     const { container } = render(<SiteList sites={DRAG_SITES} />);
     const dataTransfer = createDataTransfer();
     const list = container.querySelector("ul") as HTMLElement;
 
+    // 사아자(C)는 즐겨찾기가 아니지만 맨 앞으로 끌 수 있어야 한다
     fireEvent.dragStart(cardFor(container, "사아자"), { dataTransfer });
     fireEvent.dragEnter(cardFor(container, "가나다"), { dataTransfer });
     fireEvent.drop(list, { dataTransfer });
 
+    expect(storedAllOrder()).toEqual([C, A, B]);
+    expect(renderedOrder(container)).toEqual(["사아자", "가나다", "라마바"]);
+  });
+
+  it("전체 탭에서 끈 순서는 즐겨찾기를 건드리지 않고 따로 저장된다", () => {
+    localStorage.setItem("loa_favorites", JSON.stringify([A, B]));
+    const { container } = render(<SiteList sites={DRAG_SITES} />);
+    const dataTransfer = createDataTransfer();
+    const list = container.querySelector("ul") as HTMLElement;
+
+    fireEvent.dragStart(cardFor(container, "가나다"), { dataTransfer });
+    fireEvent.dragEnter(cardFor(container, "사아자"), { dataTransfer });
+    fireEvent.drop(list, { dataTransfer });
+
+    expect(storedAllOrder()).toEqual([B, C, A]);
     expect(storedFavorites()).toEqual([A, B]);
   });
 
+  it("저장된 전체 순서가 있으면 그대로 그려지고 새 사이트는 뒤에 붙는다", () => {
+    localStorage.setItem("loa_favorites", JSON.stringify([]));
+    // C, A 만 저장해둔 상태에서 B 가 새로 들어온 상황
+    localStorage.setItem("loa_all_order", JSON.stringify([C, A]));
+    const { container } = render(<SiteList sites={DRAG_SITES} />);
+
+    expect(renderedOrder(container)).toEqual(["사아자", "가나다", "라마바"]);
+  });
+
+  it("저장된 전체 순서에서 사라진 사이트는 버려진다", () => {
+    localStorage.setItem("loa_favorites", JSON.stringify([]));
+    localStorage.setItem(
+      "loa_all_order",
+      JSON.stringify([C, "https://없어진.test", A, B]),
+    );
+    const { container } = render(<SiteList sites={DRAG_SITES} />);
+
+    expect(renderedOrder(container)).toEqual(["사아자", "가나다", "라마바"]);
+  });
+
   it("첫 즐겨찾기를 마지막 위로 드래그해 놓으면 저장 순서가 바뀐다", () => {
+    localStorage.setItem("loa_active_view", "favorites");
     const { container } = render(<SiteList sites={DRAG_SITES} />);
     const dataTransfer = createDataTransfer();
     const list = container.querySelector("ul") as HTMLElement;
@@ -402,9 +443,12 @@ describe("SiteList 즐겨찾기 드래그 정렬", () => {
     fireEvent.drop(list, { dataTransfer });
 
     expect(storedFavorites()).toEqual([B, C, A]);
+    // 즐겨찾기 탭에서 끈 건 전체 순서에 새지 않는다
+    expect(storedAllOrder()).toEqual([]);
   });
 
   it("마지막 즐겨찾기를 맨 앞으로 드래그해 놓으면 저장 순서가 바뀐다", () => {
+    localStorage.setItem("loa_active_view", "favorites");
     const { container } = render(<SiteList sites={DRAG_SITES} />);
     const dataTransfer = createDataTransfer();
     const list = container.querySelector("ul") as HTMLElement;
@@ -425,6 +469,7 @@ describe("SiteList 즐겨찾기 드래그 정렬", () => {
     fireEvent.dragEnter(cardFor(container, "사아자"), { dataTransfer });
 
     expect(renderedOrder(container)).toEqual(["라마바", "사아자", "가나다"]);
+    expect(storedAllOrder()).toEqual([]);
     expect(storedFavorites()).toEqual([A, B, C]);
   });
 
@@ -438,21 +483,9 @@ describe("SiteList 즐겨찾기 드래그 정렬", () => {
     // 목록 밖에서 손을 뗀 상황: drop 없이 dragEnd만 발생
     fireEvent.dragEnd(dragged, { dataTransfer });
 
+    expect(storedAllOrder()).toEqual([]);
     expect(storedFavorites()).toEqual([A, B, C]);
     expect(renderedOrder(container)).toEqual(["가나다", "라마바", "사아자"]);
-  });
-
-  it("즐겨찾기가 아닌 카드 위로는 순서가 바뀌지 않는다", () => {
-    localStorage.setItem("loa_favorites", JSON.stringify([A, B]));
-    const { container } = render(<SiteList sites={DRAG_SITES} />);
-    const dataTransfer = createDataTransfer();
-    const list = container.querySelector("ul") as HTMLElement;
-
-    fireEvent.dragStart(cardFor(container, "가나다"), { dataTransfer });
-    fireEvent.dragEnter(cardFor(container, "사아자"), { dataTransfer });
-    fireEvent.drop(list, { dataTransfer });
-
-    expect(storedFavorites()).toEqual([A, B]);
   });
 });
 
@@ -623,5 +656,133 @@ describe("SiteList 프리셋", () => {
     expect(screen.getByText("가나다")).toBeInTheDocument();
     expect(screen.getByText("라마바")).toBeInTheDocument();
     expect(screen.getByText("사아자")).toBeInTheDocument();
+  });
+});
+
+/** 카드를 탭 위로 끌어다 놓는다 */
+function dropOnTab(card: HTMLElement, tab: HTMLElement) {
+  const dataTransfer = createDataTransfer();
+  fireEvent.dragStart(card, { dataTransfer });
+  fireEvent.dragOver(tab, { dataTransfer });
+  fireEvent.drop(tab, { dataTransfer });
+  fireEvent.dragEnd(card, { dataTransfer });
+}
+
+function favoritesTab(): HTMLElement {
+  return screen.getByRole("button", { name: "★ 즐겨찾기" });
+}
+
+describe("SiteList 탭에 끌어다 담기", () => {
+  beforeEach(() => {
+    localStorageMock.clear();
+    Object.defineProperty(window, "localStorage", {
+      value: localStorageMock,
+      writable: true,
+    });
+  });
+
+  afterEach(() => {
+    localStorageMock.clear();
+  });
+
+  it("전체 탭의 카드를 즐겨찾기 탭에 드롭하면 담긴다", () => {
+    const { container } = render(<SiteList sites={DRAG_SITES} />);
+
+    dropOnTab(cardFor(container, "라마바"), favoritesTab());
+
+    expect(storedFavorites()).toEqual([B]);
+  });
+
+  it("이미 즐겨찾기인 카드를 즐겨찾기 탭에 드롭하면 아무 일도 없다", () => {
+    localStorage.setItem("loa_favorites", JSON.stringify([A, B]));
+    const { container } = render(<SiteList sites={DRAG_SITES} />);
+
+    dropOnTab(cardFor(container, "라마바"), favoritesTab());
+
+    expect(storedFavorites()).toEqual([A, B]);
+  });
+
+  it("프리셋 탭의 카드를 즐겨찾기 탭에 드롭하면 담긴다", () => {
+    localStorage.setItem(
+      "loa_presets",
+      JSON.stringify([{ id: "p1", name: "레이드", hrefs: [C] }]),
+    );
+    localStorage.setItem("loa_active_view", "preset:p1");
+    const { container } = render(<SiteList sites={DRAG_SITES} />);
+
+    dropOnTab(cardFor(container, "사아자"), favoritesTab());
+
+    expect(storedFavorites()).toEqual([C]);
+    // 원래 있던 프리셋에서 빠지지는 않는다 — 담기지 옮기기가 아니다
+    expect(storedPresets()[0].hrefs).toEqual([C]);
+  });
+
+  it("즐겨찾기 탭의 카드를 프리셋 탭에 드롭하면 담긴다", () => {
+    localStorage.setItem("loa_favorites", JSON.stringify([A]));
+    localStorage.setItem(
+      "loa_presets",
+      JSON.stringify([{ id: "p1", name: "레이드", hrefs: [] }]),
+    );
+    localStorage.setItem("loa_active_view", "favorites");
+    const { container } = render(<SiteList sites={DRAG_SITES} />);
+
+    dropOnTab(
+      cardFor(container, "가나다"),
+      screen.getByRole("button", { name: "레이드" }),
+    );
+
+    expect(storedPresets()[0].hrefs).toEqual([A]);
+    expect(storedFavorites()).toEqual([A]);
+  });
+
+  it("프리셋 탭의 카드를 다른 프리셋 탭에 드롭하면 담긴다", () => {
+    localStorage.setItem(
+      "loa_presets",
+      JSON.stringify([
+        { id: "p1", name: "레이드", hrefs: [A] },
+        { id: "p2", name: "숙제", hrefs: [] },
+      ]),
+    );
+    localStorage.setItem("loa_active_view", "preset:p1");
+    const { container } = render(<SiteList sites={DRAG_SITES} />);
+
+    dropOnTab(
+      cardFor(container, "가나다"),
+      screen.getByRole("button", { name: "숙제" }),
+    );
+
+    expect(storedPresets()[1].hrefs).toEqual([A]);
+    expect(storedPresets()[0].hrefs).toEqual([A]);
+  });
+
+  it("이미 담긴 프리셋 탭에 다시 드롭하면 아무 일도 없다", () => {
+    localStorage.setItem(
+      "loa_presets",
+      JSON.stringify([{ id: "p1", name: "레이드", hrefs: [A] }]),
+    );
+    localStorage.setItem("loa_active_view", "preset:p1");
+    const { container } = render(<SiteList sites={DRAG_SITES} />);
+
+    dropOnTab(
+      cardFor(container, "가나다"),
+      screen.getByRole("button", { name: "레이드" }),
+    );
+
+    expect(storedPresets()[0].hrefs).toEqual([A]);
+  });
+
+  // 전체는 모든 사이트가 이미 들어 있는 뷰라 "여기에 담는다"가 성립하지 않는다.
+  it("전체 탭은 드롭을 받지 않는다", () => {
+    localStorage.setItem("loa_favorites", JSON.stringify([A]));
+    localStorage.setItem("loa_active_view", "favorites");
+    const { container } = render(<SiteList sites={DRAG_SITES} />);
+
+    dropOnTab(
+      cardFor(container, "가나다"),
+      screen.getByRole("button", { name: "전체" }),
+    );
+
+    expect(storedFavorites()).toEqual([A]);
+    expect(storedAllOrder()).toEqual([]);
   });
 });

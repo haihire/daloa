@@ -8,6 +8,7 @@ import PresetPicker from "./PresetPicker";
 import {
   VIEW_ALL,
   VIEW_FAVORITES,
+  allViewOrder,
   createPresetId,
   moveItem,
   normalizePresetName,
@@ -16,6 +17,7 @@ import {
   readServerStore,
   readStore,
   saveActiveView,
+  saveAllOrder,
   saveFavorites,
   savePresets,
   subscribeStore,
@@ -64,7 +66,7 @@ function StarIcon({ filled }: { filled: boolean }) {
 
 export default function SiteList({ sites }: Props) {
   // SSR/CSR 초기 스냅샷을 일치시켜 hydration mismatch를 방지한다.
-  const { favorites, presets, activeView } = useSyncExternalStore(
+  const { favorites, presets, activeView, allOrder } = useSyncExternalStore(
     subscribeStore,
     readStore,
     readServerStore,
@@ -87,39 +89,35 @@ export default function SiteList({ sites }: Props) {
   const view: ActiveView =
     activePresetId && !activePreset ? VIEW_ALL : activeView;
 
-  // 지금 화면에서 드래그로 순서를 바꿀 수 있는 배열.
-  // 프리셋 탭이면 그 프리셋의 순서, 그 외에는 즐겨찾기 순서.
-  const baseOrder = activePreset ? activePreset.hrefs : favorites;
-  const order = dragOrder ?? baseOrder;
-  const favoriteOrder = activePreset ? favorites : order;
   const favSet = new Set(favorites);
-
   const byHref = new Map(sites.map((site) => [site.href, site]));
   const pickSites = (hrefs: string[]): Site[] =>
     hrefs
       .map((href) => byHref.get(href))
       .filter((site): site is Site => site !== undefined);
 
-  let visible: Site[];
-  if (activePreset) {
-    visible = pickSites(order);
-  } else if (view === VIEW_FAVORITES) {
-    visible = pickSites(favoriteOrder);
-  } else {
-    // 전체: 즐겨찾기가 저장 순서대로 위, 나머지는 원래 서버 순서
-    visible = [
-      ...pickSites(favoriteOrder),
-      ...sites.filter((site) => !favSet.has(site.href)),
-    ];
-  }
+  // 지금 화면에서 드래그로 순서를 바꿀 수 있는 배열. 세 뷰 모두 "보이는 목록 = 이 배열"이라
+  // 어느 탭에 있든 카드를 자유롭게 옮길 수 있고, 저장되는 곳만 뷰마다 다르다.
+  const baseOrder = activePreset
+    ? activePreset.hrefs
+    : view === VIEW_FAVORITES
+      ? favorites
+      : allViewOrder(
+          sites.map((site) => site.href),
+          allOrder,
+          favorites,
+        );
+  const visible = pickSites(dragOrder ?? baseOrder);
 
   const persistOrder = (next: string[]) => {
     if (activePreset) {
       savePresets(
         presets.map((p) => (p.id === activePreset.id ? { ...p, hrefs: next } : p)),
       );
-    } else {
+    } else if (view === VIEW_FAVORITES) {
       saveFavorites(next);
+    } else {
+      saveAllOrder(next);
     }
   };
 
@@ -171,7 +169,7 @@ export default function SiteList({ sites }: Props) {
     );
   };
 
-  /** 탭 위로 드롭 — 이미 들어있으면 그대로 둔다(토글이 아니라 담기). */
+  /** 프리셋 탭 위로 드롭 — 이미 들어있으면 그대로 둔다(토글이 아니라 담기). */
   const addSiteToPreset = (presetId: string, href: string) => {
     const target = presets.find((p) => p.id === presetId);
     if (!target || target.hrefs.includes(href)) return;
@@ -182,6 +180,18 @@ export default function SiteList({ sites }: Props) {
       ),
     );
     gaEvent("preset_add_site", { site_href: href });
+  };
+
+  /** 즐겨찾기 탭 위로 드롭 — 프리셋과 같게 이미 있으면 아무 일도 하지 않는다. */
+  const addSiteToFavorites = (href: string) => {
+    if (favorites.includes(href)) return;
+
+    saveFavorites([...favorites, href]);
+    gaEvent("favorite_toggle", {
+      site_name: byHref.get(href)?.name ?? href,
+      site_href: href,
+      action: "add",
+    });
   };
 
   const handleDragStart = (href: string, e: React.DragEvent) => {
@@ -256,6 +266,7 @@ export default function SiteList({ sites }: Props) {
         onRename={renamePreset}
         onDelete={deletePreset}
         onDropSite={addSiteToPreset}
+        onDropFavorite={addSiteToFavorites}
       />
 
       <div className="border-b border-slate-200/70 px-3 py-2 dark:border-slate-700/70">
