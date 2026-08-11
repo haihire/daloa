@@ -41,6 +41,11 @@ const PYTHON_BIN =
 // 크론이 새벽 4회(02~05시)라 4 × 1,200 = 4,800건 — 최대치에도 여유가 있다.
 const INVEN_MAX_DETAIL = Number(process.env.INVEN_MAX_DETAIL ?? 1200);
 
+// 댓글 수집 on/off. 링크는 본문보다 댓글에 훨씬 많이 달려서 사이트 추천의 주 재료다.
+// 끄면 게시글당 요청이 2 → 1로 줄지만, 추천 후보도 같이 마른다.
+// (본문과 동시에 요청하므로 켜도 런 시간은 거의 안 늘어난다)
+const INVEN_COLLECT_COMMENTS = process.env.INVEN_COLLECT_COMMENTS !== '0';
+
 export interface PipelineStatus {
   running: boolean;
   step: string; // 현재 단계 이름
@@ -160,7 +165,10 @@ export class AdminInvenPipelineService {
       this.setStep(0, '크롤링 진행 중...');
       this.logger.log(`[크롤링] 시작 (${label})`);
       const posts = await this.crawl(date);
-      this.logger.log(`[크롤링] 완료 — 게시글 ${posts.length}개`);
+      const comments = posts.reduce((s, p) => s + (p.comments?.length ?? 0), 0);
+      this.logger.log(
+        `[크롤링] 완료 — 게시글 ${posts.length}개, 댓글 ${comments}개`,
+      );
 
       // 2) DB 저장 (Nest — Prisma upsert)
       this.setStep(1, 'DB 저장 진행 중...');
@@ -202,6 +210,7 @@ export class AdminInvenPipelineService {
   private async crawl(date: string | null): Promise<CrawledPost[]> {
     const scriptPath = join(SITE_FINDER_DIR, 'crawl.py');
     const args = [scriptPath];
+    if (!INVEN_COLLECT_COMMENTS) args.push('--no-comments');
     if (date) {
       // 수동 날짜 백필: 본문 전체 수집(캡 해제)
       args.push('--date', date);
@@ -213,12 +222,16 @@ export class AdminInvenPipelineService {
       // 증분: 본문 fetch는 캡으로 제한(목록 메타는 전체 저장 → since_id 정상 전진)
       args.push('--max-detail', String(INVEN_MAX_DETAIL));
       this.logger.log(
-        `[크롤링] 증분 기준 since free=${maxIds.free ?? 0} tip=${maxIds.tip ?? 0} maxDetail=${INVEN_MAX_DETAIL}`,
+        `[크롤링] 증분 기준 since free=${maxIds.free ?? 0} tip=${maxIds.tip ?? 0} ` +
+          `maxDetail=${INVEN_MAX_DETAIL} comments=${INVEN_COLLECT_COMMENTS}`,
       );
     }
     const { stdout } = await execFileAsync(PYTHON_BIN, args, {
       timeout: 60 * 60 * 1000, // 최대 1시간
-      maxBuffer: 256 * 1024 * 1024, // 256MB (수천 게시글 JSON 대비)
+      // 256MB. stdout 전체를 문자열로 모은 뒤 JSON.parse 하므로 실제 메모리는 페이로드의
+      // 2~3배가 잠깐 뜬다. 댓글 원문까지 실리면서 런당 수 MB 수준이 됐다(캡 1200글 기준).
+      // 캡 해제(--max-detail 0) 백필은 이 값에 가까워질 수 있으니 날짜를 쪼개 돌릴 것.
+      maxBuffer: 256 * 1024 * 1024,
       env: { ...process.env },
     });
     const parsed = JSON.parse(stdout) as {

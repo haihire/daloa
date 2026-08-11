@@ -96,10 +96,15 @@ function CandidatesTab({
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
-  const load = async () => {
+  // 언급 1회짜리 후보까지 볼지 (기본은 2회 이상 — 1회성 뉴스·쇼핑 링크 노이즈가 많다)
+  const [includeSingle, setIncludeSingle] = useState(false);
+
+  const load = async (minMentions = includeSingle ? 1 : 2) => {
     setLoading(true);
     try {
-      const d = await apiFetch("/site-candidates?status=pending");
+      const d = await apiFetch(
+        `/site-candidates?status=pending&minMentions=${minMentions}`,
+      );
       setCandidates((d.candidates as SiteCandidate[]) ?? []);
       setError("");
     } catch (e) {
@@ -110,8 +115,9 @@ function CandidatesTab({
   };
 
   useEffect(() => {
-    load();
-  }, []);
+    load(includeSingle ? 1 : 2);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [includeSingle]);
 
   // 백드롭 클릭으로 모달을 닫되, "프레스를 백드롭에서 시작"한 경우에만 닫는다.
   // (입력칸 텍스트를 드래그 선택하다 마우스를 백드롭에서 떼면 click 타깃이
@@ -194,12 +200,23 @@ function CandidatesTab({
         <p className="text-sm text-[color:var(--admin-muted)]">
           검토 대기 {candidates.length}개
         </p>
-        <button
-          onClick={load}
-          className="text-xs text-blue-500 hover:underline"
-        >
-          새로고침
-        </button>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-[color:var(--admin-muted)] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeSingle}
+              onChange={(e) => setIncludeSingle(e.target.checked)}
+              className="cursor-pointer"
+            />
+            1회 언급 포함
+          </label>
+          <button
+            onClick={() => load()}
+            className="text-xs text-blue-500 hover:underline"
+          >
+            새로고침
+          </button>
+        </div>
       </div>
 
       {error && <p className="text-red-500 text-sm">{error}</p>}
@@ -210,6 +227,12 @@ function CandidatesTab({
           <p className="text-xs text-[color:var(--admin-muted)] mt-2">
             수집이 돌면 인벤에서 언급된 신규 사이트 후보가 여기에 모입니다.
           </p>
+          {!includeSingle && (
+            <p className="text-xs text-[color:var(--admin-muted)] mt-1">
+              언급 1회짜리는 기본으로 숨겨집니다 — 위 &quot;1회 언급 포함&quot;을
+              켜보세요.
+            </p>
+          )}
         </div>
       )}
 

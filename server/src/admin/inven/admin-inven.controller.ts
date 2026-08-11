@@ -40,10 +40,21 @@ export class AdminInvenController {
     return this.pipeline.getStatus();
   }
 
-  /** 추출된 사이트 후보 목록 (검토 대기 / 추가됨 / 거부됨). */
+  /**
+   * 추출된 사이트 후보 목록 (검토 대기 / 추가됨 / 거부됨).
+   * minMentions: 노출 임계값(누적 언급 글 수). 미지정이면 저장소 기본값(2),
+   * 관리자 화면의 "1회 언급 포함" 토글이 1을 보낸다.
+   */
   @Get('site-candidates')
-  async getSiteCandidates(@Query('status') status = 'pending') {
-    const candidates = await this.invenRepo.getSiteCandidates(status);
+  async getSiteCandidates(
+    @Query('status') status = 'pending',
+    @Query('minMentions') minMentions?: string,
+  ) {
+    const parsed = Number.parseInt(minMentions ?? '', 10);
+    const candidates = await this.invenRepo.getSiteCandidates(
+      status,
+      Number.isFinite(parsed) && parsed >= 1 ? parsed : undefined,
+    );
     return { candidates };
   }
 

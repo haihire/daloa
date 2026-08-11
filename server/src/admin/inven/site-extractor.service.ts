@@ -5,6 +5,8 @@ export interface CrawledComment {
   text: string;
   date: string;
   recommend: number;
+  /** 댓글 안 <a href> 절대 URL. 크롤러가 채운다(구버전 데이터엔 없을 수 있음). */
+  links?: string[];
 }
 
 export interface CrawledPost {
@@ -18,6 +20,8 @@ export interface CrawledPost {
   views: number;
   likes: number;
   content: string | null;
+  /** 본문 안 <a href> 절대 URL. 본문 텍스트에는 앵커 속성이 안 남아서 따로 받는다. */
+  links?: string[];
   comments: CrawledComment[];
 }
 
@@ -68,7 +72,8 @@ const EXCLUDE_DOMAINS = new Set([
 ]);
 
 // 증분 크롤은 실행 배치가 작아(2시간치) 배치별 임계값을 두면 저빈도 사이트를 놓친다.
-// → extract는 1회 이상이면 후보로 만들어 누적시키고, 노출 임계값(누적 ≥2)은 조회 시점에 적용.
+// → extract는 1회 이상이면 후보로 만들어 누적시키고, 노출 임계값(기본 누적 ≥2)은
+//   조회 시점에 적용한다(관리자 화면에서 1회짜리까지 볼지 토글 가능).
 const MIN_MENTIONS = 1;
 const URL_RE = /https?:\/\/[^\s"<>)\]}]+/g;
 
@@ -108,6 +113,23 @@ export class SiteExtractorService {
     return parts.length >= 2 ? parts.slice(-2).join('.') : domain;
   }
 
+  /**
+   * URL 스캔 대상 문자열들: 본문 텍스트 + 본문 링크 + 댓글 텍스트 + 댓글 링크.
+   *
+   * 링크(href)를 텍스트와 따로 받는 이유 — 크롤러가 본문을 get_text()로 뽑기 때문에
+   * `<a href="...">여기</a>` 같은 링크는 텍스트에 URL이 아예 안 남는다.
+   */
+  private scanTargets(post: CrawledPost): string[] {
+    const parts: string[] = [];
+    if (post.content) parts.push(post.content);
+    if (post.links?.length) parts.push(post.links.join('\n'));
+    for (const c of post.comments ?? []) {
+      if (c.text) parts.push(c.text);
+      if (c.links?.length) parts.push(c.links.join('\n'));
+    }
+    return parts;
+  }
+
   private isExcluded(domain: string): boolean {
     return (
       EXCLUDE_DOMAINS.has(domain) ||
@@ -133,9 +155,15 @@ export class SiteExtractorService {
     >();
 
     for (const post of posts) {
-      // 본문만 스캔 (댓글은 더 이상 수집하지 않음)
-      const blob = post.content ?? '';
-      const matches = blob.match(URL_RE) ?? [];
+      const matches = this.scanTargets(post).flatMap(
+        (blob) => blob.match(URL_RE) ?? [],
+      );
+
+      // 같은 글에서 같은 도메인이 여러 번 나와도 1회로 센다.
+      // 댓글까지 스캔하면서 한 글에 스티커·짤 링크가 수십 번 반복되는 경우가 생겼는데,
+      // 그걸 그대로 세면 노출 임계값(누적 2회)이 글 하나로 뚫린다.
+      // => mention_count = "이 도메인을 언급한 글 수" 로 의미를 고정한다.
+      const seenInPost = new Set<string>();
 
       for (const match of matches) {
         // URL 끝의 구두점·괄호·zero-width space(U+200B) 제거
@@ -147,7 +175,10 @@ export class SiteExtractorService {
           entry = { count: 0, urls: new Set(), samplePost: null };
           agg.set(domain, entry);
         }
-        entry.count += 1;
+        if (!seenInPost.has(domain)) {
+          seenInPost.add(domain);
+          entry.count += 1;
+        }
         entry.urls.add(raw);
         if (entry.samplePost === null) entry.samplePost = post.post_id;
       }

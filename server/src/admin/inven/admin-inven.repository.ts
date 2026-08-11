@@ -3,10 +3,15 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { chunk } from '../../common/sql-batch.util';
 import type { CrawledPost, SiteCandidateDraft } from './site-extractor.service';
 
-// 한 번에 보낼 행 수. 게시글은 content(본문)가 커서 작게, 후보는 짧은 값뿐이라 크게.
-// Postgres 파라미터 상한(쿼리당 65,535)에도 여유가 있어야 한다 — 게시글은 행당 9개.
-const UPSERT_CHUNK_POSTS = 200;
+// 한 번에 보낼 행 수. 게시글은 content(본문)+comments(댓글 원문)가 커서 작게,
+// 후보는 짧은 값뿐이라 크게.
+// Postgres 파라미터 상한(쿼리당 65,535)에도 여유가 있어야 한다 — 게시글은 행당 10개.
+// 댓글이 붙으면서 행당 payload 가 커져 200 → 100 으로 낮췄다(쿼리 하나가 수 MB가 되는 것 방지).
+const UPSERT_CHUNK_POSTS = 100;
 const UPSERT_CHUNK_CANDIDATES = 500;
+
+/** 추천 후보 노출 기본 임계값(누적 언급 글 수). 관리자 화면에서 1까지 낮출 수 있다. */
+const DEFAULT_MIN_MENTIONS = 2;
 
 export interface InvenPost {
   id: bigint;
@@ -41,15 +46,19 @@ export class AdminInvenRepository {
 
   /**
    * 추천 사이트 후보 목록 (status별 필터). 기본은 검토 대기(pending).
-   * 노출 임계값: 누적 언급 2회 이상만 (1회성 URL 노이즈 숨김 — 증분 누적과 짝).
+   * 노출 임계값: 누적 언급 minMentions회 이상 (1회성 URL 노이즈 숨김 — 증분 누적과 짝).
+   * 관리자 화면의 "1회 언급 포함" 토글이 minMentions=1로 호출한다.
    */
-  async getSiteCandidates(status = 'pending'): Promise<SiteCandidate[]> {
+  async getSiteCandidates(
+    status = 'pending',
+    minMentions = DEFAULT_MIN_MENTIONS,
+  ): Promise<SiteCandidate[]> {
     return this.prisma.$queryRaw<SiteCandidate[]>`
       SELECT id, url, domain, name, description, category,
              mention_count, sample_post_id, status, created_at
       FROM inven_site_candidates
       WHERE status = ${status}
-        AND mention_count >= 2
+        AND mention_count >= ${minMentions}::int
       ORDER BY mention_count DESC, created_at DESC
     `;
   }
@@ -101,8 +110,7 @@ export class AdminInvenRepository {
 
   /**
    * 크롤된 게시글을 inven_posts에 일괄 upsert한다.
-   * post_id 충돌 시 조회/추천/본문/제목을 최신값으로 갱신.
-   * 댓글은 더 이상 수집하지 않음(본문만 사용) — comments는 빈 배열로 저장.
+   * post_id 충돌 시 조회/추천/본문/제목/댓글을 최신값으로 갱신.
    *
    * 건당 개별 왕복이 아니라 멀티로우 INSERT 로 묶는다 — 한 배치가 평균 300건,
    * 많으면 1,300건이라 건당 왕복이면 그만큼 순차 대기가 쌓여 nest CPU 가 튄다.
@@ -131,12 +139,13 @@ export class AdminInvenRepository {
           p.views,
           p.likes,
           p.content ?? null,
+          JSON.stringify(p.comments ?? []),
         );
-        // 숫자 컬럼엔 캐스트를 붙인다 — 멀티로우 VALUES 에서는 Postgres 가
+        // 숫자·jsonb 컬럼엔 캐스트를 붙인다 — 멀티로우 VALUES 에서는 Postgres 가
         // 파라미터 타입을 추론하지 못하는 경우가 있다.
         return (
           `($${i + 1},$${i + 2},$${i + 3},$${i + 4},$${i + 5},$${i + 6},` +
-          `$${i + 7}::int,$${i + 8}::int,$${i + 9},'[]'::jsonb)`
+          `$${i + 7}::int,$${i + 8}::int,$${i + 9},$${i + 10}::jsonb)`
         );
       });
 
@@ -148,7 +157,13 @@ export class AdminInvenRepository {
            views    = EXCLUDED.views,
            likes    = EXCLUDED.likes,
            content  = COALESCE(EXCLUDED.content, inven_posts.content),
-           title    = EXCLUDED.title`,
+           title    = EXCLUDED.title,
+           -- 본문 캡에 걸려 상세를 안 받은 글은 댓글도 빈 배열로 온다.
+           -- 그대로 덮으면 이전 런에서 모은 댓글이 지워지므로 비어있을 때만 유지.
+           comments = CASE
+             WHEN jsonb_array_length(EXCLUDED.comments) > 0
+             THEN EXCLUDED.comments ELSE inven_posts.comments
+           END`,
         ...values,
       );
       saved += batch.length;
