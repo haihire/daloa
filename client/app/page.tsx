@@ -3,6 +3,7 @@ import { after } from "next/server";
 import SiteList from "@/components/sites/SiteList";
 import FeedbackForm from "@/components/feedback/FeedbackForm";
 import StreamSection from "@/components/stream/StreamSection";
+import SiteFooter from "@/components/layout/SiteFooter";
 import type { Site } from "@/types";
 import type { Metadata } from "next";
 
@@ -121,11 +122,7 @@ export default async function Home() {
         </div>
       </div>
 
-      <footer className="border-t border-slate-200/80 bg-slate-50/80 px-4 py-4 backdrop-blur dark:border-slate-700/80 dark:bg-slate-900/80">
-        <div className="mx-auto flex max-w-6xl flex-col gap-1 text-center text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
-          <p>© 2026 로아</p>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

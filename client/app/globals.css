@@ -82,6 +82,106 @@ body {
 }
 
 /* =========================================================
+   Content pages (소개 · 개인정보처리방침 · 문의)
+   본문이 길게 흐르는 페이지 전용. 요소마다 유틸리티 클래스를 반복하지 않으려고
+   컨테이너 하나에 걸고 자손 선택자로 내려보낸다.
+   ========================================================= */
+.doc-prose {
+  /* body { user-select: none } 해제 — 약관·정책은 복사할 수 있어야 한다 */
+  user-select: text;
+  font-size: 0.9375rem;
+  line-height: 1.75;
+  color: #374151;
+}
+.dark .doc-prose {
+  color: #cbd5e1;
+}
+.doc-prose h2 {
+  margin-top: 2.25rem;
+  margin-bottom: 0.75rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #0f172a;
+}
+.dark .doc-prose h2 {
+  color: #f1f5f9;
+}
+.doc-prose h2:first-child {
+  margin-top: 0;
+}
+.doc-prose h3 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+.dark .doc-prose h3 {
+  color: #e2e8f0;
+}
+.doc-prose p {
+  margin-bottom: 0.875rem;
+}
+.doc-prose ul {
+  margin-bottom: 0.875rem;
+  padding-left: 1.125rem;
+  list-style: disc;
+}
+.doc-prose li {
+  margin-bottom: 0.375rem;
+}
+.doc-prose li::marker {
+  color: #94a3b8;
+}
+.doc-prose a {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+.dark .doc-prose a {
+  color: #60a5fa;
+}
+.doc-prose strong {
+  font-weight: 600;
+  color: #0f172a;
+}
+.dark .doc-prose strong {
+  color: #f1f5f9;
+}
+/* 표: 좁은 화면에서 페이지 전체가 가로로 밀리지 않도록 감싼 쪽에서 스크롤시킨다 */
+.doc-prose .doc-table-wrap {
+  margin-bottom: 0.875rem;
+  overflow-x: auto;
+}
+.doc-prose table {
+  width: 100%;
+  min-width: 28rem;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.doc-prose th,
+.doc-prose td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid #e2e8f0;
+}
+.dark .doc-prose th,
+.dark .doc-prose td {
+  border-bottom-color: #334155;
+}
+.doc-prose th {
+  font-weight: 600;
+  color: #0f172a;
+  white-space: nowrap;
+}
+.dark .doc-prose th {
+  color: #f1f5f9;
+}
+
+/* =========================================================
    Admin Design System (CleanPay-inspired light theme)
    ========================================================= */
 :root {
