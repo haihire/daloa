@@ -232,15 +232,6 @@ export default function SiteList({ sites }: Props) {
       if ((s.clickCount ?? 0) > 0) rankMap.set(s.href, i + 1);
     });
 
-  const detectDeviceType = (): "mobile" | "desktop" | "tablet" | "bot" | "unknown" => {
-    const ua = navigator.userAgent.toLowerCase();
-    if (/bot|crawler|spider|crawling/.test(ua)) return "bot";
-    if (/ipad|tablet/.test(ua)) return "tablet";
-    if (/mobi|android|iphone/.test(ua)) return "mobile";
-    if (ua.length > 0) return "desktop";
-    return "unknown";
-  };
-
   // 이름 필터 — 공백만이면 전체, 아니면 이름에 포함된 것만 (대소문자 무시)
   const normalizedQuery = query.trim().toLowerCase();
   const filtered = normalizedQuery
@@ -302,12 +293,8 @@ export default function SiteList({ sites }: Props) {
                 // 서버는 site_idx(=loa_sites.seq)만 저장한다 — 이름/카테고리는 loa_sites가
                 // 원본이라 여기서 굳이 실어 보내지 않는다. gaEvent는 GA(구글 애널리틱스)용이라
                 // 우리 DB 스키마와 무관하게 사람이 읽을 라벨을 그대로 보낸다.
-                const payload = {
-                  type: "site-click",
-                  siteHref: site.href,
-                  siteIdx: site.seq,
-                  deviceType: detectDeviceType(),
-                };
+                // 예전엔 여기서 /api/telemetry로 클릭을 함께 보내 관리자 "클릭 상위"를
+                // 집계했다. EC2를 정리하면서 그 수집 경로가 없어져 GA 이벤트만 남긴다.
                 gaEvent("site_click", {
                   site_name: site.name,
                   site_category: site.category,
@@ -318,32 +305,6 @@ export default function SiteList({ sites }: Props) {
                   item_name: site.name,
                   item_id: site.href,
                 });
-                try {
-                  const body = JSON.stringify(payload);
-                  const beacon = navigator.sendBeacon(
-                    "/api/telemetry",
-                    new Blob([body], { type: "application/json" }),
-                  );
-                  if (!beacon) {
-                    void fetch("/api/telemetry", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body,
-                      keepalive: true,
-                    }).catch(() => {
-                      // best-effort telemetry
-                    });
-                  }
-                } catch {
-                  void fetch("/api/telemetry", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload),
-                    keepalive: true,
-                  }).catch(() => {
-                    // best-effort telemetry
-                  });
-                }
               };
 
               return (
