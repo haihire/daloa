@@ -56,14 +56,6 @@ export default function PrivacyPage() {
               </td>
             </tr>
             <tr>
-              <td>Google AdSense</td>
-              <td>Google LLC</td>
-              <td>
-                광고 게재. 광고 쿠키를 통해 이용자의 방문 기록 기반 정보가
-                처리될 수 있습니다.
-              </td>
-            </tr>
-            <tr>
               <td>Cloudflare</td>
               <td>Cloudflare, Inc.</td>
               <td>
@@ -92,9 +84,9 @@ export default function PrivacyPage() {
 
       <h2>3. 쿠키 및 유사 기술</h2>
       <p>
-        사이트는 방문 분석과 광고 게재를 위해 쿠키를 사용합니다. 이용자는
-        브라우저 설정을 통해 쿠키 저장을 거부할 수 있으나, 이 경우 일부 기능이
-        정상적으로 동작하지 않을 수 있습니다.
+        사이트는 방문 분석을 위해 쿠키를 사용합니다. 이용자는 브라우저 설정을
+        통해 쿠키 저장을 거부할 수 있으나, 이 경우 일부 기능이 정상적으로
+        동작하지 않을 수 있습니다.
       </p>
 
       <h3>Google Analytics</h3>
@@ -112,7 +104,11 @@ export default function PrivacyPage() {
       </p>
 
       <h3>광고 쿠키</h3>
-      <p>사이트에 광고가 게재되는 경우 다음 사항이 적용됩니다.</p>
+      <p>
+        <strong>현재 사이트에는 광고가 게재되지 않습니다.</strong> 향후 광고를
+        도입하는 경우 아래 사항이 적용되며, 도입 시점에 본 방침을 갱신하고 광고
+        사업자를 명시하겠습니다.
+      </p>
       <ul>
         <li>
           Google을 포함한 제3자 공급업체는 쿠키를 사용하여 이용자의 이전 방문
