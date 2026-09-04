@@ -1,30 +1,102 @@
-# lomoa - 로스트아크 커뮤니티 플랫폼
+# lomoa — 로스트아크 사이트 모음
 
-## 프로젝트 목표
+로스트아크를 하면서 자주 쓰게 되는 사이트들을 한 화면에 모아둔 링크 모음 사이트.
 
-- 로스트아크 게이머들이 필요한 도구를 빠르게 찾는 커뮤니티 허브 구축
-- 사이트 모음, 실시간 방송(치지직·유튜브) 등 분산된 정보를 한 곳에서 탐색 가능하게 제공
+**https://www.lomoa.kr**
 
-## 기술 스택
+## 무엇을 하는 사이트인가
 
-- Docker
-- pnpm 10: 패키지 매니저 (client·server 폴더별 독립)
-- TypeScript: 타입 안정성으로 런타임 에러 사전 방지
-- Next.js 16: 메인 페이지 ISR, 관리자 CSR (Vercel 배포)
-- NestJS 11: 백엔드 API 서버
-- PostgreSQL: 주 데이터베이스
-- Prisma 7: ORM (driver adapter 방식)
-- Redis: 캐시로 속도 개선
-- Nginx: 리버스 프록시
-- NVIDIA NIM (OpenAI 호환): 관리자 AI 진단·사이트 추천
-- Sentry: 에러·성능 모니터링 (프론트·백엔드)
-- AWS EC2 + GitHub Actions(ECR → SSM): 서버 배포 자동화
-- Claude Code: AI 페어 프로그래밍
+로스트아크는 게임 안에서 확인할 수 없는 정보가 많다. 재련 기댓값은 계산기 사이트에서,
+각인 세팅은 빌드 사이트에서, 재료 시세는 또 다른 사이트에서 봐야 한다. 대부분 유저가
+개인적으로 운영하는 곳이라 정리된 목록도 마땅히 없다.
 
-## 시스템 흐름:
+로모아는 그 도구들을 용도별로 분류해두고 접속하자마자 바로 누를 수 있게 한다. 별표로
+즐겨찾기를 하거나 목적에 맞는 사이트만 골라 나만의 목록(프리셋)으로 묶을 수 있고,
+이 설정은 로그인 없이 브라우저에만 저장된다.
 
-<a href="https://raw.githubusercontent.com/haihire/lomoa/main/docs/architecture.svg" target="_blank" rel="noopener">
-  <img src="docs/architecture.svg" alt="아키텍처 다이어그램" width="100%" />
-</a>
+## 구조
 
-원본 크기로 보기: [docs/architecture.svg](https://raw.githubusercontent.com/haihire/lomoa/main/docs/architecture.svg)
+**서버가 없다.** 전 페이지가 빌드 시점에 완성되는 정적 HTML이고, Cloudflare Workers가
+그 파일을 그대로 서빙한다. 데이터베이스도 API도 없다.
+
+```
+main 푸시 → Cloudflare 빌드(next build) → out/ 정적 파일 배포
+```
+
+|               |                                             |
+| ------------- | ------------------------------------------- |
+| 프레임워크    | Next.js 16 (App Router, `output: "export"`) |
+| 언어          | TypeScript                                  |
+| 스타일        | Tailwind CSS 4                              |
+| 패키지 매니저 | pnpm 10                                     |
+| 호스팅        | Cloudflare Workers (static assets)          |
+| 분석          | Google Analytics 4                          |
+
+## 사이트 목록을 바꾸려면
+
+목록은 DB가 아니라 리포에 있다.
+
+1. `client/data/sites.json` 수정
+2. 커밋 → PR → main 머지
+3. Cloudflare가 자동으로 빌드·배포
+
+각 항목의 형태는 `client/types/index.ts`의 `Site` 인터페이스를 따른다.
+
+## 로컬 실행
+
+```bash
+cd client
+pnpm install
+pnpm dev          # http://localhost:3000
+```
+
+```bash
+pnpm build        # out/ 에 정적 파일 생성
+pnpm lint
+pnpm test
+```
+
+백엔드가 없으므로 별도 환경 구성 없이 바로 뜬다. `NEXT_PUBLIC_GA_ID`만 선택적으로
+설정하면 되고, 없으면 GA 스크립트가 렌더되지 않는다.
+
+## 페이지
+
+| 경로       | 내용                                   |
+| ---------- | -------------------------------------- |
+| `/`        | 사이트 모음                            |
+| `/about`   | 소개, 사이트 선정 기준                 |
+| `/privacy` | 개인정보처리방침                       |
+| `/contact` | 문의, 사이트 등록 요청, 권리 침해 신고 |
+
+## 이전 구조 (2026-09 이전)
+
+원래는 NestJS 백엔드를 AWS EC2에서 돌리고 PostgreSQL·Redis·Nginx를 도커로 띄웠다.
+관리자 페이지에서 사이트를 CRUD하고, 인벤 크롤링으로 새 사이트 후보를 발굴하고,
+컨테이너 메트릭을 수집해 AI로 진단하는 모니터링까지 붙어 있었다. 홈은 그 API를
+ISR로 불러왔다.
+
+운영 비용을 없애기 위해 2026년 9월 EC2를 정리하고 정적 사이트로 전환했다. 홈이
+API에 의존하던 구조는 트래픽이 적을 때 엣지 캐시가 축출되면 첫 방문자가 콜드 생성
+(TTFB 7~10초)을 뒤집어썼고, API가 느리면 함수 한도를 넘겨 5xx까지 났다. 데이터를
+리포에 넣으면서 그 실패 모드가 함께 사라졌다.
+
+당시 코드는 지우지 않고 남겨뒀다.
+
+| 위치                    | 내용                                     |
+| ----------------------- | ---------------------------------------- |
+| `server/`               | NestJS 백엔드 전체                       |
+| `client/_archive/`      | 관리자 페이지, API 라우트, 인증 미들웨어 |
+| `site-finder/`          | 인벤 크롤러 (Python)                     |
+| `docs/architecture.svg` | 당시 아키텍처 다이어그램                 |
+
+`client/_archive/`는 tsconfig `exclude`, eslint `globalIgnores`, vitest `exclude`에
+등록돼 있어 타입체크·린트·테스트 대상이 아니다. 되살리려면 원래 위치로 옮기고 그 세
+곳에서 빼면 된다.
+
+CI/CD와 브랜치 흐름은 [.github/CI_CD_FLOW.md](.github/CI_CD_FLOW.md) 참고.
+
+## 라이선스 / 고지
+
+로스트아크 및 관련 상표의 권리는 스마일게이트 RPG에 있으며, 로모아는 스마일게이트 RPG와
+제휴 관계가 없는 비공식 팬 사이트다. 목록에 있는 사이트는 모두 제3자가 운영하는 외부
+사이트이며 로모아는 링크만 제공한다.
