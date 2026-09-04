@@ -68,16 +68,6 @@ export default function RootLayout({
             __html: `(function(){var t=localStorage.getItem('theme');if(t==='light'){document.documentElement.classList.remove('dark')}else{document.documentElement.classList.add('dark')}})()`,
           }}
         />
-
-        {/* 애드센스 소유권 확인 + 광고 게재.
-            next/script(afterInteractive)를 쓰지 않고 head에 직접 박는다 — 그쪽은 하이드레이션
-            이후 클라이언트가 주입해서 서버 HTML에 스니펫이 남지 않고, 심사 크롤러가 정적 HTML에서
-            코드를 못 찾으면 소유권 확인이 실패할 수 있다. async라 렌더는 막지 않는다. */}
-        <script
-          async
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9676954636003574"
-          crossOrigin="anonymous"
-        />
       </head>
       <body className="min-h-full flex flex-col">
         <GoogleAnalytics />
