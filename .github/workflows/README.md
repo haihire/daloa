@@ -8,13 +8,24 @@
 | 워크플로우 | 트리거 | 분류 | 역할 |
 | ---------- | ------ | ---- | ---- |
 | [pr-ci.yml](pr-ci.yml) | PR (base ≠ main) | CI | 변경분 lint·test·build·E2E → `quality-gate` 집계 |
-| [main-post-merge.yml](main-post-merge.yml) | push → main (`server/**`,`client/**`) | 배포 | 서버 이미지 빌드→ECR→EC2 배포(SSM) |
-| [vercel-deploy-log.yml](vercel-deploy-log.yml) | `deployment_status` (Vercel) | 기록 | next(프론트) 배포 시점을 모니터링 DB에 기록 |
-| [prewarm-home.yml](prewarm-home.yml) | `deployment_status` / 수동 | 성능 | 배포 직후 홈(`/`) ISR 엣지 캐시 1회 워밍 |
 | [auto-delete-branch.yml](auto-delete-branch.yml) | PR closed(merged) | 정리 | 머지된 하위 브랜치 자동 삭제(상위 제외) |
-| [db-migrate.yml](db-migrate.yml) | 수동(`workflow_dispatch`) | 운영 | EC2 postgres에 SQL 마이그레이션 실행 |
-| [diag-nest.yml](diag-nest.yml) | 수동(`workflow_dispatch`) | 운영 | EC2 NestJS 컨테이너 상태·로그 조회 |
 | [server-e2e.yml](server-e2e.yml) | 수동(`workflow_dispatch`) | CI(예비) | E2E 단독 재현용 수동 fallback |
+
+### 삭제된 워크플로우 (2026-09-04)
+
+사이트를 정적으로 전환하고 EC2를 없애면서, EC2·모니터링 DB에 의존하던 다음 워크플로우를 지웠다.
+남겨두면 main에 푸시할 때마다 존재하지 않는 인스턴스에 배포를 시도해 실패한다.
+
+| 워크플로우 | 지운 이유 |
+| ---------- | --------- |
+| `main-post-merge.yml` | 서버 이미지를 ECR에 올려 EC2에 SSM 배포했다. 배포 대상이 사라졌다. |
+| `vercel-deploy-log.yml` | 배포 시점을 `api.lomoa.kr`의 모니터링 DB에 기록했다. 그 엔드포인트가 없어져 `curl -fsS`가 매번 실패한다. |
+| `prewarm-home.yml` | 홈의 ISR 엣지 캐시를 데웠다. 홈이 빌드 시점에 완성되는 정적 페이지가 되어 데울 캐시가 없다. |
+| `db-migrate.yml` | EC2 postgres에 SQL을 실행했다. DB가 사라졌다. |
+| `diag-nest.yml` | EC2 NestJS 컨테이너 상태를 조회했다. 컨테이너가 사라졌다. |
+
+`server/` 코드 자체는 리포에 남아 있어 `pr-ci.yml`·`server-e2e.yml`은 그대로 동작한다
+(둘 다 CI 러너 안에서 postgres를 띄우므로 EC2와 무관하다).
 
 ---
 
@@ -35,39 +46,13 @@
 
 ---
 
-## 배포 / 배포 후속
+## 배포
 
-### main-post-merge.yml — 서버 배포
-- **트리거**: `main`에 push되고 `server/**` 또는 `client/**` 변경 시 (+ 수동)
-- **동작**:
-  1. 서버 빌드(`pnpm install --frozen-lockfile` → `pnpm build`)
-  2. `./server` Docker 이미지 빌드 → **ECR push** (태그 = commit SHA)
-  3. **SSM**으로 EC2에 접속해 `git pull` + `.env` 갱신 + 이미지 pull + `docker compose --profile production up -d` + nginx 재시작
-  4. (선택) 헬스체크, 배포 이벤트(`service:nest`)를 모니터링 DB에 기록
-- 자세한 배포 파일 구성은 [../CI_CD_FLOW.md](../CI_CD_FLOW.md)의 "EC2에 올라가는 것" 참고.
-
-### vercel-deploy-log.yml — Vercel(next) 배포 기록
-- **트리거**: `deployment_status` (Vercel Git 연동이 production 배포 완료 시 발생)
-- **동작**: production 성공 시 `POST /api/webhooks/deploy`로 `service:next` 배포 시점을 `container_events` 테이블에 기록 (Vercel 유료 웹훅 불필요)
-
-### prewarm-home.yml — 홈 캐시 워밍
-- **트리거**: `deployment_status`(Vercel production 성공) / 수동
-- **동작**: 배포 직후 홈(`/`)을 봇으로 호출해 **ISR 엣지 캐시를 1회 데움** → 첫 사용자가 cold/stale 응답을 안 만나게.
-- **주의**: 상시 크론이 아니라 배포 직후 1회. 평상시 캐시 유지는 외부 업타임 핑거(UptimeRobot/cron-job.org) 별도 운영.
-
----
+배포 전용 워크플로우는 없다. Vercel이 GitHub 연동으로 `main` 푸시를 감지해 직접 빌드·배포한다.
+전 페이지가 정적 프리렌더라 배포 후 캐시 워밍이나 서버 재시작 같은 후속 작업이 필요 없다.
 
 ## 정리 / 문서 / 운영
 
 ### auto-delete-branch.yml — 머지 후 브랜치 삭제
 - **트리거**: PR이 **merged** 상태로 close될 때
 - **동작**: head 브랜치가 상위(`main`,`admin`,`mainPage`,`etc`)면 보존, 그 외(하위 작업 브랜치)는 자동 삭제. ref가 이미 없어도 실패하지 않게 멱등 처리.
-
-### db-migrate.yml — DB 마이그레이션 (수동)
-- **트리거**: 수동. 입력 `sql_file`(레포 루트 기준 경로), `restart_nest`(기본 true)
-- **동작**: SSM으로 EC2에서 `git pull` 후 해당 SQL을 `lomoa-postgres` 컨테이너에 주입. 옵션 시 nest 재시작.
-- **사용 예**: `gh workflow run db-migrate.yml -f sql_file=db-migrations/004_xxx.sql`
-
-### diag-nest.yml — NestJS 진단 (수동)
-- **트리거**: 수동. 입력 `tail`(로그 라인 수, 기본 100)
-- **동작**: SSM으로 EC2의 `docker compose ps` + nest 컨테이너 로그를 조회해 출력.
