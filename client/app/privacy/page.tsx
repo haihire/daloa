@@ -64,11 +64,11 @@ export default function PrivacyPage() {
               </td>
             </tr>
             <tr>
-              <td>Vercel</td>
-              <td>Vercel Inc.</td>
+              <td>Cloudflare</td>
+              <td>Cloudflare, Inc.</td>
               <td>
-                웹사이트 호스팅. 서비스 제공 과정에서 접속 로그가 처리될 수
-                있습니다.
+                웹사이트 호스팅 및 콘텐츠 전송. 서비스 제공 과정에서 접속 로그가
+                처리될 수 있습니다.
               </td>
             </tr>
           </tbody>
