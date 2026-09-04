@@ -64,14 +64,6 @@ export default function PrivacyPage() {
               </td>
             </tr>
             <tr>
-              <td>Sentry</td>
-              <td>Functional Software, Inc.</td>
-              <td>
-                오류 추적. 오류가 발생한 경우에 한해 오류 메시지, 발생 위치,
-                브라우저 환경 정보가 전송됩니다.
-              </td>
-            </tr>
-            <tr>
               <td>Vercel</td>
               <td>Vercel Inc.</td>
               <td>

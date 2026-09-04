@@ -1,5 +1,9 @@
 import type { MetadataRoute } from "next";
 
+// output: "export" 에서는 메타데이터 라우트도 빌드 시점에 확정돼야 한다.
+// (sitemap의 new Date()처럼 요청 시점에 달라질 수 있는 값이 있으면 동적으로 분류된다)
+export const dynamic = "force-static";
+
 const SITE_URL = "https://www.lomoa.kr";
 
 export default function sitemap(): MetadataRoute.Sitemap {
