@@ -1,0 +1,18 @@
+{
+  // Cloudflare Workers 정적 자산 배포 설정.
+  //
+  // 스크립트(main) 없이 assets만 두는 "static assets only" Worker다. 사이트가 전부
+  // 프리렌더된 HTML이라 런타임 코드가 필요 없다.
+  //
+  // Cloudflare 빌드 설정에서 Root directory를 client로 잡아야 한다 — 리포 루트에는
+  // package.json이 없고 pnpm 프로젝트가 client/ 와 server/ 로 나뉘어 있다.
+  "name": "lomoa",
+  "compatibility_date": "2026-09-04",
+  "assets": {
+    // next build(output: "export")가 떨어뜨리는 디렉터리
+    "directory": "./out",
+    // 없는 경로에 out/404.html을 404 상태로 응답한다.
+    // (기본값 "none"은 빈 404를 주고, "single-page-application"은 SPA용이라 200을 준다)
+    "not_found_handling": "404-page"
+  }
+}
