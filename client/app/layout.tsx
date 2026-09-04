@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
-import MonitoringBeacon from "@/components/MonitoringBeacon";
 import DarkModeToggleGuard from "@/components/DarkModeToggleGuard";
 import "./globals.css";
 
@@ -82,7 +81,6 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <GoogleAnalytics />
-        <MonitoringBeacon />
         <div className="fixed right-4 top-4 z-50">
           <DarkModeToggleGuard />
         </div>
