@@ -97,3 +97,6 @@ work-log/
 code-review/
 
 security/
+
+# 더 이상 배포에 쓰이지 않는 코드 보관함 (로컬 전용)
+_old/
