@@ -68,59 +68,45 @@ GitHub **Settings > Rules > Rulesets** 기준. (구 Branch protection rules 아�
 
 ## 4. 배포 흐름
 
-배포는 **백엔드(nest, EC2)** 와 **프론트(next, Vercel)** 두 경로로 나뉜다.
-
-### 4-1. 백엔드 — EC2 (nest)
-[main-post-merge.yml](workflows/main-post-merge.yml) — 트리거: `main` push + `server/**`·`client/**` 변경
+배포 경로는 **Vercel 하나뿐이다.** 2026-09-04 정적 전환으로 EC2·ECR·SSM 경로를 전부 없앴다.
 
 ```
 main 머지
   │
-  ├─ 1. server 빌드 (pnpm install --frozen-lockfile → pnpm build)
-  ├─ 2. ./server Docker 이미지 빌드 → ECR push (태그 = commit SHA)
-  ├─ 3. SSM으로 EC2 접속:
-  │       git pull origin main         (레포 설정 파일 동기화)
-  │       .env 갱신 (NEST_IMAGE 등)
-  │       docker pull <ECR 이미지>
-  │       docker compose --profile production up -d
-  │       docker restart lomoa-nginx
-  └─ 4. (선택) 헬스체크 + 배포 이벤트 기록(service:nest)
+  └─ Vercel(GitHub 연동)이 감지 → next build → 프로덕션 배포
 ```
 
-#### EC2에 올라가는 것
-| 경로 | 전달 방식 | 내용 |
-| ---- | --------- | ---- |
-| 서버 코드(nest) | ECR 이미지 pull | `dist/`, `generated/`, prod 의존성 (Dockerfile 기준) |
-| 인프라/설정 | `git pull origin main` | `docker-compose.yml`, `nginx/`, `site-finder/`, `db-migrations/` |
-| 시크릿 | SSM이 `.env`에 주입 | 이미지 태그, 토큰류 |
+전 페이지가 빌드 시점에 완성되는 정적 프리렌더(`○ Static`)라, 배포 후 캐시 워밍이나
+컨테이너 재시작 같은 후속 작업이 없다. GitHub Actions에 배포용 워크플로우도 없다.
 
-> EC2의 `git pull`은 레포 전체를 체크아웃하므로, 불필요한 파일(README/docs/client/server 소스 등)을 빼려면 EC2에서 **sparse-checkout**으로 `docker-compose.yml`,`nginx/`,`site-finder/`,`db-migrations/`만 남기면 된다. (`server/`는 ECR 이미지를 쓰므로 불필요)
+### 사이트 목록을 바꾸려면
 
-### 4-2. 프론트 — Vercel (next)
-- Vercel **Git 연동**이 `main` 변경을 감지해 자동 배포 (이 레포 워크플로우 아님).
-- 배포 완료 시 GitHub `deployment_status` 이벤트가 발생하고, 이를 받아:
-  - [vercel-deploy-log.yml](workflows/vercel-deploy-log.yml): next 배포 시점을 모니터링 DB(`container_events`)에 기록
-  - [prewarm-home.yml](workflows/prewarm-home.yml): 홈(`/`) ISR 엣지 캐시를 1회 워밍
+사이트 데이터는 DB가 아니라 리포에 있다.
+
+1. `client/data/sites.json` 수정
+2. 커밋 → PR → main 머지
+3. Vercel이 자동 배포
+
+### 이전 구조 (2026-09-04 이전)
+
+백엔드(nest)를 EC2에서 돌리고 `main-post-merge.yml`이 ECR 이미지를 빌드해 SSM으로 배포했다.
+홈은 그 API를 ISR로 불러왔는데, 트래픽이 적어 엣지 캐시가 축출되면 첫 방문자가 콜드 생성
+(TTFB 7~10초)을 뒤집어썼고 API가 느리면 함수 한도를 넘겨 5xx까지 났다. 운영 비용을 없애면서
+데이터를 리포에 넣는 방식으로 바꿔 이 실패 모드를 통째로 제거했다.
+
+관련 코드는 지우지 않고 남겨뒀다.
+
+| 위치 | 내용 |
+| ---- | ---- |
+| `server/` | NestJS 백엔드 전체 |
+| `client/_archive/` | admin 페이지, API 라우트, admin 인증 미들웨어(`proxy.ts`) |
+
+`client/_archive/`는 tsconfig `exclude`, eslint `globalIgnores`, vitest `exclude`에 등록돼 있어
+타입체크·린트·테스트 대상이 아니다. 되살리려면 원래 위치로 옮기고 그 세 곳에서 빼면 된다.
 
 ---
 
-## 5. 운영 (수동 워크플로우)
+## 5. 운영
 
-| 작업 | 워크플로우 | 실행 |
-| ---- | ---------- | ---- |
-| DB 마이그레이션 | [db-migrate.yml](workflows/db-migrate.yml) | `gh workflow run db-migrate.yml -f sql_file=db-migrations/xxx.sql` |
-| NestJS 상태·로그 진단 | [diag-nest.yml](workflows/diag-nest.yml) | Actions 탭 > Run workflow |
-| E2E 단독 재현 | [server-e2e.yml](workflows/server-e2e.yml) | Actions 탭 > Run workflow |
-
----
-
-## 6. 홈 캐시 상시 워밍 (외부 핑거)
-
-홈(`/`)은 정적 ISR(`revalidate=600`)이라 트래픽이 적은 시간대엔 엣지 캐시가 만료·축출되어,
-직후 첫 방문자의 TTFB가 7~10초까지 튄다. [prewarm-home.yml](workflows/prewarm-home.yml)은
-**배포 직후 1회**만 데우므로, 배포 없는 날의 상시 캐시는 외부 업타임 핑거로 유지한다.
-
-- **UptimeRobot**(무료, 5분 간격): `HTTP(s)` 모니터, URL `https://www.lomoa.kr/` → 다운 알림 덤
-- **cron-job.org**(무료, 1분 간격 가능): 더 촘촘한 워밍이 필요할 때
-
-확인: 관리자 > 모니터링 > "메인페이지 로딩 속도 추이"에서 TTFB 스파이크가 사라지는지 관찰.
+수동 운영 워크플로우(`db-migrate.yml`, `diag-nest.yml`)는 대상 EC2·DB가 없어져 함께 삭제했다.
+현재 남은 워크플로우는 [workflows/README.md](workflows/README.md) 참고.
