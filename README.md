@@ -80,18 +80,16 @@ API에 의존하던 구조는 트래픽이 적을 때 엣지 캐시가 축출되
 (TTFB 7~10초)을 뒤집어썼고, API가 느리면 함수 한도를 넘겨 5xx까지 났다. 데이터를
 리포에 넣으면서 그 실패 모드가 함께 사라졌다.
 
-당시 코드는 지우지 않고 남겨뒀다.
+당시 코드(NestJS 백엔드, 관리자 페이지와 API 라우트, 인벤 크롤러, DB 마이그레이션,
+nginx·docker-compose 설정)는 배포에 쓰이지 않으므로 리포에서 내렸다. **git 히스토리에는
+그대로 남아 있어** 필요하면 언제든 꺼낼 수 있다.
 
-| 위치                    | 내용                                     |
-| ----------------------- | ---------------------------------------- |
-| `server/`               | NestJS 백엔드 전체                       |
-| `client/_archive/`      | 관리자 페이지, API 라우트, 인증 미들웨어 |
-| `site-finder/`          | 인벤 크롤러 (Python)                     |
-| `docs/architecture.svg` | 당시 아키텍처 다이어그램                 |
+```bash
+# 예: 내리기 직전 시점의 server/ 를 꺼내기
+git checkout c24e02a -- server/
+```
 
-`client/_archive/`는 tsconfig `exclude`, eslint `globalIgnores`, vitest `exclude`에
-등록돼 있어 타입체크·린트·테스트 대상이 아니다. 되살리려면 원래 위치로 옮기고 그 세
-곳에서 빼면 된다.
+`docs/architecture.svg`는 당시 아키텍처 다이어그램이다.
 
 CI/CD와 브랜치 흐름은 [.github/CI_CD_FLOW.md](.github/CI_CD_FLOW.md) 참고.
 

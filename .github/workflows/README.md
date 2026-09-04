@@ -9,7 +9,6 @@
 | ---------- | ------ | ---- | ---- |
 | [pr-ci.yml](pr-ci.yml) | PR (base ≠ main) | CI | 변경분 lint·test·build·E2E → `quality-gate` 집계 |
 | [auto-delete-branch.yml](auto-delete-branch.yml) | PR closed(merged) | 정리 | 머지된 하위 브랜치 자동 삭제(상위 제외) |
-| [server-e2e.yml](server-e2e.yml) | 수동(`workflow_dispatch`) | CI(예비) | E2E 단독 재현용 수동 fallback |
 
 ### 삭제된 워크플로우 (2026-09-04)
 
@@ -24,8 +23,8 @@
 | `db-migrate.yml` | EC2 postgres에 SQL을 실행했다. DB가 사라졌다. |
 | `diag-nest.yml` | EC2 NestJS 컨테이너 상태를 조회했다. 컨테이너가 사라졌다. |
 
-`server/` 코드 자체는 리포에 남아 있어 `pr-ci.yml`·`server-e2e.yml`은 그대로 동작한다
-(둘 다 CI 러너 안에서 postgres를 띄우므로 EC2와 무관하다).
+`server/` 코드를 리포에서 내리면서 `server-e2e.yml`도 함께 지웠다. `pr-ci.yml`은 남겨두지만
+`server/**` paths-filter가 더는 매칭되지 않아 client 잡만 실행된다.
 
 ---
 
@@ -38,13 +37,6 @@
   - 잡: `server`(lint+test+build), `integration`(PostgreSQL), `e2e`(PostgreSQL+Redis), `client`(lint+test+build)
   - `quality-gate` 잡이 위 잡들을 `needs`로 묶어 **단일 통과 기준** 제공
 - **왜 main 제외?** 상위→main 머지는 이미 하위→상위 단계에서 검증됐으므로 다시 돌리지 않는다.
-
-### server-e2e.yml — Server E2E (Manual)
-- **트리거**: 수동 전용
-- **동작**: PostgreSQL·Redis 서비스 컨테이너 띄우고 `pnpm test:e2e` 실행
-- **위치**: PR 자동 E2E는 pr-ci.yml에 통합됨. 이 파일은 **회귀 재현·단독 디버깅용 수동 fallback**으로만 유지.
-
----
 
 ## 배포
 

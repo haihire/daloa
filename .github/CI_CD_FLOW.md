@@ -94,15 +94,8 @@ main 머지
 (TTFB 7~10초)을 뒤집어썼고 API가 느리면 함수 한도를 넘겨 5xx까지 났다. 운영 비용을 없애면서
 데이터를 리포에 넣는 방식으로 바꿔 이 실패 모드를 통째로 제거했다.
 
-관련 코드는 지우지 않고 남겨뒀다.
-
-| 위치 | 내용 |
-| ---- | ---- |
-| `server/` | NestJS 백엔드 전체 |
-| `client/_archive/` | admin 페이지, API 라우트, admin 인증 미들웨어(`proxy.ts`) |
-
-`client/_archive/`는 tsconfig `exclude`, eslint `globalIgnores`, vitest `exclude`에 등록돼 있어
-타입체크·린트·테스트 대상이 아니다. 되살리려면 원래 위치로 옮기고 그 세 곳에서 빼면 된다.
+관련 코드(NestJS 백엔드, admin 페이지, API 라우트, admin 인증 미들웨어)는 배포에 쓰이지 않아
+리포에서 내렸다. git 히스토리에 남아 있으므로 `git checkout <sha> -- server/` 식으로 꺼낼 수 있다.
 
 ---
 
