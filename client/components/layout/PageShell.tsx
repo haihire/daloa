@@ -1,5 +1,6 @@
 import Link from "next/link";
 import SiteFooter from "./SiteFooter";
+import DarkModeToggle from "@/components/DarkModeToggle";
 
 interface Props {
   title: string;
@@ -20,13 +21,16 @@ export default function PageShell({ title, updatedAt, children }: Props) {
     <div className="h-screen overflow-y-auto">
       <div className="flex min-h-full flex-col">
         <div className="mx-auto w-full max-w-3xl flex-1 px-5 py-10 sm:px-6">
-          {/* 다크모드 토글이 right-4 top-4에 fixed로 떠 있어 우상단은 비워둔다 */}
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1 text-sm text-slate-500 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
-          >
-            <span aria-hidden="true">←</span> 로모아 홈
-          </Link>
+          {/* 홈과 같은 배치 — 왼쪽에 돌아가기, 오른쪽 끝에 다크모드 토글 */}
+          <div className="flex items-center justify-between gap-2">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1 text-sm text-slate-500 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+            >
+              <span aria-hidden="true">←</span> 로모아 홈
+            </Link>
+            <DarkModeToggle />
+          </div>
 
           <h1 className="mt-5 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-3xl">
             {title}

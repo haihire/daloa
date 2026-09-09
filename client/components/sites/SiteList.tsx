@@ -112,7 +112,9 @@ export default function SiteList({ sites }: Props) {
   const persistOrder = (next: string[]) => {
     if (activePreset) {
       savePresets(
-        presets.map((p) => (p.id === activePreset.id ? { ...p, hrefs: next } : p)),
+        presets.map((p) =>
+          p.id === activePreset.id ? { ...p, hrefs: next } : p,
+        ),
       );
     } else if (view === VIEW_FAVORITES) {
       saveFavorites(next);
@@ -206,7 +208,9 @@ export default function SiteList({ sites }: Props) {
   // 순서 대상 안의 다른 카드 위로 들어오면 미리보기 순서를 즉시 바꿔 보여준다.
   const handleDragEnter = (href: string) => {
     if (!draggingHref || draggingHref === href) return;
-    setDragOrder((current) => moveItem(current ?? baseOrder, draggingHref, href));
+    setDragOrder((current) =>
+      moveItem(current ?? baseOrder, draggingHref, href),
+    );
   };
 
   // 목록 안에 놓았을 때만 저장 확정.
@@ -247,7 +251,7 @@ export default function SiteList({ sites }: Props) {
       : "즐겨찾기한 사이트가 없어요. 카드의 ★ 버튼을 눌러 추가해보세요.";
 
   return (
-    <section className="flex max-h-[58vh] flex-col rounded-2xl border border-slate-200/70 bg-white/80 shadow-md backdrop-blur dark:border-slate-700/70 dark:bg-slate-800/80 sm:h-[560px] sm:max-h-none">
+    <section className="flex max-h-[58vh] flex-col rounded-2xl border border-slate-200/70 bg-white/80 shadow-md backdrop-blur dark:border-slate-700/70 dark:bg-slate-800/80 sm:h-full sm:max-h-none">
       <SiteViewTabs
         presets={presets}
         activeView={view}
@@ -272,14 +276,15 @@ export default function SiteList({ sites }: Props) {
       </div>
 
       <div className="stagger flex-1 overflow-y-auto rounded-b-2xl px-1 py-3 sm:px-2">
-        {filtered.length === 0 && (normalizedQuery !== "" || view !== VIEW_ALL) ? (
+        {filtered.length === 0 &&
+        (normalizedQuery !== "" || view !== VIEW_ALL) ? (
           <p className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
             {emptyMessage}
           </p>
         ) : (
           // 목록 전체가 드롭 영역. 여기 밖에서 놓으면 drop이 안 걸려 원위치된다.
           <ul
-            className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 sm:gap-2 xl:grid-cols-3"
+            className="grid grid-cols-1 gap-1.5 sm:gap-2 min-[864px]:grid-cols-2 min-[1184px]:grid-cols-3"
             onDragOver={(e) => {
               if (draggingHref) e.preventDefault();
             }}
@@ -398,7 +403,9 @@ export default function SiteList({ sites }: Props) {
                       {/* 모바일은 아이콘+이름만 남겨 한 줄로 — 카테고리/설명은 sm부터 */}
                       <span
                         className={`hidden shrink-0 rounded-full px-2 py-0.5 text-xs text-white sm:inline-block ${
-                          isFav ? "bg-blue-500" : "bg-slate-700 dark:bg-slate-600"
+                          isFav
+                            ? "bg-blue-500"
+                            : "bg-slate-700 dark:bg-slate-600"
                         }`}
                       >
                         {site.category}
