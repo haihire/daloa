@@ -12,4 +12,4 @@ export const SITE_URL = "https://www.lomoa.kr";
 export const CONTACT_EMAIL = "kimsungsoo1758@gmail.com";
 
 /** 정책 문서 최종 수정일 (KST). 내용을 고치면 함께 갱신한다. */
-export const POLICY_UPDATED_AT = "2026-09-05";
+export const POLICY_UPDATED_AT = "2026-09-06";

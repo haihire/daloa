@@ -32,6 +32,12 @@ export default function SiteFooter() {
         <span aria-hidden="true">·</span>
         <span>© 2026 로모아</span>
       </div>
+      {/* 공정위 추천·보증 심사지침에 따른 대가성 공개. 쿠팡 파트너스 필수 고지사항이며
+          광고(홈 하단 배너) 바로 아래에 놓이도록 푸터에 둔다. 광고를 내리기 전까지 지우지 말 것. */}
+      <p className="mt-1 text-center text-[10px] leading-snug text-slate-400 dark:text-slate-600">
+        이 사이트는 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를
+        제공받습니다.
+      </p>
     </footer>
   );
 }

@@ -1,5 +1,7 @@
 import SiteList from "@/components/sites/SiteList";
 import SiteFooter from "@/components/layout/SiteFooter";
+import { SideAd, BottomAd } from "@/components/ads/AdSlots";
+import DarkModeToggle from "@/components/DarkModeToggle";
 import sitesData from "@/data/sites.json";
 import type { Site } from "@/types";
 import type { Metadata } from "next";
@@ -17,24 +19,31 @@ const sites = sitesData as Site[];
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen flex-col">
-      <div className="flex-1 py-3">
-        <div className="grid grid-cols-1 gap-4 px-1 sm:px-2 md:px-3 xl:grid-cols-[1fr_minmax(0,1100px)_1fr] xl:px-0">
-          <div className="hidden xl:block" aria-hidden="true" />
+    <div className="flex h-screen flex-col">
+      <div className="min-h-0 flex-1 py-3">
+        <div className="grid h-full grid-cols-1 gap-4 px-1 sm:px-2 min-[640px]:grid-cols-[minmax(136px,1fr)_minmax(0,1100px)_minmax(136px,1fr)] min-[640px]:px-0">
+          <SideAd />
 
-          <main className="flex flex-col gap-2">
-            <header className="fade-in flex flex-col items-center gap-2 sm:min-h-9 sm:justify-center">
+          <main className="flex h-full min-h-0 w-full flex-col gap-2">
+            {/* 제목은 가운데 고정, 토글은 헤더 오른쪽 끝. 예전엔 토글이 화면에
+                fixed로 떠 있었는데 광고가 들어오면서 겹칠 여지가 생겨 헤더 안으로 넣었다. */}
+            <header className="fade-in relative flex min-h-9 items-center justify-center">
               <h1 className="text-center text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-xl">
                 로모아
               </h1>
+              <div className="absolute right-0 top-1/2 -translate-y-1/2">
+                <DarkModeToggle />
+              </div>
             </header>
 
-            <section className="flex flex-col gap-4">
+            <section className="flex min-h-0 flex-1 flex-col gap-4">
               <SiteList sites={sites} />
             </section>
+
+            <BottomAd />
           </main>
 
-          <div className="hidden xl:block" aria-hidden="true" />
+          <SideAd />
         </div>
       </div>
 
